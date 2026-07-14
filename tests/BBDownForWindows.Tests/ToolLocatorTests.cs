@@ -28,4 +28,21 @@ public sealed class ToolLocatorTests
         }
         finally { root.Delete(true); }
     }
+
+    [Fact(Timeout = 15_000)]
+    public async Task VersionDetectionReadsOutputAndCompletes()
+    {
+        var dotnet = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(directory => Path.Combine(directory.Trim('"'), "dotnet.exe"))
+            .First(File.Exists);
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var locator = new ToolLocator(new ApplicationPaths(root.FullName, root.FullName));
+            var version = await locator.GetVersionAsync(dotnet);
+            Assert.Matches(@"\d+\.\d+", version);
+        }
+        finally { root.Delete(true); }
+    }
 }

@@ -49,16 +49,39 @@ public sealed class ToolLocator(ApplicationPaths paths) : IToolLocator
         };
         var fileName = Path.GetFileName(executable);
         startInfo.ArgumentList.Add(fileName.Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase) ? "-version" : fileName.Equals("BBDown.exe", StringComparison.OrdinalIgnoreCase) ? "--help" : "--version");
-        using var process = Process.Start(startInfo);
-        if (process is null) return "无法启动";
-        var output = await process.StandardOutput.ReadLineAsync(cancellationToken) ?? await process.StandardError.ReadLineAsync(cancellationToken) ?? string.Empty;
-        await process.WaitForExitAsync(cancellationToken);
-        if (fileName.Equals("BBDown.exe", StringComparison.OrdinalIgnoreCase) && !output.Contains("version", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            var all = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-            output = all.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(line => line.Contains("version", StringComparison.OrdinalIgnoreCase)) ?? output;
+            using var process = Process.Start(startInfo);
+            if (process is null) return "无法启动";
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            var standardOutput = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            var standardError = process.StandardError.ReadToEndAsync(timeout.Token);
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+                var output = await standardOutput;
+                var error = await standardError;
+                var lines = string.Concat(output, "\n", error)
+                    .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                return lines.FirstOrDefault(line => line.Contains("version", StringComparison.OrdinalIgnoreCase))
+                    ?? lines.FirstOrDefault()
+                    ?? fileName;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                TryKill(process);
+                return "检测超时";
+            }
         }
-        return string.IsNullOrWhiteSpace(output) ? Path.GetFileName(executable) : output.Trim();
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+        {
+            return $"检测失败：{exception.Message}";
+        }
     }
 
     private static string FindMkvmerge(string configured)
@@ -77,6 +100,16 @@ public sealed class ToolLocator(ApplicationPaths paths) : IToolLocator
 
     private static string FirstExisting(params string?[] candidates) =>
         candidates.FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate)) ?? string.Empty;
+
+    private static void TryKill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited) process.Kill(true);
+        }
+        catch (InvalidOperationException) { }
+        catch (System.ComponentModel.Win32Exception) { }
+    }
 
     private static string FindOnPath(string executable)
     {

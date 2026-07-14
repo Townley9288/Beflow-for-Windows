@@ -8,7 +8,11 @@
             <NavigationViewItem Content="多音轨封装" Tag="dual" Icon="Document" />
             <NavigationViewItem Content="历史" Tag="history" Icon="Clock" />
             <NavigationViewItem Content="设置" Tag="settings" Icon="Setting" />
-            <NavigationViewItem Content="关于" Tag="about" Icon="Help" />
+            <NavigationViewItem Content="关于" Tag="about">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE946;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
         </NavigationView.MenuItems>
         <Frame x:Name="ContentFrame" />
     </NavigationView>
