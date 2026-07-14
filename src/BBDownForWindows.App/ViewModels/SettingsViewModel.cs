@@ -27,7 +27,15 @@ public sealed class SettingsViewModel : ObservableObject
     public IReadOnlyList<string> AudioBitrateOptions { get; } = ["highest", "lowest"];
     public AppSettings Settings { get => _settings; private set => SetProperty(ref _settings, value); }
     public string ToolStatus { get => _toolStatus; private set => SetProperty(ref _toolStatus, value); }
-    public string Message { get => _message; private set => SetProperty(ref _message, value); }
+    public string Message
+    {
+        get => _message;
+        private set
+        {
+            if (SetProperty(ref _message, value)) OnPropertyChanged(nameof(HasMessage));
+        }
+    }
+    public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
     public IAsyncRelayCommand SaveCommand { get; }
     public IRelayCommand ResetCommand { get; }
     public IAsyncRelayCommand DetectToolsCommand { get; }
