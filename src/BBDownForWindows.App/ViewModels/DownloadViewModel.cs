@@ -54,7 +54,15 @@ public sealed class DownloadViewModel : ObservableObject
     ];
     public IReadOnlyList<OptionItem> AudioBitrateOptions { get; } =
     [new("highest", "最高码率"), new("lowest", "最低码率")];
-    public IReadOnlyList<string> UposHostOptions { get; } = ["upos-sz-mirrorcos.bilivideo.com", "upos-sz-mirrorcoso1.bilivideo.com", "upos-sz-mirrorali.bilivideo.com", "upos-sz-mirroralib.bilivideo.com", "upos-sz-mirrorhw.bilivideo.com"];
+    public IReadOnlyList<OptionItem> UposHostOptions { get; } =
+    [
+        new("", "使用默认 CDN 节点"),
+        new("upos-sz-mirrorcos.bilivideo.com", "upos-sz-mirrorcos.bilivideo.com"),
+        new("upos-sz-mirrorcoso1.bilivideo.com", "upos-sz-mirrorcoso1.bilivideo.com"),
+        new("upos-sz-mirrorali.bilivideo.com", "upos-sz-mirrorali.bilivideo.com"),
+        new("upos-sz-mirroralib.bilivideo.com", "upos-sz-mirroralib.bilivideo.com"),
+        new("upos-sz-mirrorhw.bilivideo.com", "upos-sz-mirrorhw.bilivideo.com")
+    ];
 
     public TaskConsoleViewModel Console { get; }
     public string Url { get => _url; set { if (SetProperty(ref _url, value)) NotifyCommands(); } }
