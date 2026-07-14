@@ -19,8 +19,8 @@ public sealed partial class MainWindow : Window
     public void ApplyInitialSize()
     {
         var display = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
-        var width = Math.Min(1600, Math.Max(1100, display.WorkArea.Width - 80));
-        var height = Math.Min(980, Math.Max(720, display.WorkArea.Height - 80));
+        var width = Math.Min(display.WorkArea.Width, Math.Min(1680, Math.Max(1200, display.WorkArea.Width - 40)));
+        var height = Math.Min(display.WorkArea.Height, Math.Min(1000, Math.Max(760, display.WorkArea.Height - 40)));
         AppWindow.Resize(new Windows.Graphics.SizeInt32(width, height));
         AppWindow.Move(new Windows.Graphics.PointInt32(display.WorkArea.X + (display.WorkArea.Width - width) / 2, display.WorkArea.Y + (display.WorkArea.Height - height) / 2));
     }
