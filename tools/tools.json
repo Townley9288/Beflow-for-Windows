@@ -1,0 +1,19 @@
+{
+  "bbdown": {
+    "version": "1.6.3",
+    "archive": "BBDown_1.6.3_20240814_win-x64.zip",
+    "url": "https://github.com/nilaoda/BBDown/releases/download/1.6.3/BBDown_1.6.3_20240814_win-x64.zip",
+    "sha256": "40F1E2AF0D4E74DF765C6F93D2E931F9BEA201D5168D0BC62DC35A54B7E0EC02"
+  },
+  "aria2": {
+    "version": "1.37.0",
+    "archive": "aria2-1.37.0-win-64bit-build1.zip",
+    "url": "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip",
+    "sha256": "67D015301EEF0B612191212D564C5BB0A14B5B9C4796B76454276A4D28D9B288"
+  },
+  "ffmpeg": {
+    "version": "N-113240-g6d2f64534d-20240110",
+    "archive": "ffmpeg-N-113240-g6d2f64534d-win64-gpl.zip",
+    "sha256": "D69FA64F6EEDFF7EC247D6C7870F8041F1A7E2254165FA1429F40A077FC54955"
+  }
+}

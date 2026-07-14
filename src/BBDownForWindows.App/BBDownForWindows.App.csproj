@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>BBDownForWindows.App</RootNamespace>
+    <AssemblyName>BBDownForWindows</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BBDownForWindows.Core\BBDownForWindows.Core.csproj" />
+  </ItemGroup>
+
+  <Target Name="CopyWinUiResourcesToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <_WinUiRootResource Include="$(TargetDir)App.xbf;$(TargetDir)MainWindow.xbf;$(TargetDir)BBDownForWindows.pri" />
+      <_WinUiPageResource Include="$(TargetDir)Pages\**\*" />
+      <_WinUiAppAsset Include="$(TargetDir)Assets\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WinUiRootResource)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_WinUiPageResource)" DestinationFolder="$(PublishDir)Pages\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_WinUiAppAsset)" DestinationFolder="$(PublishDir)Assets\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

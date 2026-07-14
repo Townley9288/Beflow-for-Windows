@@ -1,0 +1,31 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BBDownForWindows.Core", "src\BBDownForWindows.Core\BBDownForWindows.Core.csproj", "{B7DBE5A2-0FC9-4B09-BE48-2673D7FD0CD2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BBDownForWindows.App", "src\BBDownForWindows.App\BBDownForWindows.App.csproj", "{6C7C430B-AD1D-4DC1-B042-4F8057E208A9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BBDownForWindows.Tests", "tests\BBDownForWindows.Tests\BBDownForWindows.Tests.csproj", "{9680D576-BC97-4A4A-8AC4-E4E0DA58A5DF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B7DBE5A2-0FC9-4B09-BE48-2673D7FD0CD2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B7DBE5A2-0FC9-4B09-BE48-2673D7FD0CD2}.Debug|x64.Build.0 = Debug|Any CPU
+		{B7DBE5A2-0FC9-4B09-BE48-2673D7FD0CD2}.Release|x64.ActiveCfg = Release|Any CPU
+		{B7DBE5A2-0FC9-4B09-BE48-2673D7FD0CD2}.Release|x64.Build.0 = Release|Any CPU
+		{6C7C430B-AD1D-4DC1-B042-4F8057E208A9}.Debug|x64.ActiveCfg = Debug|x64
+		{6C7C430B-AD1D-4DC1-B042-4F8057E208A9}.Debug|x64.Build.0 = Debug|x64
+		{6C7C430B-AD1D-4DC1-B042-4F8057E208A9}.Release|x64.ActiveCfg = Release|x64
+		{6C7C430B-AD1D-4DC1-B042-4F8057E208A9}.Release|x64.Build.0 = Release|x64
+		{9680D576-BC97-4A4A-8AC4-E4E0DA58A5DF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9680D576-BC97-4A4A-8AC4-E4E0DA58A5DF}.Debug|x64.Build.0 = Debug|Any CPU
+		{9680D576-BC97-4A4A-8AC4-E4E0DA58A5DF}.Release|x64.ActiveCfg = Release|Any CPU
+		{9680D576-BC97-4A4A-8AC4-E4E0DA58A5DF}.Release|x64.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

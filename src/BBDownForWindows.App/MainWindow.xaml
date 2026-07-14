@@ -1,0 +1,15 @@
+<Window
+    x:Class="BBDownForWindows.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <NavigationView x:Name="RootNavigation" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" PaneDisplayMode="LeftCompact" ItemInvoked="RootNavigation_ItemInvoked">
+        <NavigationView.MenuItems>
+            <NavigationViewItem Content="下载" Tag="download" Icon="Download" />
+            <NavigationViewItem Content="多音轨封装" Tag="dual" Icon="Document" />
+            <NavigationViewItem Content="历史" Tag="history" Icon="Clock" />
+            <NavigationViewItem Content="设置" Tag="settings" Icon="Setting" />
+            <NavigationViewItem Content="关于" Tag="about" Icon="Help" />
+        </NavigationView.MenuItems>
+        <Frame x:Name="ContentFrame" />
+    </NavigationView>
+</Window>
