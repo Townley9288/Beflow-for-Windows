@@ -56,10 +56,10 @@
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                             <ComboBox Header="视频质量" HorizontalAlignment="Stretch" ItemsSource="{Binding QualityOptions}" SelectedItem="{Binding Quality, Mode=TwoWay}" />
                             <ComboBox Grid.Column="1" Header="编码优先" HorizontalAlignment="Stretch" ItemsSource="{Binding EncodingOptions}" SelectedItem="{Binding Encoding, Mode=TwoWay}" />
-                            <ComboBox Grid.Column="2" Header="音频格式" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioCodecOptions}" SelectedItem="{Binding AudioCodec, Mode=TwoWay}" />
+                            <ComboBox Grid.Column="2" Header="音频格式" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioCodecOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding AudioCodec, Mode=TwoWay}" />
                             <ComboBox Grid.Column="3" Header="下载类型" HorizontalAlignment="Stretch" ItemsSource="{Binding DownloadModeOptions}" SelectedItem="{Binding DownloadModeText, Mode=TwoWay}" />
-                            <ComboBox Grid.Row="1" Header="音频码率" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioBitrateOptions}" SelectedItem="{Binding AudioBitrate, Mode=TwoWay}" />
-                            <ComboBox Grid.Row="1" Grid.Column="1" Header="CDN 节点" HorizontalAlignment="Stretch" ItemsSource="{Binding UposHostOptions}" Text="{Binding UposHost, Mode=TwoWay}" IsEditable="True" />
+                            <ComboBox Grid.Row="1" Header="音频码率" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioBitrateOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding AudioBitrate, Mode=TwoWay}" />
+                            <ComboBox Grid.Row="1" Grid.Column="1" Header="CDN 节点" PlaceholderText="使用默认 CDN 节点" HorizontalAlignment="Stretch" ItemsSource="{Binding UposHostOptions}" Text="{Binding UposHost, Mode=TwoWay}" IsEditable="True" />
                         </Grid>
                         <StackPanel Orientation="Horizontal" Spacing="18">
                             <CheckBox Content="下载弹幕" IsChecked="{Binding Danmaku, Mode=TwoWay}" />

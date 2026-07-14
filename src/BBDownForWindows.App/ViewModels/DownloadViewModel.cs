@@ -6,6 +6,8 @@ namespace BBDownForWindows.App.ViewModels;
 
 public sealed class DownloadViewModel : ObservableObject
 {
+    public sealed record OptionItem(string Value, string Label);
+
     private readonly AppServices _services;
     private string _url = string.Empty;
     private string _pages = string.Empty;
@@ -41,9 +43,18 @@ public sealed class DownloadViewModel : ObservableObject
     public IReadOnlyList<string> QualityOptions { get; } = ["杜比视界", "HDR 真彩", "4K", "1080P 高码率", "1080P", "720P", "480P", "360P"];
     public IReadOnlyList<string> EncodingOptions { get; } = ["HEVC", "AVC", "AV1"];
     public IReadOnlyList<string> DownloadModeOptions { get; } = ["视频+音频", "仅视频", "仅音频"];
-    public IReadOnlyList<string> AudioCodecOptions { get; } = ["auto", "E-AC-3", "M4A", "FLAC", "AC-3", "DTS"];
-    public IReadOnlyList<string> AudioBitrateOptions { get; } = ["highest", "lowest"];
-    public IReadOnlyList<string> UposHostOptions { get; } = ["", "upos-sz-mirrorcos.bilivideo.com", "upos-sz-mirrorcoso1.bilivideo.com", "upos-sz-mirrorali.bilivideo.com", "upos-sz-mirroralib.bilivideo.com", "upos-sz-mirrorhw.bilivideo.com"];
+    public IReadOnlyList<OptionItem> AudioCodecOptions { get; } =
+    [
+        new("auto", "自动"),
+        new("E-AC-3", "E-AC-3"),
+        new("M4A", "M4A"),
+        new("FLAC", "FLAC"),
+        new("AC-3", "AC-3"),
+        new("DTS", "DTS")
+    ];
+    public IReadOnlyList<OptionItem> AudioBitrateOptions { get; } =
+    [new("highest", "最高码率"), new("lowest", "最低码率")];
+    public IReadOnlyList<string> UposHostOptions { get; } = ["upos-sz-mirrorcos.bilivideo.com", "upos-sz-mirrorcoso1.bilivideo.com", "upos-sz-mirrorali.bilivideo.com", "upos-sz-mirroralib.bilivideo.com", "upos-sz-mirrorhw.bilivideo.com"];
 
     public TaskConsoleViewModel Console { get; }
     public string Url { get => _url; set { if (SetProperty(ref _url, value)) NotifyCommands(); } }
