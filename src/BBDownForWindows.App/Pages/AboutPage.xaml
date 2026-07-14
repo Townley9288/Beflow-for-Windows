@@ -1,7 +1,101 @@
-<Page x:Class="BBDownForWindows.App.Pages.AboutPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <ScrollViewer><StackPanel Padding="40" Spacing="16" MaxWidth="850" HorizontalAlignment="Left"><TextBlock Text="BBDown for Windows" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock Text="v1.0.0" FontSize="20"/><TextBlock Text="基于 WinUI 3 与 .NET 10 构建的原生 Bilibili 下载器界面。" TextWrapping="Wrap"/>
-        <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="8"><TextBlock Text="主要功能" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Text="• 普通视频、多分P和整季下载&#x0a;• 杜比视界、HDR、4K 至 360P&#x0a;• AVC、HEVC、AV1 及指定音频格式&#x0a;• WEB/TV 扫码登录&#x0a;• aria2c、CDN 和多线程&#x0a;• 双音轨下载、延迟和 MKV 批量封装&#x0a;• 历史记录和持久任务日志" TextWrapping="Wrap"/></StackPanel></Border>
-        <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="8"><TextBlock Text="运行环境" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Text="WinUI 3 / Windows App SDK 1.8 / .NET 10"/><TextBlock x:Name="ToolVersions" Text="正在检测工具…" FontFamily="Consolas" TextWrapping="Wrap"/></StackPanel></Border>
-        <HyperlinkButton Content="BBDown 项目主页" NavigateUri="https://github.com/nilaoda/BBDown" HorizontalAlignment="Left"/>
-    </StackPanel></ScrollViewer>
+<Page
+    x:Class="BBDownForWindows.App.Pages.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer>
+        <StackPanel Padding="40" Spacing="20" MaxWidth="1080" HorizontalAlignment="Left">
+            <Border Padding="28" CornerRadius="16">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#FF7C3AED" Offset="0" />
+                        <GradientStop Color="#FF2563EB" Offset="0.55" />
+                        <GradientStop Color="#FF0891B2" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Grid ColumnSpacing="20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="76" Height="76" CornerRadius="20" Background="#28FFFFFF">
+                        <FontIcon Glyph="&#xE896;" FontSize="38" Foreground="White" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
+                        <TextBlock Text="BBDown for Windows" FontSize="34" FontWeight="SemiBold" Foreground="White" />
+                        <TextBlock Text="原生、快速、专注的 Bilibili 下载管理工具" FontSize="17" Foreground="White" Opacity="0.88" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                            <Border Padding="10,4" CornerRadius="10" Background="#25FFFFFF"><TextBlock Text="WinUI 3" Foreground="White" /></Border>
+                            <Border Padding="10,4" CornerRadius="10" Background="#25FFFFFF"><TextBlock Text=".NET 10" Foreground="White" /></Border>
+                            <Border Padding="10,4" CornerRadius="10" Background="#25FFFFFF"><TextBlock Text="Windows x64" Foreground="White" /></Border>
+                        </StackPanel>
+                    </StackPanel>
+                    <Border Grid.Column="2" Padding="14,7" CornerRadius="14" Background="#2FFFFFFF" VerticalAlignment="Top">
+                        <TextBlock Text="v1.0.0" FontSize="16" FontWeight="SemiBold" Foreground="White" />
+                    </Border>
+                </Grid>
+            </Border>
+
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Padding="18" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="5"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border CornerRadius="3" Background="#FF7C3AED" />
+                        <StackPanel Grid.Column="1" Spacing="8">
+                            <TextBlock Text="下载能力" FontSize="20" FontWeight="SemiBold" />
+                            <TextBlock Text="• 普通视频、多分P与整季下载&#x0a;• 杜比视界、HDR、4K 至 360P&#x0a;• AVC、HEVC、AV1 与多种音频格式&#x0a;• WEB / TV 扫码登录" TextWrapping="Wrap" LineHeight="25" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border Grid.Column="1" Padding="18" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="5"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border CornerRadius="3" Background="#FF0891B2" />
+                        <StackPanel Grid.Column="1" Spacing="8">
+                            <TextBlock Text="增强工作流" FontSize="20" FontWeight="SemiBold" />
+                            <TextBlock Text="• aria2c、CDN 节点与多线程&#x0a;• 双链接及奇偶分P双音轨封装&#x0a;• 音轨标签、语言、默认标志与延迟&#x0a;• 历史记录、任务日志与配置恢复" TextWrapping="Wrap" LineHeight="25" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border Padding="18" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Border Width="50" Height="50" CornerRadius="25" Background="#187C3AED">
+                        <FontIcon Glyph="&#xE713;" FontSize="24" Foreground="#FF7C3AED" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="9">
+                        <TextBlock Text="运行环境与工具" FontSize="20" FontWeight="SemiBold" />
+                        <TextBlock Text="Windows App SDK 1.8 · WinUI 3 · .NET 10 自包含 x64" Opacity="0.68" />
+                        <Border Padding="14" CornerRadius="8" Background="#100078D4">
+                            <TextBlock x:Name="ToolVersions" Text="正在检测工具…" FontFamily="Consolas" TextWrapping="Wrap" LineHeight="23" />
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <InfoBar
+                IsOpen="True"
+                IsClosable="False"
+                Severity="Warning"
+                Title="BBDown 上游仓库已归档"
+                Message="上游仓库自 2026-05-14 起为只读。现有源码和 Release 仍可使用，但不会再接受官方 Issue、PR 或后续修复；未来若 B 站接口变化，需要由本项目自行兼容或迁移到维护中的分支。" />
+
+            <Border Padding="18" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="项目链接" FontSize="20" FontWeight="SemiBold" />
+                    <TextBlock Text="查看上游源码、历史版本与第三方许可信息。" Opacity="0.68" />
+                    <StackPanel Orientation="Horizontal" Spacing="20">
+                        <HyperlinkButton Content="BBDown 项目主页" NavigateUri="https://github.com/nilaoda/BBDown" HorizontalAlignment="Left" Padding="0,4" />
+                        <HyperlinkButton Content="BBDown Releases" NavigateUri="https://github.com/nilaoda/BBDown/releases" HorizontalAlignment="Left" Padding="0,4" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </Page>
