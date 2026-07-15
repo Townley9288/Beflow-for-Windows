@@ -84,6 +84,7 @@
                 IsOpen="True"
                 IsClosable="False"
                 Severity="Warning"
+                Margin="18,0"
                 Title="BBDown 上游仓库已归档"
                 Message="上游仓库自 2026-05-14 起为只读。现有源码和 Release 仍可使用，但不会再接受官方 Issue、PR 或后续修复；未来若 B 站接口变化，需要由本项目自行兼容或迁移到维护中的分支。" />
 
