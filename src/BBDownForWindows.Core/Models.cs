@@ -17,6 +17,22 @@ public enum TaskState { Pending, Running, Completed, Failed, Cancelled }
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DualAudioSourceMode { Separate, Interleaved }
 
+public enum AccountChannel { Web, Tv }
+
+public enum AccountLoginState { NotConfigured, LoggedIn, Expired, Unavailable }
+
+public sealed record AccountProfile(string DisplayName, string UserId, string AvatarUrl, int Level, string VipLabel);
+
+public sealed record AccountChannelStatus(
+    AccountChannel Channel,
+    AccountLoginState State,
+    AccountProfile? Profile,
+    string Message,
+    DateTimeOffset CheckedAt,
+    DateTimeOffset? CredentialUpdatedAt);
+
+public sealed record AccountStatusSnapshot(AccountChannelStatus Web, AccountChannelStatus Tv, DateTimeOffset CheckedAt);
+
 public sealed class AppSettings
 {
     [JsonPropertyName("schemaVersion")] public int SchemaVersion { get; set; } = 1;

@@ -29,9 +29,16 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
     {
         try { if (File.Exists(paths.QrCodeFile)) File.Delete(paths.QrCodeFile); } catch (IOException) { }
         var tools = await ResolveToolsAsync(cancellationToken);
-        var result = await RunAsync(tools.BBDown, [tv ? "logintv" : "login"], context, cancellationToken);
+        var arguments = new[] { tv ? "logintv" : "login" };
+        context.AppendLog($"\n$ {Path.GetFileName(tools.BBDown)} {arguments[0]}\n");
+        var result = await processRunner.RunAsync(new ProcessRunRequest(tools.BBDown, arguments, paths.RuntimeDirectory), line => context.AppendLog(SanitizeLoginOutput(line)), cancellationToken);
         if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"登录流程失败，退出码 {result.ExitCode}");
     }
+
+    internal static string SanitizeLoginOutput(string line) => Regex.Replace(
+        line,
+        "(?i)(SESSDATA|AccessToken|access_token)\\s*=\\s*[^\\s;&]+",
+        "$1=[已隐藏]");
 
     public async Task<string> GetTitleAsync(string url, CancellationToken cancellationToken)
     {

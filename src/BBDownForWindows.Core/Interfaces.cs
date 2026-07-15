@@ -27,6 +27,12 @@ public interface IToolLocator
     Task<string> GetVersionAsync(string executable, CancellationToken cancellationToken = default);
 }
 
+public interface IAccountStatusService
+{
+    Task<AccountStatusSnapshot> GetStatusAsync(CancellationToken cancellationToken = default);
+    Task<AccountChannelStatus> GetStatusAsync(AccountChannel channel, CancellationToken cancellationToken = default);
+}
+
 public interface ITaskManager
 {
     TaskSnapshot? ActiveTask { get; }

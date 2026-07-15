@@ -14,12 +14,79 @@
                         <Setter Target="ToolCards.RowSpacing" Value="16" />
                         <Setter Target="MkvCard.(Grid.Column)" Value="0" />
                         <Setter Target="MkvCard.(Grid.Row)" Value="1" />
+                        <Setter Target="AccountPrimaryColumn.Width" Value="*" />
+                        <Setter Target="AccountSecondaryColumn.Width" Value="0" />
+                        <Setter Target="AccountSecondaryRow.Height" Value="Auto" />
+                        <Setter Target="AccountPanels.RowSpacing" Value="16" />
+                        <Setter Target="TvAccountCard.(Grid.Column)" Value="0" />
+                        <Setter Target="TvAccountCard.(Grid.Row)" Value="1" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled"><StackPanel Width="{Binding ActualWidth, ElementName=LayoutRoot}" Padding="24" Spacing="16" MaxWidth="1600" HorizontalAlignment="Left">
+        <ScrollViewer x:Name="SettingsScrollViewer" HorizontalScrollBarVisibility="Disabled" SizeChanged="SettingsScrollViewer_SizeChanged"><StackPanel x:Name="SettingsContent" Padding="24" Spacing="16" MaxWidth="1600" HorizontalAlignment="Left">
         <StackPanel><TextBlock Text="设置" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock Text="默认下载参数、外部工具和任务日志" Opacity="0.65"/></StackPanel>
+        <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="12">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="B 站账号" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                        <TextBlock Text="分别验证 WEB 与 TV 登录数据；两者可以登录不同账号" Opacity="0.65" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding LastAccountCheckText}" Opacity="0.55" FontSize="12"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="刷新状态" Command="{Binding RefreshAccountsCommand}" VerticalAlignment="Top"/>
+                </Grid>
+
+                <Grid x:Name="AccountPanels" ColumnSpacing="16">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition x:Name="AccountSecondaryRow" Height="0"/></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition x:Name="AccountPrimaryColumn" Width="*"/><ColumnDefinition x:Name="AccountSecondaryColumn" Width="*"/></Grid.ColumnDefinitions>
+                    <Border Padding="14" CornerRadius="8" Background="{ThemeResource ControlFillColorDefaultBrush}">
+                        <StackPanel Spacing="10">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Border Width="56" Height="56" CornerRadius="28" Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                    <Grid><FontIcon Glyph="&#xE77B;" FontSize="24"/><Image Source="{Binding WebAccount.AvatarUrl}" Stretch="UniformToFill"/></Grid>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="{Binding WebAccount.ChannelTitle}" FontWeight="SemiBold" FontSize="16"/>
+                                    <TextBlock Text="{Binding WebAccount.ChannelDescription}" Opacity="0.6" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding WebAccount.DisplayName}" FontWeight="SemiBold"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="12"><TextBlock Text="{Binding WebAccount.UserIdText}" Opacity="0.7"/><TextBlock Text="{Binding WebAccount.DetailText}" Opacity="0.7"/></StackPanel>
+                                </StackPanel>
+                                <Button Grid.Column="2" Content="{Binding WebAccount.LoginButtonText}" Command="{Binding LoginWebCommand}" VerticalAlignment="Top"/>
+                            </Grid>
+                            <InfoBar IsOpen="True" IsClosable="False" Severity="{Binding WebAccount.Severity}" Title="{Binding WebAccount.StatusTitle}" Message="{Binding WebAccount.StatusMessage}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border x:Name="TvAccountCard" Grid.Column="1" Padding="14" CornerRadius="8" Background="{ThemeResource ControlFillColorDefaultBrush}">
+                        <StackPanel Spacing="10">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Border Width="56" Height="56" CornerRadius="28" Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                    <Grid><FontIcon Glyph="&#xE77B;" FontSize="24"/><Image Source="{Binding TvAccount.AvatarUrl}" Stretch="UniformToFill"/></Grid>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="{Binding TvAccount.ChannelTitle}" FontWeight="SemiBold" FontSize="16"/>
+                                    <TextBlock Text="{Binding TvAccount.ChannelDescription}" Opacity="0.6" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding TvAccount.DisplayName}" FontWeight="SemiBold"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="12"><TextBlock Text="{Binding TvAccount.UserIdText}" Opacity="0.7"/><TextBlock Text="{Binding TvAccount.DetailText}" Opacity="0.7"/></StackPanel>
+                                </StackPanel>
+                                <Button Grid.Column="2" Content="{Binding TvAccount.LoginButtonText}" Command="{Binding LoginTvCommand}" VerticalAlignment="Top"/>
+                            </Grid>
+                            <InfoBar IsOpen="True" IsClosable="False" Severity="{Binding TvAccount.Severity}" Title="{Binding TvAccount.StatusTitle}" Message="{Binding TvAccount.StatusMessage}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <StackPanel x:Name="QrPanel" Visibility="Collapsed" HorizontalAlignment="Center" Spacing="8">
+                    <Image x:Name="QrImage" Width="180" Height="180" Stretch="Uniform"/>
+                    <TextBlock x:Name="QrStatus" Text="等待二维码生成…" HorizontalAlignment="Center" TextWrapping="Wrap"/>
+                    <Button Content="取消登录" Command="{Binding Console.CancelCommand}" HorizontalAlignment="Center"/>
+                </StackPanel>
+                <InfoBar IsOpen="{Binding HasLoginMessage}" IsClosable="False" Severity="{Binding LoginMessageSeverity}" Message="{Binding LoginMessage}"/>
+            </StackPanel>
+        </Border>
         <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="12"><TextBlock Text="默认下载设置" Style="{StaticResource SubtitleTextBlockStyle}"/>
             <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <ComboBox Header="视频质量" HorizontalAlignment="Stretch" ItemsSource="{Binding QualityOptions}" SelectedItem="{Binding Settings.Quality, Mode=TwoWay}"/>

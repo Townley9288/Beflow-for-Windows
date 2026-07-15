@@ -32,8 +32,6 @@ public sealed class DownloadViewModel : ObservableObject
         GetInfoCommand = new AsyncRelayCommand(GetInfoAsync, CanStart);
         DownloadCommand = new AsyncRelayCommand(() => StartDownloadAsync(false), CanStart);
         SeasonCommand = new AsyncRelayCommand(() => StartDownloadAsync(true), CanStart);
-        LoginWebCommand = new AsyncRelayCommand(() => LoginAsync(false), CanRunWithoutUrl);
-        LoginTvCommand = new AsyncRelayCommand(() => LoginAsync(true), CanRunWithoutUrl);
         Console.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(Console.IsBusy)) NotifyCommands();
@@ -83,8 +81,6 @@ public sealed class DownloadViewModel : ObservableObject
     public IAsyncRelayCommand GetInfoCommand { get; }
     public IAsyncRelayCommand DownloadCommand { get; }
     public IAsyncRelayCommand SeasonCommand { get; }
-    public IAsyncRelayCommand LoginWebCommand { get; }
-    public IAsyncRelayCommand LoginTvCommand { get; }
 
     public async Task InitializeAsync(HistoryRecord? restore = null)
     {
@@ -114,8 +110,6 @@ public sealed class DownloadViewModel : ObservableObject
         if (snapshot.State == TaskState.Completed)
             await _services.History.AddAsync(new HistoryRecord { TaskType = kind, Url = request.Url, Timestamp = DateTimeOffset.Now, LogPath = snapshot.LogPath, Download = request });
     }
-
-    private Task LoginAsync(bool tv) => _services.TaskManager.RunExclusiveAsync(tv ? TaskKind.LoginTv : TaskKind.LoginWeb, false, tv ? "login_tv" : "login_web", (context, token) => _services.BBDown.LoginAsync(tv, context, token));
 
     private async Task<DownloadRequest> BuildRequestAsync(bool season)
     {
@@ -151,10 +145,8 @@ public sealed class DownloadViewModel : ObservableObject
     }
 
     private bool CanStart() => !Console.IsBusy && !string.IsNullOrWhiteSpace(Url);
-    private bool CanRunWithoutUrl() => !Console.IsBusy;
     private void NotifyCommands()
     {
         GetInfoCommand.NotifyCanExecuteChanged(); DownloadCommand.NotifyCanExecuteChanged(); SeasonCommand.NotifyCanExecuteChanged();
-        LoginWebCommand.NotifyCanExecuteChanged(); LoginTvCommand.NotifyCanExecuteChanged();
     }
 }
