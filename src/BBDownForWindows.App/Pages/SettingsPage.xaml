@@ -41,15 +41,15 @@
                 <Grid x:Name="AccountPanels" ColumnSpacing="16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition x:Name="AccountSecondaryRow" Height="0"/></Grid.RowDefinitions>
                     <Grid.ColumnDefinitions><ColumnDefinition x:Name="AccountPrimaryColumn" Width="*"/><ColumnDefinition x:Name="AccountSecondaryColumn" Width="*"/></Grid.ColumnDefinitions>
-                    <Border Padding="14" CornerRadius="8" Background="{ThemeResource ControlFillColorDefaultBrush}">
+                    <Border Padding="16" CornerRadius="12" Background="#147C3AED" BorderBrush="#667C3AED" BorderThickness="1">
                         <StackPanel Spacing="10">
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <Border Width="56" Height="56" CornerRadius="28" Background="{ThemeResource AccentFillColorSecondaryBrush}">
-                                    <Grid><FontIcon Glyph="&#xE77B;" FontSize="24"/><Image Source="{Binding WebAccount.AvatarUrl}" Stretch="UniformToFill"/></Grid>
+                                <Border Width="56" Height="56" CornerRadius="28" Background="#247C3AED">
+                                    <Grid><FontIcon Glyph="&#xE77B;" FontSize="24" Foreground="#FF7C3AED"/><Image Source="{Binding WebAccount.AvatarUrl}" Stretch="UniformToFill"/></Grid>
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="{Binding WebAccount.ChannelTitle}" FontWeight="SemiBold" FontSize="16"/>
+                                    <TextBlock Text="{Binding WebAccount.ChannelTitle}" FontWeight="SemiBold" FontSize="16" Foreground="#FF7C3AED"/>
                                     <TextBlock Text="{Binding WebAccount.ChannelDescription}" Opacity="0.6" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding WebAccount.DisplayName}" FontWeight="SemiBold"/>
                                     <StackPanel Orientation="Horizontal" Spacing="12"><TextBlock Text="{Binding WebAccount.UserIdText}" Opacity="0.7"/><TextBlock Text="{Binding WebAccount.DetailText}" Opacity="0.7"/></StackPanel>
@@ -59,15 +59,15 @@
                             <InfoBar IsOpen="True" IsClosable="False" Severity="{Binding WebAccount.Severity}" Title="{Binding WebAccount.StatusTitle}" Message="{Binding WebAccount.StatusMessage}"/>
                         </StackPanel>
                     </Border>
-                    <Border x:Name="TvAccountCard" Grid.Column="1" Padding="14" CornerRadius="8" Background="{ThemeResource ControlFillColorDefaultBrush}">
+                    <Border x:Name="TvAccountCard" Grid.Column="1" Padding="16" CornerRadius="12" Background="#140891B2" BorderBrush="#660891B2" BorderThickness="1">
                         <StackPanel Spacing="10">
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <Border Width="56" Height="56" CornerRadius="28" Background="{ThemeResource AccentFillColorSecondaryBrush}">
-                                    <Grid><FontIcon Glyph="&#xE77B;" FontSize="24"/><Image Source="{Binding TvAccount.AvatarUrl}" Stretch="UniformToFill"/></Grid>
+                                <Border Width="56" Height="56" CornerRadius="28" Background="#240891B2">
+                                    <Grid><FontIcon Glyph="&#xE77B;" FontSize="24" Foreground="#FF0891B2"/><Image Source="{Binding TvAccount.AvatarUrl}" Stretch="UniformToFill"/></Grid>
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="{Binding TvAccount.ChannelTitle}" FontWeight="SemiBold" FontSize="16"/>
+                                    <TextBlock Text="{Binding TvAccount.ChannelTitle}" FontWeight="SemiBold" FontSize="16" Foreground="#FF0891B2"/>
                                     <TextBlock Text="{Binding TvAccount.ChannelDescription}" Opacity="0.6" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding TvAccount.DisplayName}" FontWeight="SemiBold"/>
                                     <StackPanel Orientation="Horizontal" Spacing="12"><TextBlock Text="{Binding TvAccount.UserIdText}" Opacity="0.7"/><TextBlock Text="{Binding TvAccount.DetailText}" Opacity="0.7"/></StackPanel>
