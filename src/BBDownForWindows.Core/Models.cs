@@ -29,7 +29,8 @@ public sealed record AccountChannelStatus(
     AccountProfile? Profile,
     string Message,
     DateTimeOffset CheckedAt,
-    DateTimeOffset? CredentialUpdatedAt);
+    DateTimeOffset? CredentialUpdatedAt,
+    DateTimeOffset? CredentialExpiresAt = null);
 
 public sealed record AccountStatusSnapshot(AccountChannelStatus Web, AccountChannelStatus Tv, DateTimeOffset CheckedAt);
 

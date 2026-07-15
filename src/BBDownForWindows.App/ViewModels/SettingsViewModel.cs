@@ -1,6 +1,7 @@
 using BBDownForWindows.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace BBDownForWindows.App.ViewModels;
@@ -65,20 +66,30 @@ public sealed class SettingsViewModel : ObservableObject
         get => _loginMessage;
         private set
         {
-            if (SetProperty(ref _loginMessage, value)) OnPropertyChanged(nameof(HasLoginMessage));
+            if (SetProperty(ref _loginMessage, value))
+            {
+                OnPropertyChanged(nameof(HasLoginMessage));
+                OnPropertyChanged(nameof(LoginMessageVisibility));
+            }
         }
     }
     public bool HasLoginMessage => !string.IsNullOrWhiteSpace(LoginMessage);
+    public Visibility LoginMessageVisibility => HasLoginMessage ? Visibility.Visible : Visibility.Collapsed;
     public InfoBarSeverity LoginMessageSeverity { get => _loginMessageSeverity; private set => SetProperty(ref _loginMessageSeverity, value); }
     public string Message
     {
         get => _message;
         private set
         {
-            if (SetProperty(ref _message, value)) OnPropertyChanged(nameof(HasMessage));
+            if (SetProperty(ref _message, value))
+            {
+                OnPropertyChanged(nameof(HasMessage));
+                OnPropertyChanged(nameof(MessageVisibility));
+            }
         }
     }
     public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
+    public Visibility MessageVisibility => HasMessage ? Visibility.Visible : Visibility.Collapsed;
     public IAsyncRelayCommand SaveCommand { get; }
     public IRelayCommand ResetCommand { get; }
     public IAsyncRelayCommand DetectToolsCommand { get; }

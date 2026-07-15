@@ -9,6 +9,7 @@ public sealed class AccountChannelViewModel : ObservableObject
     private string _displayName = "尚未检测";
     private string _userIdText = "UID：—";
     private string _detailText = "等级与会员信息将在登录后显示";
+    private string _expiryText = "有效期：—";
     private string _avatarUrl = string.Empty;
     private string _statusTitle = "尚未检测";
     private string _statusMessage = "进入设置页后自动检测";
@@ -30,6 +31,7 @@ public sealed class AccountChannelViewModel : ObservableObject
     public string DisplayName { get => _displayName; private set => SetProperty(ref _displayName, value); }
     public string UserIdText { get => _userIdText; private set => SetProperty(ref _userIdText, value); }
     public string DetailText { get => _detailText; private set => SetProperty(ref _detailText, value); }
+    public string ExpiryText { get => _expiryText; private set => SetProperty(ref _expiryText, value); }
     public string AvatarUrl { get => _avatarUrl; private set => SetProperty(ref _avatarUrl, value); }
     public string StatusTitle { get => _statusTitle; private set => SetProperty(ref _statusTitle, value); }
     public string StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
@@ -63,6 +65,11 @@ public sealed class AccountChannelViewModel : ObservableObject
             _ => InfoBarSeverity.Informational
         };
         LoginButtonText = IsLoggedIn ? "重新登录" : Channel == AccountChannel.Web ? "网页登录" : "TV 登录";
+        ExpiryText = status.CredentialUpdatedAt is null
+            ? "有效期：—"
+            : status.CredentialExpiresAt is { } expiresAt
+                ? $"有效期至：{expiresAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}"
+                : "有效期：未知，以实时验证为准";
 
         if (status.Profile is { } profile)
         {

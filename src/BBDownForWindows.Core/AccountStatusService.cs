@@ -44,6 +44,7 @@ public sealed class AccountStatusService : IAccountStatusService
         var credential = ReadCredential(_paths.WebCredentialFile, AccountChannel.Web, checkedAt, out var unavailable);
         if (unavailable is not null) return unavailable;
         if (credential is null) return Missing(AccountChannel.Web, checkedAt);
+        var expiresAt = WebCredentialExpiresAt(credential);
 
         try
         {
@@ -51,35 +52,35 @@ public sealed class AccountStatusService : IAccountStatusService
             request.Headers.TryAddWithoutValidation("Cookie", credential);
             request.Headers.TryAddWithoutValidation("User-Agent", "BBDown-for-Windows/1.0");
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            if (!response.IsSuccessStatusCode) return HttpUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile, response.StatusCode);
+            if (!response.IsSuccessStatusCode) return WithExpiry(HttpUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile, response.StatusCode), expiresAt);
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
             var root = document.RootElement;
             var code = GetInt32(root, "code");
-            if (code != 0) return ApiFailure(AccountChannel.Web, checkedAt, _paths.WebCredentialFile, code, GetString(root, "message"));
-            if (!TryGetObject(root, "data", out var data)) return Incomplete(AccountChannel.Web, checkedAt, _paths.WebCredentialFile);
-            if (!GetBoolean(data, "isLogin")) return Expired(AccountChannel.Web, checkedAt, _paths.WebCredentialFile);
+            if (code != 0) return WithExpiry(ApiFailure(AccountChannel.Web, checkedAt, _paths.WebCredentialFile, code, GetString(root, "message")), expiresAt);
+            if (!TryGetObject(root, "data", out var data)) return WithExpiry(Incomplete(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
+            if (!GetBoolean(data, "isLogin")) return WithExpiry(Expired(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
 
             var displayName = GetString(data, "uname");
             var userId = GetScalarText(data, "mid");
-            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(userId)) return Incomplete(AccountChannel.Web, checkedAt, _paths.WebCredentialFile);
+            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(userId)) return WithExpiry(Incomplete(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
             var level = TryGetObject(data, "level_info", out var levelInfo) ? GetInt32(levelInfo, "current_level") : 0;
             var vipLabel = TryGetObject(data, "vip_label", out var vip) ? GetString(vip, "text") : string.Empty;
             if (string.IsNullOrWhiteSpace(vipLabel)) vipLabel = GetInt32(data, "vipStatus") == 1 ? "大会员" : "普通用户";
             var profile = new AccountProfile(displayName, userId, NormalizeAvatar(GetString(data, "face")), level, vipLabel);
-            return LoggedIn(AccountChannel.Web, profile, checkedAt, _paths.WebCredentialFile);
+            return WithExpiry(LoggedIn(AccountChannel.Web, profile, checkedAt, _paths.WebCredentialFile), expiresAt);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return NetworkUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile);
+            return WithExpiry(NetworkUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
         }
         catch (HttpRequestException)
         {
-            return NetworkUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile);
+            return WithExpiry(NetworkUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
         }
         catch (JsonException)
         {
-            return new AccountChannelStatus(AccountChannel.Web, AccountLoginState.Unavailable, null, "账号接口返回了无法识别的数据", checkedAt, CredentialUpdatedAt(_paths.WebCredentialFile));
+            return WithExpiry(new AccountChannelStatus(AccountChannel.Web, AccountLoginState.Unavailable, null, "账号接口返回了无法识别的数据", checkedAt, CredentialUpdatedAt(_paths.WebCredentialFile)), expiresAt);
         }
     }
 
@@ -203,6 +204,23 @@ public sealed class AccountStatusService : IAccountStatusService
         catch (IOException) { return null; }
         catch (UnauthorizedAccessException) { return null; }
     }
+
+    private static DateTimeOffset? WebCredentialExpiresAt(string credential)
+    {
+        foreach (var part in credential.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var separator = part.IndexOf('=');
+            if (separator <= 0 || !part[..separator].Equals("Expires", StringComparison.OrdinalIgnoreCase)) continue;
+            if (long.TryParse(part[(separator + 1)..], out var seconds))
+            {
+                try { return DateTimeOffset.FromUnixTimeSeconds(seconds); }
+                catch (ArgumentOutOfRangeException) { return null; }
+            }
+        }
+        return null;
+    }
+
+    private static AccountChannelStatus WithExpiry(AccountChannelStatus status, DateTimeOffset? expiresAt) => status with { CredentialExpiresAt = expiresAt };
 
     private static bool TryGetObject(JsonElement element, string propertyName, out JsonElement value)
     {

@@ -37,7 +37,7 @@ public sealed class AccountStatusTests
         using var temp = new TempDirectory();
         var root = temp.Info;
         var paths = CreatePaths(root);
-        File.WriteAllText(paths.WebCredentialFile, "SESSDATA=web-test-secret;bili_jct=test");
+        File.WriteAllText(paths.WebCredentialFile, "SESSDATA=web-test-secret;bili_jct=test;Expires=1767323045");
         File.WriteAllText(paths.TvCredentialFile, "access_token=tv-test-token");
         var handler = new StubHandler(request => request.RequestUri!.AbsolutePath.Contains("/nav", StringComparison.Ordinal)
             ? Json("""{"code":0,"data":{"isLogin":true,"uname":"WEB用户","mid":123,"face":"http://example.test/web.png","level_info":{"current_level":6},"vipStatus":1,"vip_label":{"text":"年度大会员"}}}""")
@@ -52,6 +52,7 @@ public sealed class AccountStatusTests
         Assert.Equal("123", status.Web.Profile.UserId);
         Assert.Equal(6, status.Web.Profile.Level);
         Assert.StartsWith("https://", status.Web.Profile.AvatarUrl, StringComparison.Ordinal);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1767323045), status.Web.CredentialExpiresAt);
         Assert.Equal(AccountLoginState.LoggedIn, status.Tv.State);
         Assert.Equal("TV用户", status.Tv.Profile!.DisplayName);
         Assert.Equal("456", status.Tv.Profile.UserId);
