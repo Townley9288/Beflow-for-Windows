@@ -9,43 +9,160 @@ namespace BBDownForWindows.Tests;
 public sealed class UpdateServiceTests
 {
     [Fact]
-    public async Task FindsNewStableReleaseAndSelectsBothPackages()
+    public async Task FindsNewReleaseFromLatestRedirectAndReadsRawReleaseNotes()
     {
-        var handler = new StubHandler(_ => Json(ReleaseJson("v1.2.3")));
+        var handler = new StubHandler(request => request.Method == HttpMethod.Head
+            ? Latest("v1.2.3")
+            : Text(HttpStatusCode.OK, "# v1.2.3\n\n- 更新说明"));
+
         var result = await new UpdateService(new HttpClient(handler)).CheckAsync(new Version(1, 0, 0));
 
         Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
         Assert.Equal(new Version(1, 2, 3), result.Release!.Version);
-        Assert.EndsWith("-setup.exe", result.Release.Installer.FileName);
-        Assert.EndsWith("-portable.zip", result.Release.Portable.FileName);
-        Assert.Contains("Beflow/", handler.Requests[0].Headers.UserAgent.ToString());
+        Assert.Equal("# v1.2.3\n\n- 更新说明", result.Release.ReleaseNotes);
+        Assert.Equal(new Uri("https://github.com/Townley9288/Beflow-for-Windows/releases/tag/v1.2.3"), result.Release.ReleasePage);
+        Assert.Collection(
+            handler.Requests,
+            request =>
+            {
+                Assert.Equal(HttpMethod.Head, request.Method);
+                Assert.Equal("github.com", request.RequestUri!.Host);
+                Assert.Equal("/Townley9288/Beflow-for-Windows/releases/latest", request.RequestUri.AbsolutePath);
+                Assert.DoesNotContain("api.github.com", request.RequestUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("Beflow/", request.Headers.UserAgent.ToString());
+            },
+            request =>
+            {
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.Equal("raw.githubusercontent.com", request.RequestUri!.Host);
+                Assert.Equal("/Townley9288/Beflow-for-Windows/v1.2.3/RELEASE_NOTES.md", request.RequestUri.AbsolutePath);
+            });
+    }
+
+    [Theory]
+    [InlineData("1.0.2", "1.0.1", UpdateCheckStatus.UpdateAvailable)]
+    [InlineData("1.0.2", "1.0.2", UpdateCheckStatus.UpToDate)]
+    [InlineData("1.0.2", "1.1.0", UpdateCheckStatus.UpToDate)]
+    public async Task ComparesLatestVersionWithCurrentVersion(string latest, string current, UpdateCheckStatus expected)
+    {
+        var handler = new StubHandler(request => request.Method == HttpMethod.Head ? Latest($"v{latest}") : Text(HttpStatusCode.NotFound));
+
+        var result = await new UpdateService(new HttpClient(handler)).CheckAsync(Version.Parse(current));
+
+        Assert.Equal(expected, result.Status);
+        Assert.Equal(Version.Parse(latest), result.Release!.Version);
     }
 
     [Fact]
-    public async Task SameOrOlderVersionIsUpToDate()
+    public async Task BuildsFixedInstallerPortableAndChecksumAddresses()
     {
-        var service = new UpdateService(new HttpClient(new StubHandler(_ => Json(ReleaseJson("v1.0.0")))));
-        var result = await service.CheckAsync(new Version(1, 1, 0));
+        var handler = new StubHandler(request => request.Method == HttpMethod.Head ? Latest("v1.2.3") : Text(HttpStatusCode.NotFound));
+
+        var release = (await new UpdateService(new HttpClient(handler)).CheckAsync(new Version(1, 0, 0))).Release!;
+
+        Assert.Equal("Beflow-for-Windows-v1.2.3-win-x64-setup.exe", release.Installer.FileName);
+        Assert.Equal("Beflow-for-Windows-v1.2.3-win-x64-setup.exe.sha256", release.Installer.ChecksumFileName);
+        Assert.Equal("https://github.com/Townley9288/Beflow-for-Windows/releases/download/v1.2.3/Beflow-for-Windows-v1.2.3-win-x64-setup.exe", release.Installer.DownloadUri.AbsoluteUri);
+        Assert.Equal("https://github.com/Townley9288/Beflow-for-Windows/releases/download/v1.2.3/Beflow-for-Windows-v1.2.3-win-x64-setup.exe.sha256", release.Installer.ChecksumUri.AbsoluteUri);
+        Assert.Equal("Beflow-for-Windows-v1.2.3-win-x64-portable.zip", release.Portable.FileName);
+        Assert.Equal("Beflow-for-Windows-v1.2.3-win-x64-portable.zip.sha256", release.Portable.ChecksumFileName);
+        Assert.Equal("https://github.com/Townley9288/Beflow-for-Windows/releases/download/v1.2.3/Beflow-for-Windows-v1.2.3-win-x64-portable.zip", release.Portable.DownloadUri.AbsoluteUri);
+        Assert.Equal("https://github.com/Townley9288/Beflow-for-Windows/releases/download/v1.2.3/Beflow-for-Windows-v1.2.3-win-x64-portable.zip.sha256", release.Portable.ChecksumUri.AbsoluteUri);
+        Assert.Equal(0, release.Installer.Size);
+        Assert.Equal(0, release.Portable.Size);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task MissingOrFailedReleaseNotesDoNotBlockVersionCheck(HttpStatusCode notesStatus)
+    {
+        var handler = new StubHandler(request => request.Method == HttpMethod.Head ? Latest("v1.2.3") : Text(notesStatus, "unavailable"));
+
+        var result = await new UpdateService(new HttpClient(handler)).CheckAsync(new Version(1, 0, 0));
+
+        Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
+        Assert.Equal(string.Empty, result.Release!.ReleaseNotes);
+    }
+
+    [Fact]
+    public async Task ReleaseNotesNetworkFailureDoesNotBlockVersionCheck()
+    {
+        var handler = new StubHandler(request => request.Method == HttpMethod.Head
+            ? Latest("v1.2.3")
+            : throw new HttpRequestException("offline"));
+
+        var result = await new UpdateService(new HttpClient(handler)).CheckAsync(new Version(1, 0, 0));
+
+        Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
+        Assert.Equal(string.Empty, result.Release!.ReleaseNotes);
+    }
+
+    [Fact]
+    public async Task LatestNotFoundMeansNoStableRelease()
+    {
+        var result = await new UpdateService(new HttpClient(new StubHandler(_ => Text(HttpStatusCode.NotFound))))
+            .CheckAsync(new Version(1, 0, 0));
+
         Assert.Equal(UpdateCheckStatus.UpToDate, result.Status);
+        Assert.Null(result.Release);
+        Assert.Contains("尚未发布", result.Message);
+    }
+
+    [Theory]
+    [InlineData("https://github.com/Townley9288/Beflow-for-Windows/releases/latest")]
+    [InlineData("https://github.com/another/repository/releases/tag/v1.2.3")]
+    [InlineData("https://example.com/Townley9288/Beflow-for-Windows/releases/tag/v1.2.3")]
+    [InlineData("https://github.com/Townley9288/Beflow-for-Windows/releases/tag/v1.2.3/extra")]
+    public async Task RejectsInvalidLatestRedirectAddress(string address)
+    {
+        var handler = new StubHandler(_ => Latest(new Uri(address)));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new UpdateService(new HttpClient(handler)).CheckAsync(new Version(1, 0, 0)));
+    }
+
+    [Theory]
+    [InlineData("v1.0")]
+    [InlineData("nightly")]
+    [InlineData("v1.0.0.1")]
+    public async Task RejectsUnsupportedLatestTag(string tag)
+    {
+        var handler = new StubHandler(_ => Latest(tag));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new UpdateService(new HttpClient(handler)).CheckAsync(new Version(1, 0, 0)));
     }
 
     [Fact]
-    public async Task DraftAndPrereleaseAreIgnored()
+    public async Task FiveMinuteCacheAvoidsRepeatedLatestAndNotesRequests()
     {
-        foreach (var marker in new[] { "\"draft\": true", "\"prerelease\": true" })
-        {
-            var json = ReleaseJson("v9.0.0").Replace(marker.Contains("draft", StringComparison.Ordinal) ? "\"draft\": false" : "\"prerelease\": false", marker, StringComparison.Ordinal);
-            var result = await new UpdateService(new HttpClient(new StubHandler(_ => Json(json)))).CheckAsync(new Version(1, 0, 0));
-            Assert.Equal(UpdateCheckStatus.UpToDate, result.Status);
-            Assert.Null(result.Release);
-        }
+        var time = new MutableTimeProvider(DateTimeOffset.Parse("2026-07-15T10:00:00Z"));
+        var handler = new StubHandler(request => request.Method == HttpMethod.Head ? Latest("v1.2.3") : Text(HttpStatusCode.OK, "notes"));
+        var service = new UpdateService(new HttpClient(handler), time);
+
+        var first = await service.CheckAsync(new Version(1, 0, 0));
+        time.Advance(TimeSpan.FromMinutes(4));
+        var second = await service.CheckAsync(new Version(1, 0, 0));
+
+        Assert.Same(first, second);
+        Assert.Equal(1, handler.Requests.Count(request => request.Method == HttpMethod.Head));
+        Assert.Equal(1, handler.Requests.Count(request => request.RequestUri!.Host == "raw.githubusercontent.com"));
     }
 
     [Fact]
-    public async Task ApiFailureIsPropagatedWithoutChangingOtherFeatures()
+    public async Task CacheExpiryRequestsLatestAgain()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("offline") };
-        await Assert.ThrowsAsync<HttpRequestException>(() => new UpdateService(new HttpClient(new StubHandler(_ => response))).CheckAsync(new Version(1, 0, 0)));
+        var time = new MutableTimeProvider(DateTimeOffset.Parse("2026-07-15T10:00:00Z"));
+        var handler = new StubHandler(request => request.Method == HttpMethod.Head ? Latest("v1.2.3") : Text(HttpStatusCode.OK, "notes"));
+        var service = new UpdateService(new HttpClient(handler), time);
+
+        await service.CheckAsync(new Version(1, 0, 0));
+        time.Advance(TimeSpan.FromMinutes(5));
+        await service.CheckAsync(new Version(1, 0, 0));
+
+        Assert.Equal(2, handler.Requests.Count(request => request.Method == HttpMethod.Head));
+        Assert.Equal(2, handler.Requests.Count(request => request.RequestUri!.Host == "raw.githubusercontent.com"));
     }
 
     [Fact]
@@ -65,26 +182,13 @@ public sealed class UpdateServiceTests
     public void ParsesReleaseTags(string tag, int major, int minor, int patch) =>
         Assert.Equal(new Version(major, minor, patch), UpdateService.ParseTagVersion(tag));
 
-    [Theory]
-    [InlineData("v1.0")]
-    [InlineData("nightly")]
-    [InlineData("v1.0.0.1")]
-    public void RejectsUnsupportedTags(string tag) => Assert.Throws<InvalidDataException>(() => UpdateService.ParseTagVersion(tag));
-
-    [Fact]
-    public async Task MissingReleaseAssetIsReported()
-    {
-        var json = ReleaseJson("v1.2.3").Replace("Beflow-for-Windows-v1.2.3-win-x64-portable.zip", "missing.zip", StringComparison.Ordinal);
-        await Assert.ThrowsAsync<InvalidDataException>(() => new UpdateService(new HttpClient(new StubHandler(_ => Json(json)))).CheckAsync(new Version(1, 0, 0)));
-    }
-
     [Fact]
     public async Task DownloadsAndVerifiesSha256()
     {
         var bytes = Encoding.UTF8.GetBytes("verified update package");
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
         var handler = new StubHandler(request => request.RequestUri!.AbsolutePath.EndsWith(".sha256", StringComparison.Ordinal)
-            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(hash + "  package.zip") }
+            ? Text(HttpStatusCode.OK, hash + "  package.zip")
             : new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
         var service = new UpdateService(new HttpClient(handler));
         using var root = new TempDirectory();
@@ -99,8 +203,8 @@ public sealed class UpdateServiceTests
     public async Task RejectsWrongSha256AndDeletesPartialFile()
     {
         var handler = new StubHandler(request => request.RequestUri!.AbsolutePath.EndsWith(".sha256", StringComparison.Ordinal)
-            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(new string('0', 64)) }
-            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("bad") });
+            ? Text(HttpStatusCode.OK, new string('0', 64))
+            : Text(HttpStatusCode.OK, "bad"));
         var service = new UpdateService(new HttpClient(handler));
         using var root = new TempDirectory();
         var asset = new UpdateAsset(UpdatePackageKind.Portable, "package.zip", new Uri("https://example.invalid/package.zip"), 3, "package.zip.sha256", new Uri("https://example.invalid/package.zip.sha256"));
@@ -109,38 +213,34 @@ public sealed class UpdateServiceTests
         Assert.Empty(root.Info.GetFiles());
     }
 
-    private static string ReleaseJson(string tag)
-    {
-        var prefix = $"Beflow-for-Windows-{tag}-win-x64";
-        return $$"""
-        {
-          "tag_name": "{{tag}}",
-          "name": "Beflow {{tag}}",
-          "body": "更新说明",
-          "html_url": "https://github.com/Townley9288/Beflow-for-Windows/releases/tag/{{tag}}",
-          "published_at": "2026-07-15T10:00:00Z",
-          "draft": false,
-          "prerelease": false,
-          "assets": [
-            { "name": "{{prefix}}-setup.exe", "browser_download_url": "https://example.invalid/setup.exe", "size": 100 },
-            { "name": "{{prefix}}-setup.exe.sha256", "browser_download_url": "https://example.invalid/setup.exe.sha256", "size": 64 },
-            { "name": "{{prefix}}-portable.zip", "browser_download_url": "https://example.invalid/portable.zip", "size": 100 },
-            { "name": "{{prefix}}-portable.zip.sha256", "browser_download_url": "https://example.invalid/portable.zip.sha256", "size": 64 }
-          ]
-        }
-        """;
-    }
+    private static HttpResponseMessage Latest(string tag) =>
+        Latest(new Uri($"https://github.com/Townley9288/Beflow-for-Windows/releases/tag/{tag}"));
 
-    private static HttpResponseMessage Json(string value) => new(HttpStatusCode.OK) { Content = new StringContent(value, Encoding.UTF8, "application/json") };
+    private static HttpResponseMessage Latest(Uri finalAddress) => new(HttpStatusCode.OK)
+    {
+        RequestMessage = new HttpRequestMessage(HttpMethod.Head, finalAddress)
+    };
+
+    private static HttpResponseMessage Text(HttpStatusCode statusCode, string value = "") => new(statusCode)
+    {
+        Content = new StringContent(value, Encoding.UTF8, "text/plain")
+    };
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
     {
         public List<HttpRequestMessage> Requests { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add(request);
             return Task.FromResult(responseFactory(request));
         }
+    }
+
+    private sealed class MutableTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+        public void Advance(TimeSpan duration) => utcNow += duration;
     }
 
     private sealed class TempDirectory : IDisposable

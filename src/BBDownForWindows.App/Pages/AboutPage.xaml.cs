@@ -84,7 +84,11 @@ public sealed partial class AboutPage : Page
         UpdateProgress.Value = _updates.Progress;
         var release = _updates.AvailableRelease;
         LatestVersionText.Visibility = release is null ? Visibility.Collapsed : Visibility.Visible;
-        LatestVersionText.Text = release is null ? string.Empty : $"最新版本：v{Core.UpdateService.FormatVersion(release.Version)} · {release.PublishedAt.ToLocalTime():yyyy-MM-dd}";
+        LatestVersionText.Text = release is null
+            ? string.Empty
+            : release.PublishedAt == DateTimeOffset.MinValue
+                ? $"最新版本：v{Core.UpdateService.FormatVersion(release.Version)}"
+                : $"最新版本：v{Core.UpdateService.FormatVersion(release.Version)} · {release.PublishedAt.ToLocalTime():yyyy-MM-dd}";
         ReleaseNotesContainer.Visibility = release is null || string.IsNullOrWhiteSpace(release.ReleaseNotes) ? Visibility.Collapsed : Visibility.Visible;
         ReleaseNotesText.Text = FormatReleaseNotes(release?.ReleaseNotes ?? string.Empty);
         ReleasePageLink.Visibility = release is null ? Visibility.Collapsed : Visibility.Visible;

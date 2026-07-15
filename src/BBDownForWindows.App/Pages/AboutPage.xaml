@@ -115,11 +115,17 @@
             <Border Padding="18" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="8">
                     <TextBlock Text="项目链接" FontSize="20" FontWeight="SemiBold" />
-                    <TextBlock Text="查看上游源码、历史版本与第三方许可信息。" Opacity="0.68" />
-                    <StackPanel Orientation="Horizontal" Spacing="20">
-                        <HyperlinkButton Content="BBDown 项目主页" NavigateUri="https://github.com/nilaoda/BBDown" HorizontalAlignment="Left" Padding="0,4" />
-                        <HyperlinkButton Content="BBDown Releases" NavigateUri="https://github.com/nilaoda/BBDown/releases" HorizontalAlignment="Left" Padding="0,4" />
-                    </StackPanel>
+                    <TextBlock Text="查看 Beflow 源码与发行版本，以及 BBDown 上游项目。" Opacity="0.68" />
+                    <Grid ColumnSpacing="18" RowSpacing="4">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                        <TextBlock Text="Beflow" VerticalAlignment="Center" FontWeight="SemiBold" />
+                        <HyperlinkButton Grid.Column="1" Content="项目主页" NavigateUri="https://github.com/Townley9288/Beflow-for-Windows" HorizontalAlignment="Left" Padding="0,4" />
+                        <HyperlinkButton Grid.Column="2" Content="Releases" NavigateUri="https://github.com/Townley9288/Beflow-for-Windows/releases" HorizontalAlignment="Left" Padding="0,4" />
+                        <TextBlock Grid.Row="1" Text="BBDown 上游" VerticalAlignment="Center" FontWeight="SemiBold" />
+                        <HyperlinkButton Grid.Row="1" Grid.Column="1" Content="项目主页" NavigateUri="https://github.com/nilaoda/BBDown" HorizontalAlignment="Left" Padding="0,4" />
+                        <HyperlinkButton Grid.Row="1" Grid.Column="2" Content="Releases" NavigateUri="https://github.com/nilaoda/BBDown/releases" HorizontalAlignment="Left" Padding="0,4" />
+                    </Grid>
                 </StackPanel>
             </Border>
         </StackPanel>
