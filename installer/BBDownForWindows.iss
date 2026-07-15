@@ -1,6 +1,6 @@
 #define MyAppName "Beflow for Windows"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.0.1"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\artifacts\publish"
@@ -65,3 +65,50 @@ Name: "{autodesktop}\Beflow for Windows"; Filename: "{app}\Beflow.exe"; Tasks: d
 
 [Run]
 Filename: "{app}\Beflow.exe"; Description: "启动 Beflow for Windows"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function IsRetainedMuiLanguage(const DirectoryName: String): Boolean;
+var
+  NormalizedName: String;
+begin
+  NormalizedName := Lowercase(DirectoryName);
+  Result := (NormalizedName = 'zh-cn') or
+            (NormalizedName = 'zh-tw') or
+            (NormalizedName = 'en-us');
+end;
+
+procedure RemoveUnsupportedMuiLanguageDirectories;
+var
+  FindRec: TFindRec;
+  DirectoryPath: String;
+begin
+  if not DirExists(ExpandConstant('{app}')) then Exit;
+  if FindFirst(ExpandConstant('{app}\*'), FindRec) then
+  begin
+    try
+      repeat
+        if ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
+           (FindRec.Name <> '.') and
+           (FindRec.Name <> '..') and
+           (not IsRetainedMuiLanguage(FindRec.Name)) then
+        begin
+          DirectoryPath := AddBackslash(ExpandConstant('{app}')) + FindRec.Name;
+          if FileExists(AddBackslash(DirectoryPath) + 'Microsoft.ui.xaml.dll.mui') or
+             FileExists(AddBackslash(DirectoryPath) + 'Microsoft.UI.Xaml.Phone.dll.mui') then
+          begin
+            Log('Removing unsupported WinUI MUI language directory: ' + DirectoryPath);
+            DelTree(DirectoryPath, True, True, True);
+          end;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+    RemoveUnsupportedMuiLanguageDirectories;
+end;

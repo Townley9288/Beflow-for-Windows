@@ -31,6 +31,7 @@ public sealed class ApplicationPaths
     public string ToolsDirectory { get; }
     public bool Portable { get; }
     public string QrCodeFile => Path.Combine(RuntimeDirectory, "qrcode.png");
+    public string RuntimeBBDownExecutable => Path.Combine(RuntimeDirectory, "BBDown.exe");
     public string WebCredentialFile => Path.Combine(RuntimeDirectory, "BBDown.data");
     public string TvCredentialFile => Path.Combine(RuntimeDirectory, "BBDownTV.data");
 

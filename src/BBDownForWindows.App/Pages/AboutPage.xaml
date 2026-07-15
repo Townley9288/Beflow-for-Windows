@@ -33,7 +33,7 @@
                         </StackPanel>
                     </StackPanel>
                     <Border Grid.Column="2" Padding="14,7" CornerRadius="14" Background="#2FFFFFFF" VerticalAlignment="Top">
-                        <TextBlock x:Name="VersionBadgeText" Text="v1.0.0" FontSize="16" FontWeight="SemiBold" Foreground="White" />
+                        <TextBlock x:Name="VersionBadgeText" Text="v1.0.1" FontSize="16" FontWeight="SemiBold" Foreground="White" />
                     </Border>
                 </Grid>
             </Border>

@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.0.0',
+    [string]$Version = '1.0.1',
     [string]$FfmpegArchiveUrl = $env:FFMPEG_ARCHIVE_URL,
     [switch]$RequireNativeUpdater
 )
@@ -36,7 +36,9 @@ $SourceManifest = Join-Path $Root 'src\BBDownForWindows.App\app.manifest'
 $GeneratedManifest = Join-Path $BuildRoot 'app.manifest'
 $ParsedVersion = [Version]::Parse($Version)
 $ManifestVersion = "$($ParsedVersion.Major).$($ParsedVersion.Minor).$([Math]::Max(0, $ParsedVersion.Build)).0"
-(Get-Content -Raw -LiteralPath $SourceManifest).Replace('version="1.0.0.0"', "version=`"$ManifestVersion`"") | Set-Content -LiteralPath $GeneratedManifest -Encoding utf8
+$ManifestContent = Get-Content -Raw -LiteralPath $SourceManifest
+$ManifestReplacement = '${1}' + $ManifestVersion + '${2}'
+[Regex]::Replace($ManifestContent, '(<assemblyIdentity\s+version=")[^"]+(")', $ManifestReplacement) | Set-Content -LiteralPath $GeneratedManifest -Encoding utf8
 Invoke-Checked { dotnet restore $Solution --locked-mode } 'Solution restore'
 Invoke-Checked { dotnet restore $AppProject -r win-x64 --locked-mode } 'Win-x64 runtime restore'
 Invoke-Checked { dotnet restore $UpdaterProject -r win-x64 --locked-mode } 'Updater restore'
@@ -83,6 +85,27 @@ foreach ($FileName in @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebVie
 
 # Debug symbols can contain local source paths and are not required by users.
 Get-ChildItem -LiteralPath $Publish -Recurse -File -Filter '*.pdb' | Remove-Item -Force
+
+# Windows App SDK self-contained publishing includes MUI resources for every
+# supported locale. Beflow currently ships Chinese UI with English fallback,
+# so keep only the locale resources needed by the supported audience.
+$RetainedMuiLanguages = @('zh-CN', 'zh-TW', 'en-US')
+$MuiLanguageDirectories = Get-ChildItem -LiteralPath $Publish -Directory | Where-Object {
+    Get-ChildItem -LiteralPath $_.FullName -Recurse -File -Filter '*.mui' -ErrorAction SilentlyContinue | Select-Object -First 1
+}
+foreach ($Directory in $MuiLanguageDirectories) {
+    if ($Directory.Name -notin $RetainedMuiLanguages) {
+        Assert-ChildPath $Directory.FullName
+        Remove-Item -LiteralPath $Directory.FullName -Recurse -Force
+    }
+}
+$UnexpectedMuiLanguages = Get-ChildItem -LiteralPath $Publish -Directory | Where-Object {
+    $_.Name -notin $RetainedMuiLanguages -and
+    (Get-ChildItem -LiteralPath $_.FullName -Recurse -File -Filter '*.mui' -ErrorAction SilentlyContinue | Select-Object -First 1)
+}
+if ($UnexpectedMuiLanguages) {
+    throw "Publish output still contains unsupported MUI language directories: $($UnexpectedMuiLanguages.Name -join ', ')"
+}
 
 & (Join-Path $PSScriptRoot 'AcquireTools.ps1') -OutputDirectory $Publish -FfmpegArchiveUrl $FfmpegArchiveUrl
 Copy-Item -LiteralPath (Join-Path $Root 'LICENSE'), (Join-Path $Root 'THIRD_PARTY_NOTICES.md'), (Join-Path $Root 'THIRD_PARTY_SOURCES.md'), (Join-Path $Root 'README.md') -Destination $Publish

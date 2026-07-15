@@ -1,22 +1,18 @@
-# Beflow for Windows v1.0.0
+# Beflow for Windows v1.0.1
 
-首个公开版本。Beflow 是基于 BBDown 构建的 WinUI 3 桌面视频下载器图形界面。
+这是一次登录与发布包修复更新。
 
-## 主要功能
+## 修复
 
-- 普通视频、多分P、番剧与整季下载
-- 杜比视界、HDR、4K、多种编码和音频格式
-- WEB/TV 扫码登录与账号状态
-- aria2c、CDN、多线程、字幕、弹幕和封面
-- 双链接与奇偶分P双音轨下载、MKV 封装和延迟设置
-- 历史记录、增量日志、任务取消与配置迁移
-- 安装版和便携版在线更新
+- 修复设置页显示 WEB/TV 账号已登录，但 BBDown 下载和信息解析仍提示“尚未登录”的问题。
+- BBDown 现在从用户私有 Runtime 目录运行，与 `BBDown.data`、`BBDownTV.data` 保持在同一目录。
+- 修复部分需要账号权限的视频因 BBDown 未加载 Cookie 而返回 `code=-404`、无法获取视频流的问题。
+- BBDown 随软件升级发生变化时，Runtime 中的托管副本会自动安全刷新。
 
-## 下载
+## 安装包
 
-- `setup.exe`：安装到 Windows，配置保存在 `%LOCALAPPDATA%\Beflow`
-- `portable.zip`：完整解压后运行，配置保存在程序旁的 `Data` 目录
+- WinUI 语言资源只保留简体中文、繁体中文和英语，减少无用语言目录。
+- 从 v1.0.0 覆盖安装时，安装程序会自动清理旧版本遗留的其他 WinUI MUI 语言目录。
+- 安装版和便携版均继续保留原有配置、历史、日志及登录数据。
 
 发行文件暂未进行商业代码签名，Windows SmartScreen 可能显示未知发布者。请从本 Release 下载，并使用对应 `.sha256` 文件核验完整性。
-
-第三方工具许可和对应源码位置见发行包内部及仓库中的 `THIRD_PARTY_NOTICES.md` 与 `THIRD_PARTY_SOURCES.md`。

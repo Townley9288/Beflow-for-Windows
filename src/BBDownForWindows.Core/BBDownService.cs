@@ -5,6 +5,8 @@ namespace BBDownForWindows.Core;
 
 public sealed class BBDownService(ApplicationPaths paths, IProcessRunner processRunner, IToolLocator toolLocator, ISettingsStore settingsStore) : IBBDownService
 {
+    private readonly BBDownRuntimeManager _runtimeManager = new(paths);
+
     public async Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken)
     {
         var request = new DownloadRequest { Url = url, Pages = pages };
@@ -126,6 +128,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var settings = await settingsStore.LoadAsync(cancellationToken);
         var tools = toolLocator.Locate(settings);
         if (string.IsNullOrWhiteSpace(tools.BBDown)) throw new FileNotFoundException("找不到 BBDown.exe");
+        tools.BBDown = _runtimeManager.PrepareExecutable(tools.BBDown);
         return tools;
     }
 
