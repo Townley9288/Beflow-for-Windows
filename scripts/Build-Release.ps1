@@ -92,17 +92,22 @@ New-Item -ItemType File -Force -Path (Join-Path $Portable 'portable.flag') | Out
 $PortableZip = Join-Path $Release "Beflow-for-Windows-v$Version-win-x64-portable.zip"
 Compress-Archive -Path (Join-Path $Portable '*') -DestinationPath $PortableZip -CompressionLevel Optimal
 
+$IsccCommand = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 $IsccCandidates = @(
+    $IsccCommand.Source,
+    "$env:ChocolateyInstall\bin\ISCC.exe",
     "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
     "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
     "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
 )
-$Iscc = $IsccCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+$Iscc = $IsccCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
 if ($Iscc) {
     $ChineseMessages = Join-Path $Artifacts 'ChineseSimplified.isl'
     $AppIconFile = Join-Path $Root 'src\BBDownForWindows.App\Assets\AppIcon.ico'
     Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl' -OutFile $ChineseMessages
     Invoke-Checked { & $Iscc "/DMyAppVersion=$Version" "/DSourceDir=$Publish" "/DOutputDir=$Release" "/DChineseMessages=$ChineseMessages" "/DAppIconFile=$AppIconFile" (Join-Path $Root 'installer\BBDownForWindows.iss') } 'Inno Setup compile'
+} elseif ($RequireNativeUpdater) {
+    throw 'Inno Setup 6 was not found; official release builds require the setup installer.'
 } else {
     Write-Warning 'Inno Setup 6 was not found; portable package was created but installer was skipped.'
 }
