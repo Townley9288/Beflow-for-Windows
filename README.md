@@ -21,6 +21,7 @@
 - CDN、多线程、aria2c、字幕、弹幕和封面
 - 双链接或奇偶分P双音轨下载、延迟与 MKV 批量封装
 - 下载历史、增量日志、持久日志和任务取消
+- 跟随系统、浅色与深色主题切换，并记忆上次选择
 - 安装版与便携版在线更新
 
 运行时不需要 Python、Node、Eel、Vue、WebView 或预先安装的 .NET Runtime。
@@ -43,7 +44,7 @@
 - 安装版下载并校验新安装包，然后执行覆盖安装。
 - 便携版由独立更新助手替换程序文件，始终保留 `Data` 和 `portable.flag`，失败时自动回滚。
 
-更新检查可以在设置页关闭。GitHub 暂时不可访问不会影响下载、登录和封装功能。
+更新检查直接读取 GitHub Releases 的最新稳定标签，不调用 GitHub API；五分钟内重复检查使用本地内存缓存。该功能可以在设置页关闭，GitHub 暂时不可访问不会影响下载、登录和封装功能。
 
 ## 隐私与账号数据
 
@@ -62,7 +63,7 @@ dotnet build src\BBDownForWindows.App\BBDownForWindows.App.csproj -c Release -p:
 生成发行包：
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 1.0.2
+.\scripts\Build-Release.ps1 -Version 1.0.3
 ```
 
 正式 CI 使用 Native AOT 构建便携更新助手。本地 Native AOT 构建需要 Visual Studio 的 Desktop development with C++ 与 Windows 10/11 SDK；缺少时脚本会为本地测试回退到自包含单文件助手。
