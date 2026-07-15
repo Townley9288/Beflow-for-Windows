@@ -60,7 +60,7 @@
                             <ComboBox Grid.Column="2" Header="音频格式" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioCodecOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding AudioCodec, Mode=TwoWay}" />
                             <ComboBox Grid.Column="3" Header="下载类型" HorizontalAlignment="Stretch" ItemsSource="{Binding DownloadModeOptions}" SelectedItem="{Binding DownloadModeText, Mode=TwoWay}" />
                             <ComboBox Grid.Row="1" Header="音频码率" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioBitrateOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding AudioBitrate, Mode=TwoWay}" />
-                            <ComboBox Grid.Row="1" Grid.Column="1" Header="CDN 节点" HorizontalAlignment="Stretch" ItemsSource="{Binding UposHostOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding UposHost, Mode=TwoWay}" />
+                            <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Header="CDN 节点" HorizontalAlignment="Stretch" ItemsSource="{Binding UposHostOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding UposHost, Mode=TwoWay}" />
                         </Grid>
                         <StackPanel Orientation="Horizontal" Spacing="18">
                             <CheckBox Content="下载弹幕" IsChecked="{Binding Danmaku, Mode=TwoWay}" />
