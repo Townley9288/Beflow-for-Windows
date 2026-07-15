@@ -26,8 +26,9 @@
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
-        <ScrollViewer Grid.Row="0" Grid.Column="0" VerticalScrollBarVisibility="Auto"><StackPanel Spacing="16">
+        <ScrollViewer Grid.Row="0" Grid.Column="0" VerticalScrollBarVisibility="Auto"><StackPanel Spacing="12">
             <StackPanel><TextBlock Text="多音轨封装" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock Text="下载两套音轨并批量封装 MKV，或重新封装已有任务" Opacity="0.65"/></StackPanel>
+            <StackPanel Spacing="8">
             <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="12">
                 <ComboBox Header="来源模式" ItemsSource="{Binding SourceModes}" SelectedItem="{Binding SourceModeText, Mode=TwoWay}" />
                 <TextBox Header="主版本 URL" Text="{Binding PrimaryUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
@@ -53,6 +54,7 @@
                 <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="mkvmerge.exe 路径" Text="{Binding MkvmergePath, Mode=TwoWay}"/><Button Grid.Column="1" Content="选择…" VerticalAlignment="Bottom" Click="BrowseMkvmerge_Click"/></Grid>
                 <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="获取规格" Command="{Binding InfoCommand}"/><Button Content="下载并封装" Command="{Binding StartCommand}" Style="{StaticResource AccentButtonStyle}"/><Button Content="仅重新封装" Command="{Binding RemuxCommand}"/><Button Content="取消" Command="{Binding Console.CancelCommand}"/></StackPanel>
             </StackPanel></Border>
+            </StackPanel>
         </StackPanel></ScrollViewer>
         <Border x:Name="LogPanel" Grid.Row="0" Grid.Column="1" Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><Grid RowSpacing="10"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="多音轨任务日志" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Text="{Binding Console.Status}" Opacity="0.65"/></StackPanel><Button Grid.Column="1" Content="复制" Margin="0,0,8,0" Click="CopyLogs_Click"/><Button Grid.Column="2" Content="清空" Command="{Binding Console.ClearCommand}"/></Grid>
