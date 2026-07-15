@@ -38,6 +38,10 @@
                     <ComboBox Grid.Column="1" Header="质量" HorizontalAlignment="Stretch" ItemsSource="{Binding QualityOptions}" SelectedItem="{Binding Quality, Mode=TwoWay}" />
                     <ComboBox Grid.Column="2" Header="编码" HorizontalAlignment="Stretch" ItemsSource="{Binding EncodingOptions}" SelectedItem="{Binding Encoding, Mode=TwoWay}" />
                 </Grid>
+                <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <ComboBox Header="主音轨格式" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioCodecOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding PrimaryAudioCodec, Mode=TwoWay}" />
+                    <ComboBox Grid.Column="1" Header="副音轨格式" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioCodecOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SecondaryAudioCodec, Mode=TwoWay}" />
+                </Grid>
             </StackPanel></Border>
             <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="12">
                 <TextBlock Text="音轨元数据" Style="{StaticResource SubtitleTextBlockStyle}"/>

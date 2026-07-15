@@ -117,6 +117,8 @@ public sealed class DualAudioRequest
     public string Pages { get; set; } = "ALL";
     public string Quality { get; set; } = "4K";
     public string Encoding { get; set; } = "AVC";
+    public string PrimaryAudioCodec { get; set; } = "auto";
+    public string SecondaryAudioCodec { get; set; } = "auto";
     public string PrimaryLabel { get; set; } = "国语";
     public string SecondaryLabel { get; set; } = "粤语";
     public string PrimaryLanguage { get; set; } = "zh";

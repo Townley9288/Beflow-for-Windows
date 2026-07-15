@@ -40,4 +40,26 @@ public sealed class DualAudioTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => DualAudioService.BuildMkvmergeArguments("a", "b", "c", new DualAudioRequest { SecondaryAudioDelayMs = 10001 }));
     }
+
+    [Fact]
+    public void DownloadRequestsUseIndependentAudioFormats()
+    {
+        var request = new DualAudioRequest
+        {
+            SourceMode = DualAudioSourceMode.Separate,
+            PrimaryUrl = "primary",
+            SecondaryUrl = "secondary",
+            PrimaryAudioCodec = "FLAC",
+            SecondaryAudioCodec = "E-AC-3"
+        };
+
+        var (primary, secondary) = DualAudioService.BuildDownloadRequests(request, "1,2", "1,2", "primary-dir", "secondary-dir");
+
+        Assert.Equal("FLAC", primary.AudioCodec);
+        Assert.Equal(DownloadMode.VideoAndAudio, primary.DownloadMode);
+        Assert.Equal("primary", primary.Url);
+        Assert.Equal("E-AC-3", secondary.AudioCodec);
+        Assert.Equal(DownloadMode.AudioOnly, secondary.DownloadMode);
+        Assert.Equal("secondary", secondary.Url);
+    }
 }

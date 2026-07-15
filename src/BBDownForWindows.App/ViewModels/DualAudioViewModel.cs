@@ -6,6 +6,8 @@ namespace BBDownForWindows.App.ViewModels;
 
 public sealed class DualAudioViewModel : ObservableObject
 {
+    public sealed record OptionItem(string Value, string Label);
+
     private readonly AppServices _services;
     private string _sourceMode = "两个独立链接";
     private string _primaryUrl = string.Empty;
@@ -13,6 +15,8 @@ public sealed class DualAudioViewModel : ObservableObject
     private string _pages = "ALL";
     private string _quality = "4K";
     private string _encoding = "AVC";
+    private string _primaryAudioCodec = "auto";
+    private string _secondaryAudioCodec = "auto";
     private string _primaryLabel = "国语";
     private string _secondaryLabel = "粤语";
     private string _primaryLanguage = "zh";
@@ -36,6 +40,15 @@ public sealed class DualAudioViewModel : ObservableObject
     public IReadOnlyList<string> SourceModes { get; } = ["两个独立链接", "同一链接奇偶分P"];
     public IReadOnlyList<string> QualityOptions { get; } = ["杜比视界", "HDR 真彩", "4K", "1080P 高码率", "1080P", "720P", "480P", "360P"];
     public IReadOnlyList<string> EncodingOptions { get; } = ["HEVC", "AVC", "AV1"];
+    public IReadOnlyList<OptionItem> AudioCodecOptions { get; } =
+    [
+        new("auto", "自动"),
+        new("E-AC-3", "E-AC-3"),
+        new("M4A", "M4A"),
+        new("FLAC", "FLAC"),
+        new("AC-3", "AC-3"),
+        new("DTS", "DTS")
+    ];
     public IReadOnlyList<string> DefaultAudioOptions { get; } = ["主版本音轨", "副版本音轨"];
     public TaskConsoleViewModel Console { get; }
     public string SourceModeText { get => _sourceMode; set { if (SetProperty(ref _sourceMode, value)) NotifyCommands(); } }
@@ -44,6 +57,8 @@ public sealed class DualAudioViewModel : ObservableObject
     public string Pages { get => _pages; set => SetProperty(ref _pages, value); }
     public string Quality { get => _quality; set => SetProperty(ref _quality, value); }
     public string Encoding { get => _encoding; set => SetProperty(ref _encoding, value); }
+    public string PrimaryAudioCodec { get => _primaryAudioCodec; set => SetProperty(ref _primaryAudioCodec, value); }
+    public string SecondaryAudioCodec { get => _secondaryAudioCodec; set => SetProperty(ref _secondaryAudioCodec, value); }
     public string PrimaryLabel { get => _primaryLabel; set => SetProperty(ref _primaryLabel, value); }
     public string SecondaryLabel { get => _secondaryLabel; set => SetProperty(ref _secondaryLabel, value); }
     public string PrimaryLanguage { get => _primaryLanguage; set => SetProperty(ref _primaryLanguage, value); }
@@ -64,6 +79,9 @@ public sealed class DualAudioViewModel : ObservableObject
         MkvmergePath = settings.MkvmergePath;
         Quality = QualityOptions.Contains(settings.Quality) ? settings.Quality : "4K";
         Encoding = EncodingOptions.Contains(settings.Encoding) ? settings.Encoding : "AVC";
+        var defaultAudioCodec = AudioCodecOptions.FirstOrDefault(option => option.Value.Equals(settings.AudioCodec, StringComparison.OrdinalIgnoreCase))?.Value ?? "auto";
+        PrimaryAudioCodec = defaultAudioCodec;
+        SecondaryAudioCodec = defaultAudioCodec;
         if (restore?.DualAudio is { } request) Apply(request);
     }
 
@@ -106,6 +124,7 @@ public sealed class DualAudioViewModel : ObservableObject
         {
             SourceMode = SourceModeText == "同一链接奇偶分P" ? DualAudioSourceMode.Interleaved : DualAudioSourceMode.Separate,
             PrimaryUrl = PrimaryUrl.Trim(), SecondaryUrl = SecondaryUrl.Trim(), Pages = Pages.Trim(), Quality = Quality, Encoding = Encoding,
+            PrimaryAudioCodec = PrimaryAudioCodec, SecondaryAudioCodec = SecondaryAudioCodec,
             PrimaryLabel = PrimaryLabel, SecondaryLabel = SecondaryLabel, PrimaryLanguage = PrimaryLanguage, SecondaryLanguage = SecondaryLanguage,
             SecondaryIsDefault = DefaultAudio == "副版本音轨", SecondaryAudioDelayMs = checked((int)SecondaryAudioDelay),
             WorkDirectory = WorkDirectory, ExistingTaskDirectory = ExistingTaskDirectory, MkvmergePath = MkvmergePath,
@@ -120,6 +139,7 @@ public sealed class DualAudioViewModel : ObservableObject
     {
         SourceModeText = request.SourceMode == DualAudioSourceMode.Interleaved ? "同一链接奇偶分P" : "两个独立链接";
         PrimaryUrl = request.PrimaryUrl; SecondaryUrl = request.SecondaryUrl; Pages = request.Pages; Quality = request.Quality; Encoding = request.Encoding;
+        PrimaryAudioCodec = request.PrimaryAudioCodec; SecondaryAudioCodec = request.SecondaryAudioCodec;
         PrimaryLabel = request.PrimaryLabel; SecondaryLabel = request.SecondaryLabel; PrimaryLanguage = request.PrimaryLanguage;
         SecondaryLanguage = request.SecondaryLanguage; DefaultAudio = request.SecondaryIsDefault ? "副版本音轨" : "主版本音轨";
         SecondaryAudioDelay = request.SecondaryAudioDelayMs; WorkDirectory = request.WorkDirectory;

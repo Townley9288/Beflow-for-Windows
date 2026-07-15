@@ -20,9 +20,8 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         context.AppendLog($"任务目录: {taskDirectory}\n");
 
         var (primaryPages, secondaryPages) = await ResolvePagesAsync(request, context, cancellationToken);
-        var primary = BuildDownloadRequest(request, request.PrimaryUrl, primaryPages, primaryDirectory, DownloadMode.VideoAndAudio, request.PrimaryLanguage);
-        var secondaryUrl = request.SourceMode == DualAudioSourceMode.Interleaved ? request.PrimaryUrl : request.SecondaryUrl;
-        var secondary = BuildDownloadRequest(request, secondaryUrl, secondaryPages, secondaryDirectory, DownloadMode.AudioOnly, request.SecondaryLanguage);
+        var (primary, secondary) = BuildDownloadRequests(request, primaryPages, secondaryPages, primaryDirectory, secondaryDirectory);
+        context.AppendLog($"音频格式: 主音轨 {DisplayAudioCodec(request.PrimaryAudioCodec)} / 副音轨 {DisplayAudioCodec(request.SecondaryAudioCodec)}\n");
         context.AppendLog("\n=== 下载主版本完整视频 ===\n");
         await bbdown.DownloadAsync(primary, context, cancellationToken);
         context.AppendLog("\n=== 下载副版本音轨 ===\n");
@@ -82,10 +81,23 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         return (string.Join(',', info.Pages.Where(page => page.Number % 2 == 1).Select(page => page.Number)), string.Join(',', info.Pages.Where(page => page.Number % 2 == 0).Select(page => page.Number)));
     }
 
-    private static DownloadRequest BuildDownloadRequest(DualAudioRequest request, string url, string pages, string directory, DownloadMode mode, string language) => new()
+    internal static (DownloadRequest Primary, DownloadRequest Secondary) BuildDownloadRequests(
+        DualAudioRequest request,
+        string primaryPages,
+        string secondaryPages,
+        string primaryDirectory,
+        string secondaryDirectory)
+    {
+        var primary = BuildDownloadRequest(request, request.PrimaryUrl, primaryPages, primaryDirectory, DownloadMode.VideoAndAudio, request.PrimaryLanguage, request.PrimaryAudioCodec);
+        var secondaryUrl = request.SourceMode == DualAudioSourceMode.Interleaved ? request.PrimaryUrl : request.SecondaryUrl;
+        var secondary = BuildDownloadRequest(request, secondaryUrl, secondaryPages, secondaryDirectory, DownloadMode.AudioOnly, request.SecondaryLanguage, request.SecondaryAudioCodec);
+        return (primary, secondary);
+    }
+
+    private static DownloadRequest BuildDownloadRequest(DualAudioRequest request, string url, string pages, string directory, DownloadMode mode, string language, string audioCodec) => new()
     {
         Url = url, Pages = pages, Quality = request.Quality, Encoding = request.Encoding, DownloadMode = mode,
-        AudioBitratePriority = request.AudioBitratePriority, WorkDirectory = directory, Language = language,
+        AudioCodec = audioCodec, AudioBitratePriority = request.AudioBitratePriority, WorkDirectory = directory, Language = language,
         MultiFilePattern = "[P<pageNumberWithZero>]<pageTitle>", MultiThread = request.MultiThread, UposHost = request.UposHost,
         UseAria2c = request.UseAria2c, Aria2cPath = request.Aria2cPath, Aria2MaxConnection = request.Aria2MaxConnection,
         Aria2Split = request.Aria2Split, Aria2MaxConcurrentDownloads = request.Aria2MaxConcurrentDownloads,
@@ -150,6 +162,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
     }
 
     private static string? EpisodePrefix(string path) => Regex.Match(Path.GetFileName(path), "^\\[P(\\d+)\\]").Groups[1].Value is { Length: > 0 } value ? value : null;
+    private static string DisplayAudioCodec(string codec) => codec.Equals("auto", StringComparison.OrdinalIgnoreCase) ? "自动" : codec;
     private static string Sanitize(string value)
     {
         var safe = Regex.Replace(value ?? string.Empty, "[\\\\/:*?\"<>|\\x00-\\x1f]+", "_").Trim(' ', '.', '_');

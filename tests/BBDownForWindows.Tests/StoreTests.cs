@@ -42,4 +42,33 @@ public sealed class StoreTests
             root.Delete(true);
         }
     }
+
+    [Fact]
+    public async Task DualAudioHistoryKeepsIndependentAudioFormats()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var store = new HistoryStore(paths);
+            await store.AddAsync(new HistoryRecord
+            {
+                TaskType = TaskKind.DualAudioMux,
+                DualAudio = new DualAudioRequest
+                {
+                    PrimaryAudioCodec = "FLAC",
+                    SecondaryAudioCodec = "E-AC-3"
+                }
+            });
+
+            var restored = Assert.Single(await store.LoadAsync()).DualAudio;
+            Assert.NotNull(restored);
+            Assert.Equal("FLAC", restored.PrimaryAudioCodec);
+            Assert.Equal("E-AC-3", restored.SecondaryAudioCodec);
+        }
+        finally
+        {
+            root.Delete(true);
+        }
+    }
 }
