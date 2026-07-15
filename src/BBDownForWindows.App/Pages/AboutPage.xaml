@@ -19,7 +19,7 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="76" Height="76" CornerRadius="20">
+                    <Border Width="96" Height="96" CornerRadius="24">
                         <Image Source="ms-appx:///Assets/AppIcon.png" Stretch="UniformToFill" />
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
