@@ -19,4 +19,4 @@
 
 发行文件暂未进行商业代码签名，Windows SmartScreen 可能显示未知发布者。请从本 Release 下载，并使用对应 `.sha256` 文件核验完整性。
 
-第三方工具许可和对应源码位置见同一 Release 中的 `THIRD_PARTY_NOTICES.md` 与 `THIRD_PARTY_SOURCES.md`。
+第三方工具许可和对应源码位置见发行包内部及仓库中的 `THIRD_PARTY_NOTICES.md` 与 `THIRD_PARTY_SOURCES.md`。

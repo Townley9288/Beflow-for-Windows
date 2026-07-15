@@ -112,9 +112,7 @@ if ($Iscc) {
     Write-Warning 'Inno Setup 6 was not found; portable package was created but installer was skipped.'
 }
 
-Copy-Item -LiteralPath (Join-Path $Root 'THIRD_PARTY_NOTICES.md'), (Join-Path $Root 'THIRD_PARTY_SOURCES.md') -Destination $Release
-
-Get-ChildItem -LiteralPath $Release -File | ForEach-Object {
+Get-ChildItem -LiteralPath $Release -File | Where-Object { $_.Extension -in @('.exe', '.zip') } | ForEach-Object {
     $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash
     Set-Content -LiteralPath ($_.FullName + '.sha256') -Value "$Hash  $($_.Name)" -Encoding ascii
 }
