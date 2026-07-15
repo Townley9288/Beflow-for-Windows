@@ -11,6 +11,8 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         Title = "BBDown for Windows";
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+        if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
         RootNavigation.SelectedItem = RootNavigation.MenuItems[0];
         Navigate("download");
         AppWindow.Closing += AppWindow_Closing;
