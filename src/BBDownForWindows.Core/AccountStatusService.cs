@@ -50,7 +50,7 @@ public sealed class AccountStatusService : IAccountStatusService
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, WebStatusUrl);
             request.Headers.TryAddWithoutValidation("Cookie", credential);
-            request.Headers.TryAddWithoutValidation("User-Agent", "BBDown-for-Windows/1.0");
+            request.Headers.TryAddWithoutValidation("User-Agent", "Beflow-for-Windows/1.0");
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (!response.IsSuccessStatusCode) return WithExpiry(HttpUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile, response.StatusCode), expiresAt);
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -96,7 +96,7 @@ public sealed class AccountStatusService : IAccountStatusService
         {
             var query = BuildTvQuery(token, checkedAt);
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{TvStatusUrl}?{query}");
-            request.Headers.TryAddWithoutValidation("User-Agent", "BBDown-for-Windows/1.0");
+            request.Headers.TryAddWithoutValidation("User-Agent", "Beflow-for-Windows/1.0");
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (!response.IsSuccessStatusCode) return HttpUnavailable(AccountChannel.Tv, checkedAt, _paths.TvCredentialFile, response.StatusCode);
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);

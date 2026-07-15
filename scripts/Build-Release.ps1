@@ -33,8 +33,8 @@ Invoke-Checked { dotnet test $Solution -c Release -p:Platform=x64 --no-restore }
 Invoke-Checked { dotnet publish $AppProject -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:Version=$Version -o $Publish --no-restore } 'Publish'
 
 $RequiredPublishFiles = @(
-    'BBDownForWindows.exe',
-    'BBDownForWindows.pri',
+    'Beflow.exe',
+    'Beflow.pri',
     'App.xbf',
     'MainWindow.xbf',
     'Pages\DownloadPage.xbf',
@@ -64,7 +64,7 @@ Copy-Item -LiteralPath (Join-Path $Root 'LICENSE'), (Join-Path $Root 'THIRD_PART
 
 Copy-Item -Path (Join-Path $Publish '*') -Destination $Portable -Recurse -Force
 New-Item -ItemType File -Force -Path (Join-Path $Portable 'portable.flag') | Out-Null
-$PortableZip = Join-Path $Release "BBDown-for-Windows-v$Version-win-x64-portable.zip"
+$PortableZip = Join-Path $Release "Beflow-for-Windows-v$Version-win-x64-portable.zip"
 Compress-Archive -Path (Join-Path $Portable '*') -DestinationPath $PortableZip -CompressionLevel Optimal
 
 $IsccCandidates = @(

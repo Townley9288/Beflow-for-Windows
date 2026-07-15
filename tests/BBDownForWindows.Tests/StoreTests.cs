@@ -44,6 +44,23 @@ public sealed class StoreTests
     }
 
     [Fact]
+    public void InstalledDataUsesBeflowDirectory()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(Path.Combine(root.FullName, "app"), root.FullName);
+            Assert.False(paths.Portable);
+            Assert.Equal(Path.Combine(root.FullName, "Beflow"), paths.DataRoot);
+            Assert.Equal(Path.Combine(root.FullName, "BBDownForWindows"), paths.PreviousInstalledDataRoot);
+        }
+        finally
+        {
+            root.Delete(true);
+        }
+    }
+
+    [Fact]
     public async Task DualAudioHistoryKeepsIndependentAudioFormats()
     {
         var root = Directory.CreateTempSubdirectory();

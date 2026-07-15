@@ -23,8 +23,8 @@
                         <FontIcon Glyph="&#xE896;" FontSize="38" Foreground="White" />
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
-                        <TextBlock Text="BBDown for Windows" FontSize="34" FontWeight="SemiBold" Foreground="White" />
-                        <TextBlock Text="基于 BBDown 的 Windows 原生图形界面" FontSize="17" Foreground="White" Opacity="0.88" />
+                        <TextBlock Text="Beflow for Windows" FontSize="34" FontWeight="SemiBold" Foreground="White" />
+                        <TextBlock Text="A Simple Desktop Video Downloader" FontSize="17" Foreground="White" Opacity="0.88" />
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
                             <Border Padding="10,4" CornerRadius="10" Background="#25FFFFFF"><TextBlock Text="WinUI 3" Foreground="White" /></Border>
                             <Border Padding="10,4" CornerRadius="10" Background="#25FFFFFF"><TextBlock Text=".NET 10" Foreground="White" /></Border>

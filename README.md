@@ -1,6 +1,8 @@
-# BBDown for Windows
+# Beflow for Windows
 
-`BBDown for Windows` 是基于 WinUI 3 与 .NET 10 构建的原生 Bilibili 下载器界面，调用 [BBDown](https://github.com/nilaoda/BBDown) 完成解析和下载。
+**A Simple Desktop Video Downloader**
+
+`Beflow for Windows` 是基于 WinUI 3 与 .NET 10 构建的原生桌面视频下载器，调用 [BBDown](https://github.com/nilaoda/BBDown) 完成 Bilibili 视频的解析和下载。
 
 ## 功能
 
@@ -40,7 +42,7 @@ CI 发布前需要把同一归档上传到稳定地址，并设置仓库变量 `
 
 ## 用户数据
 
-- 安装版：`%LOCALAPPDATA%\BBDownForWindows`
+- 安装版：`%LOCALAPPDATA%\Beflow`
 - 便携版：程序旁的 `Data` 目录
 
-首次启动会无损复制旧 Windows 版的 `config.json`、`BBDown.data` 和 `BBDownTV.data`，不会删除原文件。
+首次启动会无损迁移旧版 BBDown GUI 及 `BBDown for Windows` 的配置、历史、登录数据和日志，不会删除原文件。

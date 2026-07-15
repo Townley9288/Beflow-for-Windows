@@ -1,6 +1,6 @@
 # Third-party notices
 
-BBDown for Windows is an independent graphical frontend. Release packages may aggregate the following command-line tools as separate executables:
+Beflow for Windows is an independent graphical frontend. Release packages may aggregate the following command-line tools as separate executables:
 
 - **BBDown 1.6.3** — <https://github.com/nilaoda/BBDown>. See the upstream repository and release archive for its license.
 - **aria2 1.37.0** — GPL-2.0-or-later. Source and license: <https://github.com/aria2/aria2>.

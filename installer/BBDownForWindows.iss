@@ -1,4 +1,4 @@
-#define MyAppName "BBDown for Windows"
+#define MyAppName "Beflow for Windows"
 #ifndef MyAppVersion
   #define MyAppVersion "1.0.0"
 #endif
@@ -16,12 +16,12 @@
 AppId={{E2225E43-74CA-49C7-AB6A-48634C838A7D}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppPublisher=BBDown for Windows contributors
-DefaultDirName={autopf}\BBDown for Windows
-DefaultGroupName=BBDown for Windows
+AppPublisher=Beflow contributors
+DefaultDirName={autopf}\Beflow
+DefaultGroupName=Beflow
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=BBDown-for-Windows-v{#MyAppVersion}-win-x64-setup
+OutputBaseFilename=Beflow-for-Windows-v{#MyAppVersion}-win-x64-setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -29,7 +29,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog commandline
-UninstallDisplayIcon={app}\BBDownForWindows.exe
+UninstallDisplayIcon={app}\Beflow.exe
+VersionInfoDescription=A Simple Desktop Video Downloader
+VersionInfoProductName=Beflow for Windows
 SetupLogging=yes
 
 [Languages]
@@ -42,9 +44,18 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+Type: files; Name: "{app}\BBDownForWindows.exe"
+Type: files; Name: "{app}\BBDownForWindows.dll"
+Type: files; Name: "{app}\BBDownForWindows.deps.json"
+Type: files; Name: "{app}\BBDownForWindows.runtimeconfig.json"
+Type: files; Name: "{app}\BBDownForWindows.pri"
+Type: files; Name: "{autoprograms}\BBDown for Windows.lnk"
+Type: files; Name: "{autodesktop}\BBDown for Windows.lnk"
+
 [Icons]
-Name: "{autoprograms}\BBDown for Windows"; Filename: "{app}\BBDownForWindows.exe"
-Name: "{autodesktop}\BBDown for Windows"; Filename: "{app}\BBDownForWindows.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Beflow for Windows"; Filename: "{app}\Beflow.exe"
+Name: "{autodesktop}\Beflow for Windows"; Filename: "{app}\Beflow.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\BBDownForWindows.exe"; Description: "启动 BBDown for Windows"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Beflow.exe"; Description: "启动 Beflow for Windows"; Flags: nowait postinstall skipifsilent

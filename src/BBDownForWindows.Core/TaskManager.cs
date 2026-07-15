@@ -47,7 +47,7 @@ public sealed class TaskManager : ITaskManager
             {
                 snapshot.LogPath = CreateLogPath(snapshot.Id, logLabel);
                 writer = new StreamWriter(new FileStream(snapshot.LogPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read), new System.Text.UTF8Encoding(false)) { AutoFlush = true };
-                await writer.WriteLineAsync("BBDown for Windows 任务日志");
+                await writer.WriteLineAsync("Beflow for Windows 任务日志");
                 await writer.WriteLineAsync($"任务ID: {snapshot.Id}");
                 await writer.WriteLineAsync($"开始时间: {snapshot.StartedAt:O}");
                 await writer.WriteLineAsync();
@@ -112,6 +112,11 @@ public sealed class TaskManager : ITaskManager
         if (string.IsNullOrWhiteSpace(path)) throw new FileNotFoundException("该历史记录没有保存日志");
         var root = Path.GetFullPath(_paths.LogsDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var candidate = Path.GetFullPath(path);
+        if (!candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        {
+            var migratedCandidate = Path.Combine(_paths.LogsDirectory, Path.GetFileName(candidate));
+            if (File.Exists(migratedCandidate)) candidate = migratedCandidate;
+        }
         if (!candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !candidate.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("日志路径无效");
         return File.ReadAllText(candidate);

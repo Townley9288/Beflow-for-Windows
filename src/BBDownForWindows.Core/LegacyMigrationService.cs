@@ -24,10 +24,21 @@ public sealed class LegacyMigrationService
         {
             if (!Directory.Exists(sourceRoot)) continue;
             CopyIfMissing(Path.Combine(sourceRoot, "config.json"), _paths.SettingsFile, copied);
+            CopyIfMissing(Path.Combine(sourceRoot, "history.json"), _paths.HistoryFile, copied);
             CopyIfMissing(Path.Combine(sourceRoot, "BBDown.data"), _paths.WebCredentialFile, copied);
             CopyIfMissing(Path.Combine(sourceRoot, "BBDownTV.data"), _paths.TvCredentialFile, copied);
+            CopyIfMissing(Path.Combine(sourceRoot, "Runtime", "BBDown.data"), _paths.WebCredentialFile, copied);
+            CopyIfMissing(Path.Combine(sourceRoot, "Runtime", "BBDownTV.data"), _paths.TvCredentialFile, copied);
+            CopyLogsIfMissing(Path.Combine(sourceRoot, "Logs"), copied);
         }
         return copied;
+    }
+
+    private void CopyLogsIfMissing(string sourceDirectory, ICollection<string> copied)
+    {
+        if (!Directory.Exists(sourceDirectory)) return;
+        foreach (var source in Directory.EnumerateFiles(sourceDirectory, "*.log"))
+            CopyIfMissing(source, Path.Combine(_paths.LogsDirectory, Path.GetFileName(source)), copied);
     }
 
     private static void CopyIfMissing(string source, string destination, ICollection<string> copied)
@@ -40,6 +51,7 @@ public sealed class LegacyMigrationService
 
     private static IEnumerable<string?> GetDefaultCandidates(ApplicationPaths paths)
     {
+        if (!paths.Portable) yield return paths.PreviousInstalledDataRoot;
         yield return Directory.GetParent(paths.ApplicationDirectory)?.FullName;
         yield return Environment.CurrentDirectory;
         foreach (var drive in DriveInfo.GetDrives().Where(drive => drive.DriveType == DriveType.Fixed && drive.IsReady))

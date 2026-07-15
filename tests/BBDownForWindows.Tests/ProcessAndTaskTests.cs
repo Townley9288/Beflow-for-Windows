@@ -49,6 +49,9 @@ public sealed class ProcessAndTaskTests
             });
             Assert.Equal(TaskState.Completed, snapshot.State);
             Assert.Contains("测试日志", manager.ReadSavedLog(snapshot.LogPath));
+            var migratedLog = Path.Combine(paths.LogsDirectory, "old.log");
+            File.WriteAllText(migratedLog, "旧日志");
+            Assert.Equal("旧日志", manager.ReadSavedLog(Path.Combine(root.FullName, "BBDownForWindows", "Logs", "old.log")));
             Assert.Throws<UnauthorizedAccessException>(() => manager.ReadSavedLog(Path.Combine(root.FullName, "outside.log")));
         }
         finally { root.Delete(true); }
