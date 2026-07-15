@@ -30,7 +30,7 @@
         </VisualStateManager.VisualStateGroups>
 
         <ScrollViewer x:Name="ControlsScrollViewer" Grid.Row="0" Grid.Column="0" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="16">
+            <StackPanel Spacing="12">
                 <StackPanel>
                     <TextBlock Text="下载" Style="{StaticResource TitleTextBlockStyle}" />
                     <TextBlock Text="下载普通视频、多分P及整季内容" Opacity="0.65" />
