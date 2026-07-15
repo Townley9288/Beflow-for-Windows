@@ -19,8 +19,8 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="76" Height="76" CornerRadius="20" Background="#28FFFFFF">
-                        <FontIcon Glyph="&#xE896;" FontSize="38" Foreground="White" />
+                    <Border Width="76" Height="76" CornerRadius="20">
+                        <Image Source="ms-appx:///Assets/AppIcon.png" Stretch="UniformToFill" />
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
                         <TextBlock Text="Beflow for Windows" FontSize="34" FontWeight="SemiBold" Foreground="White" />

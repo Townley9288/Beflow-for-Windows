@@ -75,8 +75,9 @@ $IsccCandidates = @(
 $Iscc = $IsccCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if ($Iscc) {
     $ChineseMessages = Join-Path $Artifacts 'ChineseSimplified.isl'
+    $AppIconFile = Join-Path $Root 'src\BBDownForWindows.App\Assets\AppIcon.ico'
     Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl' -OutFile $ChineseMessages
-    Invoke-Checked { & $Iscc "/DMyAppVersion=$Version" "/DSourceDir=$Publish" "/DOutputDir=$Release" "/DChineseMessages=$ChineseMessages" (Join-Path $Root 'installer\BBDownForWindows.iss') } 'Inno Setup compile'
+    Invoke-Checked { & $Iscc "/DMyAppVersion=$Version" "/DSourceDir=$Publish" "/DOutputDir=$Release" "/DChineseMessages=$ChineseMessages" "/DAppIconFile=$AppIconFile" (Join-Path $Root 'installer\BBDownForWindows.iss') } 'Inno Setup compile'
 } else {
     Write-Warning 'Inno Setup 6 was not found; portable package was created but installer was skipped.'
 }

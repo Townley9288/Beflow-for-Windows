@@ -11,6 +11,9 @@
 #ifndef ChineseMessages
   #define ChineseMessages "compiler:Default.isl"
 #endif
+#ifndef AppIconFile
+  #define AppIconFile "..\src\BBDownForWindows.App\Assets\AppIcon.ico"
+#endif
 
 [Setup]
 AppId={{E2225E43-74CA-49C7-AB6A-48634C838A7D}
@@ -30,6 +33,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog commandline
 UninstallDisplayIcon={app}\Beflow.exe
+SetupIconFile={#AppIconFile}
 VersionInfoDescription=A Simple Desktop Video Downloader / 基于 BBDown 构建的桌面视频下载器图形界面
 VersionInfoProductName=Beflow for Windows
 SetupLogging=yes
