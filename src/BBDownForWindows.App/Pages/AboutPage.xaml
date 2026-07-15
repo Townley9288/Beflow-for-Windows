@@ -33,8 +33,29 @@
                         </StackPanel>
                     </StackPanel>
                     <Border Grid.Column="2" Padding="14,7" CornerRadius="14" Background="#2FFFFFFF" VerticalAlignment="Top">
-                        <TextBlock Text="v1.0.0" FontSize="16" FontWeight="SemiBold" Foreground="White" />
+                        <TextBlock x:Name="VersionBadgeText" Text="v1.0.0" FontSize="16" FontWeight="SemiBold" Foreground="White" />
                     </Border>
+                </Grid>
+            </Border>
+
+            <Border Padding="18" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Border Width="50" Height="50" CornerRadius="25" Background="#182563EB">
+                        <FontIcon Glyph="&#xE895;" FontSize="24" Foreground="#FF2563EB" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Text="软件更新" FontSize="20" FontWeight="SemiBold" />
+                        <TextBlock x:Name="UpdateStatusText" Text="尚未检查更新" TextWrapping="Wrap" />
+                        <TextBlock x:Name="LatestVersionText" Opacity="0.65" Visibility="Collapsed" />
+                        <TextBlock x:Name="ReleaseNotesText" Opacity="0.65" TextWrapping="Wrap" MaxHeight="90" Visibility="Collapsed" />
+                        <ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Height="4" Visibility="Collapsed" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                        <HyperlinkButton x:Name="ReleasePageLink" Content="查看发布页" Visibility="Collapsed" />
+                        <Button x:Name="CheckUpdateButton" Content="检查更新" Click="CheckUpdate_Click" />
+                        <Button x:Name="ApplyUpdateButton" Content="立即更新" Style="{StaticResource AccentButtonStyle}" Click="ApplyUpdate_Click" Visibility="Collapsed" />
+                    </StackPanel>
                 </Grid>
             </Border>
 

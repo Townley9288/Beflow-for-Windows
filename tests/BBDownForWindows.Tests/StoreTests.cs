@@ -19,11 +19,28 @@ public sealed class StoreTests
             Assert.Equal(DownloadMode.AudioOnly, settings.DownloadMode);
             Assert.Equal(AudioBitratePriority.Highest, settings.AudioBitratePriority);
             Assert.True(settings.SaveTaskLogs);
+            Assert.True(settings.CheckUpdatesOnStartup);
         }
         finally
         {
             root.Delete(true);
         }
+    }
+
+    [Fact]
+    public async Task UpdateStateIsStoredSeparatelyFromSettings()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var expected = DateTimeOffset.Parse("2026-07-15T10:00:00Z");
+            var store = new UpdateStateStore(paths);
+            await store.SaveAsync(new UpdateState { LastCheckedAt = expected });
+            Assert.Equal(expected, (await store.LoadAsync()).LastCheckedAt);
+            Assert.False(File.Exists(paths.SettingsFile));
+        }
+        finally { root.Delete(true); }
     }
 
     [Fact]

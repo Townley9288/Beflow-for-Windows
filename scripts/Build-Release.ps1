@@ -1,13 +1,16 @@
 param(
     [string]$Version = '1.0.0',
-    [string]$FfmpegArchiveUrl = $env:FFMPEG_ARCHIVE_URL
+    [string]$FfmpegArchiveUrl = $env:FFMPEG_ARCHIVE_URL,
+    [switch]$RequireNativeUpdater
 )
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $Artifacts = Join-Path $Root 'artifacts'
-$Publish = Join-Path $Artifacts 'publish'
-$Portable = Join-Path $Artifacts 'portable'
+$BuildRoot = Join-Path $Artifacts "build-$Version-$PID"
+$Publish = Join-Path $BuildRoot 'publish'
+$Portable = Join-Path $BuildRoot 'portable'
+$UpdaterPublish = Join-Path $BuildRoot 'updater'
 $Release = Join-Path $Artifacts 'release'
 
 function Assert-ChildPath([string]$Path) {
@@ -16,9 +19,10 @@ function Assert-ChildPath([string]$Path) {
     if (-not $ResolvedPath.StartsWith($ResolvedRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "Refusing to modify path outside repository: $ResolvedPath" }
 }
 
-foreach ($Directory in @($Artifacts, $Publish, $Portable, $Release)) { Assert-ChildPath $Directory }
-if (Test-Path -LiteralPath $Artifacts) { Remove-Item -LiteralPath $Artifacts -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $Publish, $Portable, $Release | Out-Null
+foreach ($Directory in @($Artifacts, $BuildRoot, $Publish, $Portable, $UpdaterPublish, $Release)) { Assert-ChildPath $Directory }
+if (Test-Path -LiteralPath $BuildRoot) { Remove-Item -LiteralPath $BuildRoot -Recurse -Force }
+if (Test-Path -LiteralPath $Release) { Remove-Item -LiteralPath $Release -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $Publish, $Portable, $UpdaterPublish, $Release | Out-Null
 
 function Invoke-Checked([scriptblock]$Command, [string]$Description) {
     & $Command
@@ -27,13 +31,31 @@ function Invoke-Checked([scriptblock]$Command, [string]$Description) {
 
 $Solution = Join-Path $Root 'BBDown-for-Windows.sln'
 $AppProject = Join-Path $Root 'src\BBDownForWindows.App\BBDownForWindows.App.csproj'
+$UpdaterProject = Join-Path $Root 'src\Beflow.Updater\Beflow.Updater.csproj'
+$SourceManifest = Join-Path $Root 'src\BBDownForWindows.App\app.manifest'
+$GeneratedManifest = Join-Path $BuildRoot 'app.manifest'
+$ParsedVersion = [Version]::Parse($Version)
+$ManifestVersion = "$($ParsedVersion.Major).$($ParsedVersion.Minor).$([Math]::Max(0, $ParsedVersion.Build)).0"
+(Get-Content -Raw -LiteralPath $SourceManifest).Replace('version="1.0.0.0"', "version=`"$ManifestVersion`"") | Set-Content -LiteralPath $GeneratedManifest -Encoding utf8
 Invoke-Checked { dotnet restore $Solution --locked-mode } 'Solution restore'
 Invoke-Checked { dotnet restore $AppProject -r win-x64 --locked-mode } 'Win-x64 runtime restore'
+Invoke-Checked { dotnet restore $UpdaterProject -r win-x64 --locked-mode } 'Updater restore'
 Invoke-Checked { dotnet test $Solution -c Release -p:Platform=x64 --no-restore } 'Tests'
-Invoke-Checked { dotnet publish $AppProject -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:Version=$Version -o $Publish --no-restore } 'Publish'
+Invoke-Checked { dotnet publish $AppProject -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:Version=$Version -p:ApplicationManifest=$GeneratedManifest -o $Publish --no-restore } 'Publish'
+
+& dotnet publish $UpdaterProject -c Release -r win-x64 --self-contained true -p:Version=$Version -o $UpdaterPublish --no-restore
+if ($LASTEXITCODE -ne 0) {
+    if ($RequireNativeUpdater) { throw "Native AOT updater publish failed with exit code $LASTEXITCODE" }
+    Write-Warning 'Native AOT updater publish failed; creating a managed self-contained single-file updater for this local build.'
+    if (Test-Path -LiteralPath $UpdaterPublish) { Remove-Item -LiteralPath $UpdaterPublish -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $UpdaterPublish | Out-Null
+    Invoke-Checked { dotnet publish $UpdaterProject -c Release -r win-x64 --self-contained true -p:Version=$Version -p:PublishAot=false -p:PublishSingleFile=true -p:PublishTrimmed=true -o $UpdaterPublish --no-restore } 'Managed updater fallback publish'
+}
+Copy-Item -LiteralPath (Join-Path $UpdaterPublish 'Beflow.Updater.exe') -Destination (Join-Path $Publish 'Beflow.Updater.exe') -Force
 
 $RequiredPublishFiles = @(
     'Beflow.exe',
+    'Beflow.Updater.exe',
     'Beflow.pri',
     'App.xbf',
     'MainWindow.xbf',
@@ -59,8 +81,11 @@ foreach ($FileName in @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebVie
     if (Test-Path -LiteralPath $WebViewFile -PathType Leaf) { Remove-Item -LiteralPath $WebViewFile -Force }
 }
 
+# Debug symbols can contain local source paths and are not required by users.
+Get-ChildItem -LiteralPath $Publish -Recurse -File -Filter '*.pdb' | Remove-Item -Force
+
 & (Join-Path $PSScriptRoot 'AcquireTools.ps1') -OutputDirectory $Publish -FfmpegArchiveUrl $FfmpegArchiveUrl
-Copy-Item -LiteralPath (Join-Path $Root 'LICENSE'), (Join-Path $Root 'THIRD_PARTY_NOTICES.md'), (Join-Path $Root 'README.md') -Destination $Publish
+Copy-Item -LiteralPath (Join-Path $Root 'LICENSE'), (Join-Path $Root 'THIRD_PARTY_NOTICES.md'), (Join-Path $Root 'THIRD_PARTY_SOURCES.md'), (Join-Path $Root 'README.md') -Destination $Publish
 
 Copy-Item -Path (Join-Path $Publish '*') -Destination $Portable -Recurse -Force
 New-Item -ItemType File -Force -Path (Join-Path $Portable 'portable.flag') | Out-Null
@@ -82,8 +107,11 @@ if ($Iscc) {
     Write-Warning 'Inno Setup 6 was not found; portable package was created but installer was skipped.'
 }
 
+Copy-Item -LiteralPath (Join-Path $Root 'THIRD_PARTY_NOTICES.md'), (Join-Path $Root 'THIRD_PARTY_SOURCES.md') -Destination $Release
+
 Get-ChildItem -LiteralPath $Release -File | ForEach-Object {
     $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash
     Set-Content -LiteralPath ($_.FullName + '.sha256') -Value "$Hash  $($_.Name)" -Encoding ascii
 }
 Get-ChildItem -LiteralPath $Release -File | Select-Object Name, Length | Format-Table -AutoSize
+Write-Host "Release staging directory: $BuildRoot"

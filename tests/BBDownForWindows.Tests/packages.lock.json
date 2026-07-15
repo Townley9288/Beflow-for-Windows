@@ -101,6 +101,9 @@
       },
       "bbdownforwindows.core": {
         "type": "Project"
+      },
+      "beflow.updater": {
+        "type": "Project"
       }
     },
     "net10.0/win-x64": {}

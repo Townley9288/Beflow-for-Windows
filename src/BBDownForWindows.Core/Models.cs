@@ -21,6 +21,10 @@ public enum AccountChannel { Web, Tv }
 
 public enum AccountLoginState { NotConfigured, LoggedIn, Expired, Unavailable }
 
+public enum UpdateCheckStatus { UpToDate, UpdateAvailable }
+
+public enum UpdatePackageKind { Installer, Portable }
+
 public sealed record AccountProfile(string DisplayName, string UserId, string AvatarUrl, int Level, string VipLabel);
 
 public sealed record AccountChannelStatus(
@@ -36,7 +40,7 @@ public sealed record AccountStatusSnapshot(AccountChannelStatus Web, AccountChan
 
 public sealed class AppSettings
 {
-    [JsonPropertyName("schemaVersion")] public int SchemaVersion { get; set; } = 1;
+    [JsonPropertyName("schemaVersion")] public int SchemaVersion { get; set; } = 2;
     [JsonPropertyName("quality")] public string Quality { get; set; } = "4K";
     [JsonPropertyName("encoding")] public string Encoding { get; set; } = "AVC";
     [JsonPropertyName("audioOnly")] public string LegacyAudioOnly
@@ -77,9 +81,39 @@ public sealed class AppSettings
     [JsonPropertyName("aria2MaxConcurrentDownloads")] public int Aria2MaxConcurrentDownloads { get; set; } = 16;
     [JsonPropertyName("aria2MinSplitSize")] public int Aria2MinSplitSize { get; set; } = 5;
     [JsonPropertyName("mkvmergePath")] public string MkvmergePath { get; set; } = string.Empty;
+    [JsonPropertyName("checkUpdatesOnStartup")] public bool CheckUpdatesOnStartup { get; set; } = true;
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 }
+
+public sealed class UpdateState
+{
+    [JsonPropertyName("lastCheckedAt")] public DateTimeOffset? LastCheckedAt { get; set; }
+}
+
+public sealed record UpdateAsset(
+    UpdatePackageKind Kind,
+    string FileName,
+    Uri DownloadUri,
+    long Size,
+    string ChecksumFileName,
+    Uri ChecksumUri);
+
+public sealed record UpdateRelease(
+    Version Version,
+    string TagName,
+    string DisplayName,
+    string ReleaseNotes,
+    DateTimeOffset PublishedAt,
+    Uri ReleasePage,
+    UpdateAsset Installer,
+    UpdateAsset Portable);
+
+public sealed record UpdateCheckResult(
+    UpdateCheckStatus Status,
+    Version CurrentVersion,
+    UpdateRelease? Release,
+    string Message);
 
 public sealed class DownloadRequest
 {

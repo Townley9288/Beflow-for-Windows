@@ -1,6 +1,7 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using BBDownForWindows.Core;
 
 namespace BBDownForWindows.App;
 
@@ -53,6 +54,26 @@ public sealed partial class MainWindow : Window
     }
 
     public void RestoreHistory(Core.HistoryRecord record) => Navigate(record.TaskType is Core.TaskKind.DualAudioMux or Core.TaskKind.DualAudioRemux ? "dual" : "download", record);
+
+    public void ShowUpdateAvailable(UpdateRelease release)
+    {
+        UpdateInfoBar.Message = $"v{UpdateService.FormatVersion(release.Version)} 已发布，可以在关于页查看并安装。";
+        UpdateInfoBar.IsOpen = true;
+    }
+
+    public void RequestUpdateShutdown()
+    {
+        _forceClosing = true;
+        Close();
+    }
+
+    private async void RootNavigation_Loaded(object sender, RoutedEventArgs e)
+    {
+        RootNavigation.Loaded -= RootNavigation_Loaded;
+        await ((App)Application.Current).Services.UpdateCoordinator.CheckOnStartupAsync();
+    }
+
+    private void UpdateInfoBar_Click(object sender, RoutedEventArgs e) => Navigate("about");
 
     private async void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
     {

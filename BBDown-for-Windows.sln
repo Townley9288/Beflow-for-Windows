@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BBDownForWindows.App", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BBDownForWindows.Tests", "tests\BBDownForWindows.Tests\BBDownForWindows.Tests.csproj", "{9680D576-BC97-4A4A-8AC4-E4E0DA58A5DF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Beflow.Updater", "src\Beflow.Updater\Beflow.Updater.csproj", "{DC9AC645-4F79-4B22-9A13-4090815A1A6F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -27,5 +29,9 @@ Global
 		{9680D576-BC97-4A4A-8AC4-E4E0DA58A5DF}.Debug|x64.Build.0 = Debug|Any CPU
 		{9680D576-BC97-4A4A-8AC4-E4E0DA58A5DF}.Release|x64.ActiveCfg = Release|Any CPU
 		{9680D576-BC97-4A4A-8AC4-E4E0DA58A5DF}.Release|x64.Build.0 = Release|Any CPU
+		{DC9AC645-4F79-4B22-9A13-4090815A1A6F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DC9AC645-4F79-4B22-9A13-4090815A1A6F}.Debug|x64.Build.0 = Debug|Any CPU
+		{DC9AC645-4F79-4B22-9A13-4090815A1A6F}.Release|x64.ActiveCfg = Release|Any CPU
+		{DC9AC645-4F79-4B22-9A13-4090815A1A6F}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

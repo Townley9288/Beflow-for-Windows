@@ -37,6 +37,8 @@ SetupIconFile={#AppIconFile}
 VersionInfoDescription=A Simple Desktop Video Downloader / 基于 BBDown 构建的桌面视频下载器图形界面
 VersionInfoProductName=Beflow for Windows
 SetupLogging=yes
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "chinesesimp"; MessagesFile: "{#ChineseMessages}"

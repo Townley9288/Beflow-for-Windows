@@ -125,7 +125,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     public async Task SaveAsync()
     {
-        Settings.SchemaVersion = 1;
+        Settings.SchemaVersion = 2;
         await _services.Settings.SaveAsync(Settings);
         Message = "设置已保存";
     }

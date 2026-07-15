@@ -19,5 +19,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\BBDownForWindows.Core\BBDownForWindows.Core.csproj" />
+    <ProjectReference Include="..\..\src\Beflow.Updater\Beflow.Updater.csproj" />
   </ItemGroup>
 </Project>

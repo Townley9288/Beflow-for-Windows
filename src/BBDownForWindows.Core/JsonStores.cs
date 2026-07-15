@@ -74,6 +74,29 @@ public sealed class HistoryStore(ApplicationPaths paths) : IHistoryStore
         AtomicJson.WriteAsync(paths.HistoryFile, Array.Empty<HistoryRecord>(), Options, cancellationToken);
 }
 
+public sealed class UpdateStateStore(ApplicationPaths paths) : IUpdateStateStore
+{
+    private static readonly JsonSerializerOptions Options = SettingsStore.CreateOptions();
+
+    public async Task<UpdateState> LoadAsync(CancellationToken cancellationToken = default)
+    {
+        paths.EnsureCreated();
+        if (!File.Exists(paths.UpdateStateFile)) return new UpdateState();
+        try
+        {
+            await using var stream = File.OpenRead(paths.UpdateStateFile);
+            return await JsonSerializer.DeserializeAsync<UpdateState>(stream, Options, cancellationToken) ?? new UpdateState();
+        }
+        catch (JsonException)
+        {
+            return new UpdateState();
+        }
+    }
+
+    public Task SaveAsync(UpdateState state, CancellationToken cancellationToken = default) =>
+        AtomicJson.WriteAsync(paths.UpdateStateFile, state, Options, cancellationToken);
+}
+
 internal static class AtomicJson
 {
     public static async Task WriteAsync<T>(string path, T value, JsonSerializerOptions options, CancellationToken cancellationToken)

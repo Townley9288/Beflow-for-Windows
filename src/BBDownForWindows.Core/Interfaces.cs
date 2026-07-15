@@ -21,6 +21,18 @@ public interface IHistoryStore
     Task ClearAsync(CancellationToken cancellationToken = default);
 }
 
+public interface IUpdateStateStore
+{
+    Task<UpdateState> LoadAsync(CancellationToken cancellationToken = default);
+    Task SaveAsync(UpdateState state, CancellationToken cancellationToken = default);
+}
+
+public interface IUpdateService
+{
+    Task<UpdateCheckResult> CheckAsync(Version currentVersion, CancellationToken cancellationToken = default);
+    Task<string> DownloadAndVerifyAsync(UpdateAsset asset, string destinationDirectory, IProgress<double>? progress = null, CancellationToken cancellationToken = default);
+}
+
 public interface IToolLocator
 {
     ToolPaths Locate(AppSettings settings);
