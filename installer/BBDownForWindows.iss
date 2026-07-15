@@ -30,7 +30,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog commandline
 UninstallDisplayIcon={app}\Beflow.exe
-VersionInfoDescription=A Simple Desktop Video Downloader
+VersionInfoDescription=A Simple Desktop Video Downloader / 基于 BBDown 构建的桌面视频下载器图形界面
 VersionInfoProductName=Beflow for Windows
 SetupLogging=yes
 

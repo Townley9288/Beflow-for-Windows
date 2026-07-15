@@ -2,6 +2,8 @@
 
 **A Simple Desktop Video Downloader**
 
+**基于 BBDown 构建的桌面视频下载器图形界面**
+
 `Beflow for Windows` 是基于 WinUI 3 与 .NET 10 构建的原生桌面视频下载器，调用 [BBDown](https://github.com/nilaoda/BBDown) 完成 Bilibili 视频的解析和下载。
 
 ## 功能
