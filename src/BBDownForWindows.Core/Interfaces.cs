@@ -14,6 +14,7 @@ public interface ISettingsStore
 
 public interface IHistoryStore
 {
+    event EventHandler? Changed;
     Task<IReadOnlyList<HistoryRecord>> LoadAsync(CancellationToken cancellationToken = default);
     Task SaveAllAsync(IReadOnlyList<HistoryRecord> records, CancellationToken cancellationToken = default);
     Task AddAsync(HistoryRecord record, CancellationToken cancellationToken = default);
@@ -59,13 +60,13 @@ public interface ITaskManager
 public interface IBBDownService
 {
     Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken);
-    Task DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<string> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
     Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken);
     Task<string> GetTitleAsync(string url, CancellationToken cancellationToken);
 }
 
 public interface IDualAudioService
 {
-    Task DownloadAndMuxAsync(DualAudioRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<string> DownloadAndMuxAsync(DualAudioRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
     Task RemuxExistingAsync(DualAudioRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
 }

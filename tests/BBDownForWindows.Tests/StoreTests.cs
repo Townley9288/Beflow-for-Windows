@@ -105,4 +105,29 @@ public sealed class StoreTests
             root.Delete(true);
         }
     }
+
+    [Fact]
+    public async Task HistoryStoreNotifiesAfterMutations()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var store = new HistoryStore(paths);
+            var changes = 0;
+            store.Changed += (_, _) => changes++;
+            var record = new HistoryRecord { Title = "标题", Timestamp = DateTimeOffset.Parse("2026-07-15T22:28:15+08:00") };
+
+            await store.AddAsync(record);
+            var serialized = await File.ReadAllTextAsync(paths.HistoryFile);
+            await store.SaveAllAsync(await store.LoadAsync());
+            await store.DeleteAsync(0);
+            await store.ClearAsync();
+
+            Assert.Equal(4, changes);
+            Assert.Matches(@"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", record.TimestampText);
+            Assert.DoesNotContain("timestampText", serialized, StringComparison.OrdinalIgnoreCase);
+        }
+        finally { root.Delete(true); }
+    }
 }

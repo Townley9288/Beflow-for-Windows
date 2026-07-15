@@ -26,6 +26,8 @@ public sealed class DualAudioViewModel : ObservableObject
     private string _workDirectory = string.Empty;
     private string _existingTaskDirectory = string.Empty;
     private string _mkvmergePath = string.Empty;
+    private string _resolvedPrimaryTitle = string.Empty;
+    private string _resolvedPrimaryUrl = string.Empty;
 
     public DualAudioViewModel(AppServices services)
     {
@@ -52,7 +54,20 @@ public sealed class DualAudioViewModel : ObservableObject
     public IReadOnlyList<string> DefaultAudioOptions { get; } = ["主版本音轨", "副版本音轨"];
     public TaskConsoleViewModel Console { get; }
     public string SourceModeText { get => _sourceMode; set { if (SetProperty(ref _sourceMode, value)) NotifyCommands(); } }
-    public string PrimaryUrl { get => _primaryUrl; set { if (SetProperty(ref _primaryUrl, value)) NotifyCommands(); } }
+    public string PrimaryUrl
+    {
+        get => _primaryUrl;
+        set
+        {
+            if (!SetProperty(ref _primaryUrl, value)) return;
+            if (!NormalizeUrl(value).Equals(_resolvedPrimaryUrl, StringComparison.Ordinal))
+            {
+                _resolvedPrimaryTitle = string.Empty;
+                _resolvedPrimaryUrl = string.Empty;
+            }
+            NotifyCommands();
+        }
+    }
     public string SecondaryUrl { get => _secondaryUrl; set { if (SetProperty(ref _secondaryUrl, value)) NotifyCommands(); } }
     public string Pages { get => _pages; set => SetProperty(ref _pages, value); }
     public string Quality { get => _quality; set => SetProperty(ref _quality, value); }
@@ -83,16 +98,27 @@ public sealed class DualAudioViewModel : ObservableObject
         var defaultAudioCodec = AudioCodecOptions.FirstOrDefault(option => option.Value.Equals(settings.AudioCodec, StringComparison.OrdinalIgnoreCase))?.Value ?? "auto";
         PrimaryAudioCodec = defaultAudioCodec;
         SecondaryAudioCodec = defaultAudioCodec;
-        if (restore?.DualAudio is { } request) Apply(request);
+        if (restore?.DualAudio is { } request)
+        {
+            Apply(request);
+            RememberPrimaryTitle(restore.Url, restore.Title);
+        }
     }
 
     private async Task StartAsync()
     {
         if (ConfirmMkvmergeAvailableAsync is not null && !await ConfirmMkvmergeAvailableAsync()) return;
         var request = await BuildAsync();
-        var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DualAudioMux, request.SaveTaskLogs, "dual_audio_mux", (context, token) => _services.DualAudio.DownloadAndMuxAsync(request, context, token));
+        var completedTitle = string.Empty;
+        var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DualAudioMux, request.SaveTaskLogs, "dual_audio_mux", async (context, token) =>
+        {
+            completedTitle = await _services.DualAudio.DownloadAndMuxAsync(request, context, token);
+        });
         if (snapshot.State == TaskState.Completed)
-            await _services.History.AddAsync(new HistoryRecord { TaskType = TaskKind.DualAudioMux, Url = request.PrimaryUrl, SecondaryUrl = request.SecondaryUrl, Timestamp = DateTimeOffset.Now, LogPath = snapshot.LogPath, DualAudio = request });
+        {
+            var title = !string.IsNullOrWhiteSpace(completedTitle) ? completedTitle : GetRememberedPrimaryTitle(request.PrimaryUrl);
+            await _services.History.AddAsync(new HistoryRecord { TaskType = TaskKind.DualAudioMux, Title = title, Url = request.PrimaryUrl, SecondaryUrl = request.SecondaryUrl, Timestamp = DateTimeOffset.Now, LogPath = snapshot.LogPath, DualAudio = request });
+        }
     }
 
     private async Task GetInfoAsync()
@@ -101,6 +127,7 @@ public sealed class DualAudioViewModel : ObservableObject
         {
             context.AppendLog("===== 主版本规格 =====\n");
             var primary = await _services.BBDown.GetVideoInfoAsync(PrimaryUrl, Pages, context, token);
+            RememberPrimaryTitle(PrimaryUrl, primary.Title);
             context.AppendLog($"标题: {primary.Title} / 分P: {primary.Pages.Count}\n");
             if (SourceModeText != "同一链接奇偶分P")
             {
@@ -137,6 +164,21 @@ public sealed class DualAudioViewModel : ObservableObject
             Aria2MinSplitSize = settings.Aria2MinSplitSize, SaveTaskLogs = settings.SaveTaskLogs
         };
     }
+
+    private string GetRememberedPrimaryTitle(string url)
+    {
+        var normalized = NormalizeUrl(url);
+        return normalized.Equals(_resolvedPrimaryUrl, StringComparison.Ordinal) ? _resolvedPrimaryTitle : string.Empty;
+    }
+
+    private void RememberPrimaryTitle(string url, string title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return;
+        _resolvedPrimaryUrl = NormalizeUrl(url);
+        _resolvedPrimaryTitle = title.Trim();
+    }
+
+    private static string NormalizeUrl(string value) => value.Trim();
 
     private void Apply(DualAudioRequest request)
     {

@@ -9,7 +9,17 @@ public sealed partial class HistoryPage : Page
 {
     public HistoryPage() { ViewModel = new HistoryViewModel(((App)Application.Current).Services); InitializeComponent(); }
     public HistoryViewModel ViewModel { get; }
-    protected override async void OnNavigatedTo(NavigationEventArgs e) { await ViewModel.LoadAsync(); base.OnNavigatedTo(e); }
+    protected override async void OnNavigatedTo(NavigationEventArgs e)
+    {
+        ViewModel.Activate();
+        await ViewModel.LoadAsync();
+        base.OnNavigatedTo(e);
+    }
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        ViewModel.Deactivate();
+        base.OnNavigatedFrom(e);
+    }
     private void Restore_Click(object sender, RoutedEventArgs e) { if (ViewModel.SelectedRecord is not null) ((App)Application.Current).MainWindow.RestoreHistory(ViewModel.SelectedRecord); }
     private async void ViewLog_Click(object sender, RoutedEventArgs e)
     {

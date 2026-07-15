@@ -4,7 +4,7 @@ namespace BBDownForWindows.Core;
 
 public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdown, IProcessRunner processRunner, ISettingsStore settingsStore, IToolLocator toolLocator) : IDualAudioService
 {
-    public async Task DownloadAndMuxAsync(DualAudioRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
+    public async Task<string> DownloadAndMuxAsync(DualAudioRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
     {
         Validate(request, requireUrls: true);
         var settings = await settingsStore.LoadAsync(cancellationToken);
@@ -27,6 +27,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         context.AppendLog("\n=== 下载副版本音轨 ===\n");
         await bbdown.DownloadAsync(secondary, context, cancellationToken);
         await MuxDirectoriesAsync(primaryDirectory, secondaryDirectory, outputDirectory, request, tools.Mkvmerge, context, cancellationToken);
+        return title;
     }
 
     public async Task RemuxExistingAsync(DualAudioRequest request, TaskExecutionContext context, CancellationToken cancellationToken)

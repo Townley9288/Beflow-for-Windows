@@ -1,5 +1,6 @@
 using BBDownForWindows.App.ViewModels;
 using BBDownForWindows.Core;
+using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -9,19 +10,30 @@ namespace BBDownForWindows.App.Pages;
 
 public sealed partial class DownloadPage : Page
 {
+    private readonly LogAutoScroller _logAutoScroller;
+
     public DownloadPage()
     {
         ViewModel = new DownloadViewModel(((App)Application.Current).Services);
         InitializeComponent();
+        _logAutoScroller = new LogAutoScroller(LogTextBox);
     }
 
     public DownloadViewModel ViewModel { get; }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
+        ViewModel.Console.PropertyChanged += Console_PropertyChanged;
         await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
         ControlsScrollViewer.ChangeView(null, 0, null, true);
+        _logAutoScroller.FollowLatest();
         base.OnNavigatedTo(e);
+    }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        ViewModel.Console.PropertyChanged -= Console_PropertyChanged;
+        base.OnNavigatedFrom(e);
     }
 
     private async void BrowseFolder_Click(object sender, RoutedEventArgs e)
@@ -35,10 +47,8 @@ public sealed partial class DownloadPage : Page
         var package = new DataPackage(); package.SetText(ViewModel.Console.Logs); Clipboard.SetContent(package);
     }
 
-    private void LogTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    private void Console_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        LogTextBox.SelectionStart = LogTextBox.Text.Length;
-        LogTextBox.SelectionLength = 0;
+        if (e.PropertyName == nameof(ViewModel.Console.IsBusy) && ViewModel.Console.IsBusy) _logAutoScroller.FollowLatest();
     }
-
 }

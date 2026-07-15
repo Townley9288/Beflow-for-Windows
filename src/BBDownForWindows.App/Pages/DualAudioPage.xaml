@@ -62,7 +62,7 @@
         </StackPanel></ScrollViewer>
         <Border x:Name="LogPanel" Grid.Row="0" Grid.Column="1" Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><Grid RowSpacing="10"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="多音轨任务日志" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Text="{Binding Console.Status}" Opacity="0.65"/></StackPanel><Button Grid.Column="1" Content="复制" Margin="0,0,8,0" Click="CopyLogs_Click"/><Button Grid.Column="2" Content="清空" Command="{Binding Console.ClearCommand}"/></Grid>
-            <TextBox x:Name="LogTextBox" Grid.Row="1" Text="{Binding Console.Logs, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto" TextChanged="LogTextBox_TextChanged"/>
+            <TextBox x:Name="LogTextBox" Grid.Row="1" Text="{Binding Console.Logs, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
         </Grid></Border>
     </Grid>
 </Page>

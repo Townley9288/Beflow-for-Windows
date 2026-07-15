@@ -34,6 +34,7 @@ public sealed class SettingsStore(ApplicationPaths paths) : ISettingsStore
 public sealed class HistoryStore(ApplicationPaths paths) : IHistoryStore
 {
     private static readonly JsonSerializerOptions Options = SettingsStore.CreateOptions();
+    public event EventHandler? Changed;
 
     public async Task<IReadOnlyList<HistoryRecord>> LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -55,10 +56,14 @@ public sealed class HistoryStore(ApplicationPaths paths) : IHistoryStore
         var history = (await LoadAsync(cancellationToken)).ToList();
         history.Insert(0, record);
         await AtomicJson.WriteAsync(paths.HistoryFile, history, Options, cancellationToken);
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    public Task SaveAllAsync(IReadOnlyList<HistoryRecord> records, CancellationToken cancellationToken = default) =>
-        AtomicJson.WriteAsync(paths.HistoryFile, records, Options, cancellationToken);
+    public async Task SaveAllAsync(IReadOnlyList<HistoryRecord> records, CancellationToken cancellationToken = default)
+    {
+        await AtomicJson.WriteAsync(paths.HistoryFile, records, Options, cancellationToken);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     public async Task DeleteAsync(int index, CancellationToken cancellationToken = default)
     {
@@ -67,11 +72,15 @@ public sealed class HistoryStore(ApplicationPaths paths) : IHistoryStore
         {
             history.RemoveAt(index);
             await AtomicJson.WriteAsync(paths.HistoryFile, history, Options, cancellationToken);
+            Changed?.Invoke(this, EventArgs.Empty);
         }
     }
 
-    public Task ClearAsync(CancellationToken cancellationToken = default) =>
-        AtomicJson.WriteAsync(paths.HistoryFile, Array.Empty<HistoryRecord>(), Options, cancellationToken);
+    public async Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        await AtomicJson.WriteAsync(paths.HistoryFile, Array.Empty<HistoryRecord>(), Options, cancellationToken);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 }
 
 public sealed class UpdateStateStore(ApplicationPaths paths) : IUpdateStateStore

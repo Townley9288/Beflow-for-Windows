@@ -94,7 +94,7 @@
                     <Button Grid.Column="1" Content="复制" Margin="0,0,8,0" Click="CopyLogs_Click" />
                     <Button Grid.Column="2" Content="清空" Command="{Binding Console.ClearCommand}" />
                 </Grid>
-                <TextBox x:Name="LogTextBox" Grid.Row="1" Text="{Binding Console.Logs, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto" TextChanged="LogTextBox_TextChanged" />
+                <TextBox x:Name="LogTextBox" Grid.Row="1" Text="{Binding Console.Logs, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
             </Grid>
         </Border>
     </Grid>

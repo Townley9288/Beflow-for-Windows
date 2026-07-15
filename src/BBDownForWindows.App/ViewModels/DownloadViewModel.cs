@@ -24,6 +24,8 @@ public sealed class DownloadViewModel : ObservableObject
     private bool _useAria2c = true;
     private string _audioBitrate = "highest";
     private bool _saveTaskLogs = true;
+    private string _resolvedTitle = string.Empty;
+    private string _resolvedTitleUrl = string.Empty;
 
     public DownloadViewModel(AppServices services)
     {
@@ -63,7 +65,20 @@ public sealed class DownloadViewModel : ObservableObject
     ];
 
     public TaskConsoleViewModel Console { get; }
-    public string Url { get => _url; set { if (SetProperty(ref _url, value)) NotifyCommands(); } }
+    public string Url
+    {
+        get => _url;
+        set
+        {
+            if (!SetProperty(ref _url, value)) return;
+            if (!NormalizeUrl(value).Equals(_resolvedTitleUrl, StringComparison.Ordinal))
+            {
+                _resolvedTitle = string.Empty;
+                _resolvedTitleUrl = string.Empty;
+            }
+            NotifyCommands();
+        }
+    }
     public string Pages { get => _pages; set => SetProperty(ref _pages, value); }
     public string Quality { get => _quality; set => SetProperty(ref _quality, value); }
     public string Encoding { get => _encoding; set => SetProperty(ref _encoding, value); }
@@ -87,6 +102,7 @@ public sealed class DownloadViewModel : ObservableObject
         if (restore?.Download is { } saved)
         {
             Apply(saved);
+            RememberTitle(restore.Url, restore.Title);
             return;
         }
         var settings = await _services.Settings.LoadAsync();
@@ -98,6 +114,7 @@ public sealed class DownloadViewModel : ObservableObject
         await _services.TaskManager.RunExclusiveAsync(TaskKind.Info, false, "info", async (context, token) =>
         {
             var info = await _services.BBDown.GetVideoInfoAsync(Url.Trim(), string.IsNullOrWhiteSpace(Pages) ? "1" : Pages, context, token);
+            RememberTitle(Url, info.Title);
             context.AppendLog($"\n标题: {info.Title}\n分P数: {info.Pages.Count}\n视频流: {info.VideoStreams.Count}\n音频流: {info.AudioStreams.Count}\n");
         });
     }
@@ -106,10 +123,32 @@ public sealed class DownloadViewModel : ObservableObject
     {
         var request = await BuildRequestAsync(season);
         var kind = season ? TaskKind.SeasonDownload : TaskKind.Download;
-        var snapshot = await _services.TaskManager.RunExclusiveAsync(kind, SaveTaskLogs, season ? "season_download" : "download", (context, token) => _services.BBDown.DownloadAsync(request, context, token));
+        var downloadedTitle = string.Empty;
+        var snapshot = await _services.TaskManager.RunExclusiveAsync(kind, SaveTaskLogs, season ? "season_download" : "download", async (context, token) =>
+        {
+            downloadedTitle = await _services.BBDown.DownloadAsync(request, context, token);
+        });
         if (snapshot.State == TaskState.Completed)
-            await _services.History.AddAsync(new HistoryRecord { TaskType = kind, Url = request.Url, Timestamp = DateTimeOffset.Now, LogPath = snapshot.LogPath, Download = request });
+        {
+            var title = !string.IsNullOrWhiteSpace(downloadedTitle) ? downloadedTitle : GetRememberedTitle(request.Url);
+            await _services.History.AddAsync(new HistoryRecord { TaskType = kind, Title = title, Url = request.Url, Timestamp = DateTimeOffset.Now, LogPath = snapshot.LogPath, Download = request });
+        }
     }
+
+    private string GetRememberedTitle(string url)
+    {
+        var normalized = NormalizeUrl(url);
+        return normalized.Equals(_resolvedTitleUrl, StringComparison.Ordinal) ? _resolvedTitle : string.Empty;
+    }
+
+    private void RememberTitle(string url, string title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return;
+        _resolvedTitleUrl = NormalizeUrl(url);
+        _resolvedTitle = title.Trim();
+    }
+
+    private static string NormalizeUrl(string value) => value.Trim();
 
     private async Task<DownloadRequest> BuildRequestAsync(bool season)
     {

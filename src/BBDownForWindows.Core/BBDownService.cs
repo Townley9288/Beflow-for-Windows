@@ -16,15 +16,15 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         return BBDownParser.ParseInfo(result.Output);
     }
 
-    public async Task DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
+    public async Task<string> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Url)) throw new ArgumentException("视频 URL 不能为空");
         if (request.Season && request.Quality.Equals("4K", StringComparison.OrdinalIgnoreCase))
-            await RunResolutionFirstSeasonAsync(request, context, cancellationToken);
+            return await RunResolutionFirstSeasonAsync(request, context, cancellationToken);
         else if (ShouldSelectAudio(request))
-            await RunAudioSelectionAsync(request, context, cancellationToken);
+            return await RunAudioSelectionAsync(request, context, cancellationToken);
         else
-            await RunDirectDownloadAsync(request, context, cancellationToken);
+            return await RunDirectDownloadAsync(request, context, cancellationToken);
     }
 
     public async Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken)
@@ -49,15 +49,16 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         return BBDownParser.ParseInfo(result.Output).Title;
     }
 
-    private async Task RunDirectDownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
+    private async Task<string> RunDirectDownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
     {
         var tools = await ResolveToolsAsync(cancellationToken);
         var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildDownloadArguments(request, tools), context, cancellationToken);
         if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"下载失败，退出码 {result.ExitCode}");
         context.AppendLog("\n下载完成\n");
+        return BBDownParser.ParseInfo(result.Output).Title;
     }
 
-    private async Task RunAudioSelectionAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
+    private async Task<string> RunAudioSelectionAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
     {
         var tools = await ResolveToolsAsync(cancellationToken);
         context.AppendLog($"正在分析音频流，目标格式: {request.AudioCodec}...\n");
@@ -74,9 +75,10 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var result = await RunAsync(tools.BBDown, arguments, context, cancellationToken, input);
         if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"下载失败，退出码 {result.ExitCode}");
         context.AppendLog("\n下载完成\n");
+        return BBDownParser.ParseInfo(info.Output).Title;
     }
 
-    private async Task RunResolutionFirstSeasonAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
+    private async Task<string> RunResolutionFirstSeasonAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
     {
         var tools = await ResolveToolsAsync(cancellationToken);
         context.AppendLog("正在分析整季每一集的实际分辨率和编码...\n");
@@ -121,6 +123,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"分组下载失败: P{part.Pages}");
         }
         context.AppendLog("\n整季分辨率优先下载完成\n");
+        return BBDownParser.ParseInfo(info.Output).Title;
     }
 
     private async Task<ToolPaths> ResolveToolsAsync(CancellationToken cancellationToken)

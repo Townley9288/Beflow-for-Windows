@@ -192,6 +192,7 @@ public sealed class HistoryRecord
     public string SecondaryUrl { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.Now;
+    [JsonIgnore] public string TimestampText => Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
     public string LogPath { get; set; } = string.Empty;
     public DownloadRequest? Download { get; set; }
     public DualAudioRequest? DualAudio { get; set; }

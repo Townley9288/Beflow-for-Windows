@@ -63,6 +63,33 @@ public sealed class BBDownRuntimeTests
         finally { root.Delete(true); }
     }
 
+    [Fact]
+    public async Task DownloadReturnsTitleAlreadyParsedByBBDown()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "app"));
+            var paths = new ApplicationPaths(app.FullName, Path.Combine(root.FullName, "local"));
+            paths.EnsureCreated();
+            var source = Path.Combine(app.FullName, "BBDown.exe");
+            File.WriteAllText(source, "binary");
+            var runner = new RecordingProcessRunner();
+            var service = new BBDownService(paths, runner, new FixedToolLocator(source), new FixedSettingsStore());
+            var manager = new TaskManager(paths, runner);
+            var title = string.Empty;
+
+            var snapshot = await manager.RunExclusiveAsync(TaskKind.Download, false, "download", async (context, token) =>
+            {
+                title = await service.DownloadAsync(new DownloadRequest { Url = "https://example.test/video" }, context, token);
+            });
+
+            Assert.Equal(TaskState.Completed, snapshot.State);
+            Assert.Equal("测试标题", title);
+        }
+        finally { root.Delete(true); }
+    }
+
     private sealed class RecordingProcessRunner : IProcessRunner
     {
         public ProcessRunRequest? LastRequest { get; private set; }

@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using System.Text.RegularExpressions;
 
 namespace BBDownForWindows.App.Pages;
 
@@ -84,10 +85,18 @@ public sealed partial class AboutPage : Page
         var release = _updates.AvailableRelease;
         LatestVersionText.Visibility = release is null ? Visibility.Collapsed : Visibility.Visible;
         LatestVersionText.Text = release is null ? string.Empty : $"最新版本：v{Core.UpdateService.FormatVersion(release.Version)} · {release.PublishedAt.ToLocalTime():yyyy-MM-dd}";
-        ReleaseNotesText.Visibility = release is null || string.IsNullOrWhiteSpace(release.ReleaseNotes) ? Visibility.Collapsed : Visibility.Visible;
-        ReleaseNotesText.Text = release?.ReleaseNotes ?? string.Empty;
+        ReleaseNotesContainer.Visibility = release is null || string.IsNullOrWhiteSpace(release.ReleaseNotes) ? Visibility.Collapsed : Visibility.Visible;
+        ReleaseNotesText.Text = FormatReleaseNotes(release?.ReleaseNotes ?? string.Empty);
         ReleasePageLink.Visibility = release is null ? Visibility.Collapsed : Visibility.Visible;
         if (release is not null) ReleasePageLink.NavigateUri = release.ReleasePage;
+    }
+
+    private static string FormatReleaseNotes(string value)
+    {
+        var lines = value.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n')
+            .Select(line => Regex.Replace(line, @"^\s{0,3}#{1,6}\s+", string.Empty))
+            .Select(line => Regex.Replace(line, @"^\s*[-*]\s+", "• "));
+        return string.Join('\n', lines).Trim();
     }
 
     private async Task ShowDialogAsync(string title, string message)
