@@ -71,6 +71,7 @@ public sealed class DualAudioViewModel : ObservableObject
     public IAsyncRelayCommand StartCommand { get; }
     public IAsyncRelayCommand InfoCommand { get; }
     public IAsyncRelayCommand RemuxCommand { get; }
+    public Func<Task<bool>>? ConfirmMkvmergeAvailableAsync { get; set; }
 
     public async Task InitializeAsync(HistoryRecord? restore = null)
     {
@@ -87,6 +88,7 @@ public sealed class DualAudioViewModel : ObservableObject
 
     private async Task StartAsync()
     {
+        if (ConfirmMkvmergeAvailableAsync is not null && !await ConfirmMkvmergeAvailableAsync()) return;
         var request = await BuildAsync();
         var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DualAudioMux, request.SaveTaskLogs, "dual_audio_mux", (context, token) => _services.DualAudio.DownloadAndMuxAsync(request, context, token));
         if (snapshot.State == TaskState.Completed)
@@ -111,6 +113,7 @@ public sealed class DualAudioViewModel : ObservableObject
 
     private async Task RemuxAsync()
     {
+        if (ConfirmMkvmergeAvailableAsync is not null && !await ConfirmMkvmergeAvailableAsync()) return;
         var request = await BuildAsync();
         var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DualAudioRemux, request.SaveTaskLogs, "dual_audio_remux", (context, token) => _services.DualAudio.RemuxExistingAsync(request, context, token));
         if (snapshot.State == TaskState.Completed)
