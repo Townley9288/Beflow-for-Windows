@@ -101,6 +101,7 @@ public sealed class SettingsViewModel : ObservableObject
     public async Task InitializeAsync()
     {
         Settings = await _services.Settings.LoadAsync();
+        Settings.ThemeMode = _services.Theme.CurrentMode;
         await Task.WhenAll(DetectToolsAsync(), RefreshAccountsAsync());
     }
 
@@ -126,13 +127,14 @@ public sealed class SettingsViewModel : ObservableObject
     public async Task SaveAsync()
     {
         Settings.SchemaVersion = 2;
+        Settings.ThemeMode = _services.Theme.CurrentMode;
         await _services.Settings.SaveAsync(Settings);
         Message = "设置已保存";
     }
 
     private void Reset()
     {
-        Settings = new AppSettings();
+        Settings = new AppSettings { ThemeMode = _services.Theme.CurrentMode };
         Message = "已恢复默认值（尚未保存）";
     }
 

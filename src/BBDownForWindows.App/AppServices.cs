@@ -12,6 +12,7 @@ public sealed class AppServices
         Settings = new SettingsStore(paths);
         History = new HistoryStore(paths);
         UpdateState = new UpdateStateStore(paths);
+        Theme = new ThemeManager(Settings);
         ProcessRunner = new ProcessRunner();
         ToolLocator = new ToolLocator(paths);
         TaskManager = new TaskManager(paths, ProcessRunner);
@@ -29,6 +30,7 @@ public sealed class AppServices
     public ISettingsStore Settings { get; }
     public IHistoryStore History { get; }
     public IUpdateStateStore UpdateState { get; }
+    public ThemeManager Theme { get; }
     public IProcessRunner ProcessRunner { get; }
     public IToolLocator ToolLocator { get; }
     public ITaskManager TaskManager { get; }

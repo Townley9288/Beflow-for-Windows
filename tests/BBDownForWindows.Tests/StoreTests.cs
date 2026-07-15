@@ -18,6 +18,7 @@ public sealed class StoreTests
             Assert.Equal("1080P", settings.Quality);
             Assert.Equal(DownloadMode.AudioOnly, settings.DownloadMode);
             Assert.Equal(AudioBitratePriority.Highest, settings.AudioBitratePriority);
+            Assert.Equal(AppThemeMode.System, settings.ThemeMode);
             Assert.True(settings.SaveTaskLogs);
             Assert.True(settings.CheckUpdatesOnStartup);
         }
@@ -25,6 +26,74 @@ public sealed class StoreTests
         {
             root.Delete(true);
         }
+    }
+
+    [Theory]
+    [InlineData(AppThemeMode.System, "system")]
+    [InlineData(AppThemeMode.Light, "light")]
+    [InlineData(AppThemeMode.Dark, "dark")]
+    public async Task ThemeModeRoundTripsAsStableString(AppThemeMode mode, string serializedValue)
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var store = new SettingsStore(paths);
+            await store.SaveAsync(new AppSettings { ThemeMode = mode, Quality = "1080P" });
+
+            var json = await File.ReadAllTextAsync(paths.SettingsFile);
+            var restored = await store.LoadAsync();
+
+            Assert.Contains($"\"themeMode\": \"{serializedValue}\"", json);
+            Assert.Equal(mode, restored.ThemeMode);
+            Assert.Equal("1080P", restored.Quality);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task InvalidThemeFallsBackWithoutResettingOtherSettings()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            paths.EnsureCreated();
+            await File.WriteAllTextAsync(paths.SettingsFile, "{\"themeMode\":\"sepia\",\"quality\":\"720P\",\"checkUpdatesOnStartup\":false}");
+
+            var settings = await new SettingsStore(paths).LoadAsync();
+
+            Assert.Equal(AppThemeMode.System, settings.ThemeMode);
+            Assert.Equal("720P", settings.Quality);
+            Assert.False(settings.CheckUpdatesOnStartup);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task SettingsSaveCanPreserveThemeSelectedAfterPageLoad()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var store = new SettingsStore(paths);
+            await store.SaveAsync(new AppSettings { Quality = "1080P", ThemeMode = AppThemeMode.System });
+            var settingsPageSnapshot = await store.LoadAsync();
+
+            var themeSnapshot = await store.LoadAsync();
+            themeSnapshot.ThemeMode = AppThemeMode.Dark;
+            await store.SaveAsync(themeSnapshot);
+
+            settingsPageSnapshot.Quality = "4K";
+            settingsPageSnapshot.ThemeMode = (await store.LoadAsync()).ThemeMode;
+            await store.SaveAsync(settingsPageSnapshot);
+            var restored = await store.LoadAsync();
+
+            Assert.Equal(AppThemeMode.Dark, restored.ThemeMode);
+            Assert.Equal("4K", restored.Quality);
+        }
+        finally { root.Delete(true); }
     }
 
     [Fact]

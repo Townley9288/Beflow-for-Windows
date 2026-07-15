@@ -1,5 +1,6 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using BBDownForWindows.Core;
 
@@ -12,6 +13,10 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         Title = "Beflow for Windows";
+        var theme = ((App)Application.Current).Services.Theme;
+        theme.Attach(WindowRoot, AppWindow);
+        theme.Changed += Theme_Changed;
+        UpdateThemeUi();
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
         if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
         RootNavigation.SelectedItem = RootNavigation.MenuItems[0];
@@ -74,6 +79,57 @@ public sealed partial class MainWindow : Window
     }
 
     private void UpdateInfoBar_Click(object sender, RoutedEventArgs e) => Navigate("about");
+
+    private async void ThemeMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioMenuFlyoutItem { Tag: string tag }) return;
+        var mode = tag switch
+        {
+            "light" => AppThemeMode.Light,
+            "dark" => AppThemeMode.Dark,
+            _ => AppThemeMode.System
+        };
+
+        try
+        {
+            await ((App)Application.Current).Services.Theme.SetModeAsync(mode);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            UpdateThemeUi();
+            await new ContentDialog
+            {
+                XamlRoot = WindowRoot.XamlRoot,
+                Title = "主题设置保存失败",
+                Content = exception.Message,
+                CloseButtonText = "确定"
+            }.ShowAsync();
+        }
+    }
+
+    private void Theme_Changed(object? sender, EventArgs e) => UpdateThemeUi();
+
+    private void UpdateThemeUi()
+    {
+        var mode = ((App)Application.Current).Services.Theme.CurrentMode;
+        SystemThemeItem.IsChecked = mode == AppThemeMode.System;
+        LightThemeItem.IsChecked = mode == AppThemeMode.Light;
+        DarkThemeItem.IsChecked = mode == AppThemeMode.Dark;
+        var label = mode switch
+        {
+            AppThemeMode.Light => "浅色",
+            AppThemeMode.Dark => "深色",
+            _ => "跟随系统"
+        };
+        ThemeIcon.Glyph = mode switch
+        {
+            AppThemeMode.Light => "\uE706",
+            AppThemeMode.Dark => "\uE708",
+            _ => "\uE771"
+        };
+        ToolTipService.SetToolTip(ThemeButton, $"主题：{label}");
+        AutomationProperties.SetName(ThemeButton, $"界面主题：{label}");
+    }
 
     private async void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
     {

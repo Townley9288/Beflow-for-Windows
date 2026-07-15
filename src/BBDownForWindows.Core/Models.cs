@@ -25,6 +25,8 @@ public enum UpdateCheckStatus { UpToDate, UpdateAvailable }
 
 public enum UpdatePackageKind { Installer, Portable }
 
+public enum AppThemeMode { System, Light, Dark }
+
 public sealed record AccountProfile(string DisplayName, string UserId, string AvatarUrl, int Level, string VipLabel);
 
 public sealed record AccountChannelStatus(
@@ -41,6 +43,22 @@ public sealed record AccountStatusSnapshot(AccountChannelStatus Web, AccountChan
 public sealed class AppSettings
 {
     [JsonPropertyName("schemaVersion")] public int SchemaVersion { get; set; } = 2;
+    [JsonIgnore] public AppThemeMode ThemeMode { get; set; } = AppThemeMode.System;
+    [JsonPropertyName("themeMode")] public string SerializedThemeMode
+    {
+        get => ThemeMode switch
+        {
+            AppThemeMode.Light => "light",
+            AppThemeMode.Dark => "dark",
+            _ => "system"
+        };
+        set => ThemeMode = value?.Trim().ToLowerInvariant() switch
+        {
+            "light" => AppThemeMode.Light,
+            "dark" => AppThemeMode.Dark,
+            _ => AppThemeMode.System
+        };
+    }
     [JsonPropertyName("quality")] public string Quality { get; set; } = "4K";
     [JsonPropertyName("encoding")] public string Encoding { get; set; } = "AVC";
     [JsonPropertyName("audioOnly")] public string LegacyAudioOnly

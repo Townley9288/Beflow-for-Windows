@@ -24,12 +24,13 @@ public partial class App : Application
     public AppServices Services { get; private set; } = null!;
     public MainWindow MainWindow => _window ?? throw new InvalidOperationException("主窗口尚未创建");
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         var paths = new ApplicationPaths();
         paths.EnsureCreated();
         new LegacyMigrationService(paths).Migrate();
         Services = new AppServices(paths);
+        await Services.Theme.InitializeAsync();
         _window = new MainWindow();
         _window.Activate();
         _window.ApplyInitialSize();
