@@ -75,8 +75,9 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
 
     private async Task<(string PrimaryPages, string SecondaryPages)> ResolvePagesAsync(DualAudioRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
     {
-        if (request.SourceMode == DualAudioSourceMode.Separate) return (request.Pages, request.Pages);
-        var info = await bbdown.GetVideoInfoAsync(request.PrimaryUrl, "ALL", context, cancellationToken);
+        var selectedPages = string.IsNullOrWhiteSpace(request.Pages) ? "ALL" : request.Pages;
+        if (request.SourceMode == DualAudioSourceMode.Separate) return (selectedPages, selectedPages);
+        var info = await bbdown.GetVideoInfoAsync(request.PrimaryUrl, selectedPages, context, cancellationToken);
         if (info.Pages.Count == 0) throw new InvalidOperationException("未能识别分P列表，无法拆分奇偶分P");
         return (string.Join(',', info.Pages.Where(page => page.Number % 2 == 1).Select(page => page.Number)), string.Join(',', info.Pages.Where(page => page.Number % 2 == 0).Select(page => page.Number)));
     }

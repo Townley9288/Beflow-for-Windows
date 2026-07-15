@@ -33,9 +33,9 @@
                 <TextBox Header="主版本 URL" Text="{Binding PrimaryUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 <TextBox Header="副音轨 URL（奇偶分P模式会忽略）" Text="{Binding SecondaryUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <TextBox Header="分P" Text="{Binding Pages, Mode=TwoWay}" />
-                    <ComboBox Grid.Column="1" Header="质量" ItemsSource="{Binding QualityOptions}" SelectedItem="{Binding Quality, Mode=TwoWay}" />
-                    <ComboBox Grid.Column="2" Header="编码" ItemsSource="{Binding EncodingOptions}" SelectedItem="{Binding Encoding, Mode=TwoWay}" />
+                    <TextBox Header="分P / 集数（可选）" PlaceholderText="默认 ALL，例如 1,2、3-5" HorizontalAlignment="Stretch" Text="{Binding Pages, Mode=TwoWay}" />
+                    <ComboBox Grid.Column="1" Header="质量" HorizontalAlignment="Stretch" ItemsSource="{Binding QualityOptions}" SelectedItem="{Binding Quality, Mode=TwoWay}" />
+                    <ComboBox Grid.Column="2" Header="编码" HorizontalAlignment="Stretch" ItemsSource="{Binding EncodingOptions}" SelectedItem="{Binding Encoding, Mode=TwoWay}" />
                 </Grid>
             </StackPanel></Border>
             <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="12">

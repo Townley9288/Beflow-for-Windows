@@ -98,7 +98,7 @@ public sealed class DualAudioRequest
     public string PrimaryUrl { get; set; } = string.Empty;
     public string SecondaryUrl { get; set; } = string.Empty;
     public string Pages { get; set; } = "ALL";
-    public string Quality { get; set; } = "1080P";
+    public string Quality { get; set; } = "4K";
     public string Encoding { get; set; } = "AVC";
     public string PrimaryLabel { get; set; } = "国语";
     public string SecondaryLabel { get; set; } = "粤语";

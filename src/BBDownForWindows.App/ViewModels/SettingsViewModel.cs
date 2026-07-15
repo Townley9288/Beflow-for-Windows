@@ -6,6 +6,8 @@ namespace BBDownForWindows.App.ViewModels;
 
 public sealed class SettingsViewModel : ObservableObject
 {
+    public sealed record OptionItem(string Value, string Label);
+
     private readonly AppServices _services;
     private AppSettings _settings = new();
     private string _toolStatus = "尚未检测";
@@ -23,8 +25,17 @@ public sealed class SettingsViewModel : ObservableObject
     public IReadOnlyList<string> QualityOptions { get; } = ["杜比视界", "HDR 真彩", "4K", "1080P 高码率", "1080P", "720P", "480P", "360P"];
     public IReadOnlyList<string> EncodingOptions { get; } = ["HEVC", "AVC", "AV1"];
     public IReadOnlyList<string> DownloadModeOptions { get; } = ["视频+音频", "仅视频", "仅音频"];
-    public IReadOnlyList<string> AudioCodecOptions { get; } = ["auto", "E-AC-3", "M4A", "FLAC", "AC-3", "DTS"];
-    public IReadOnlyList<string> AudioBitrateOptions { get; } = ["highest", "lowest"];
+    public IReadOnlyList<OptionItem> AudioCodecOptions { get; } =
+    [
+        new("auto", "自动"),
+        new("E-AC-3", "E-AC-3"),
+        new("M4A", "M4A"),
+        new("FLAC", "FLAC"),
+        new("AC-3", "AC-3"),
+        new("DTS", "DTS")
+    ];
+    public IReadOnlyList<OptionItem> AudioBitrateOptions { get; } =
+    [new("highest", "最高码率"), new("lowest", "最低码率")];
     public AppSettings Settings { get => _settings; private set => SetProperty(ref _settings, value); }
     public string ToolStatus { get => _toolStatus; private set => SetProperty(ref _toolStatus, value); }
     public string Message

@@ -11,7 +11,7 @@ public sealed class DualAudioViewModel : ObservableObject
     private string _primaryUrl = string.Empty;
     private string _secondaryUrl = string.Empty;
     private string _pages = "ALL";
-    private string _quality = "1080P";
+    private string _quality = "4K";
     private string _encoding = "AVC";
     private string _primaryLabel = "国语";
     private string _secondaryLabel = "粤语";
@@ -34,7 +34,7 @@ public sealed class DualAudioViewModel : ObservableObject
     }
 
     public IReadOnlyList<string> SourceModes { get; } = ["两个独立链接", "同一链接奇偶分P"];
-    public IReadOnlyList<string> QualityOptions { get; } = ["杜比视界", "HDR 真彩", "4K", "1080P 高码率", "1080P", "720P"];
+    public IReadOnlyList<string> QualityOptions { get; } = ["杜比视界", "HDR 真彩", "4K", "1080P 高码率", "1080P", "720P", "480P", "360P"];
     public IReadOnlyList<string> EncodingOptions { get; } = ["HEVC", "AVC", "AV1"];
     public IReadOnlyList<string> DefaultAudioOptions { get; } = ["主版本音轨", "副版本音轨"];
     public TaskConsoleViewModel Console { get; }
@@ -62,6 +62,8 @@ public sealed class DualAudioViewModel : ObservableObject
         var settings = await _services.Settings.LoadAsync();
         WorkDirectory = settings.WorkDirectory;
         MkvmergePath = settings.MkvmergePath;
+        Quality = QualityOptions.Contains(settings.Quality) ? settings.Quality : "4K";
+        Encoding = EncodingOptions.Contains(settings.Encoding) ? settings.Encoding : "AVC";
         if (restore?.DualAudio is { } request) Apply(request);
     }
 
