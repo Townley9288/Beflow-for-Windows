@@ -125,7 +125,7 @@ public sealed class UpdateServiceTests
     [Theory]
     [InlineData("v1.0")]
     [InlineData("nightly")]
-    [InlineData("v1.0.0.1")]
+    [InlineData("v1.0.0.1.2")]
     public async Task RejectsUnsupportedLatestTag(string tag)
     {
         var handler = new StubHandler(_ => Latest(tag));
@@ -181,6 +181,20 @@ public sealed class UpdateServiceTests
     [InlineData("1.0.0", 1, 0, 0)]
     public void ParsesReleaseTags(string tag, int major, int minor, int patch) =>
         Assert.Equal(new Version(major, minor, patch), UpdateService.ParseTagVersion(tag));
+
+    [Fact]
+    public async Task FourPartVersionsKeepRevisionInDisplayAndAssetNames()
+    {
+        var handler = new StubHandler(request => request.Method == HttpMethod.Head ? Latest("v1.0.3.1") : Text(HttpStatusCode.NotFound));
+
+        var result = await new UpdateService(new HttpClient(handler)).CheckAsync(new Version(1, 0, 3));
+
+        Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
+        Assert.Equal(new Version(1, 0, 3, 1), result.Release!.Version);
+        Assert.Equal("1.0.3.1", UpdateService.FormatVersion(result.Release.Version));
+        Assert.Equal("Beflow-for-Windows-v1.0.3.1-win-x64-setup.exe", result.Release.Installer.FileName);
+        Assert.Equal("Beflow-for-Windows-v1.0.3.1-win-x64-portable.zip", result.Release.Portable.FileName);
+    }
 
     [Fact]
     public async Task DownloadsAndVerifiesSha256()

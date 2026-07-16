@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.0.3',
+    [string]$Version = '1.0.4',
     [string]$FfmpegArchiveUrl = $env:FFMPEG_ARCHIVE_URL,
     [switch]$RequireNativeUpdater
 )
@@ -35,7 +35,7 @@ $UpdaterProject = Join-Path $Root 'src\Beflow.Updater\Beflow.Updater.csproj'
 $SourceManifest = Join-Path $Root 'src\BBDownForWindows.App\app.manifest'
 $GeneratedManifest = Join-Path $BuildRoot 'app.manifest'
 $ParsedVersion = [Version]::Parse($Version)
-$ManifestVersion = "$($ParsedVersion.Major).$($ParsedVersion.Minor).$([Math]::Max(0, $ParsedVersion.Build)).0"
+$ManifestVersion = "$($ParsedVersion.Major).$($ParsedVersion.Minor).$([Math]::Max(0, $ParsedVersion.Build)).$([Math]::Max(0, $ParsedVersion.Revision))"
 $ManifestContent = Get-Content -Raw -LiteralPath $SourceManifest
 $ManifestReplacement = '${1}' + $ManifestVersion + '${2}'
 [Regex]::Replace($ManifestContent, '(<assemblyIdentity\s+version=")[^"]+(")', $ManifestReplacement) | Set-Content -LiteralPath $GeneratedManifest -Encoding utf8
@@ -109,6 +109,14 @@ if ($UnexpectedMuiLanguages) {
 
 & (Join-Path $PSScriptRoot 'AcquireTools.ps1') -OutputDirectory $Publish -FfmpegArchiveUrl $FfmpegArchiveUrl
 Copy-Item -LiteralPath (Join-Path $Root 'LICENSE'), (Join-Path $Root 'THIRD_PARTY_NOTICES.md'), (Join-Path $Root 'THIRD_PARTY_SOURCES.md'), (Join-Path $Root 'README.md') -Destination $Publish
+
+$PortableManifestName = 'Beflow.files.txt'
+$PortableManifestPath = Join-Path $Publish $PortableManifestName
+$PortableManifestFiles = Get-ChildItem -LiteralPath $Publish -Recurse -File |
+    ForEach-Object { [IO.Path]::GetRelativePath($Publish, $_.FullName) } |
+    Sort-Object -Unique
+$PortableManifestFiles += $PortableManifestName
+[IO.File]::WriteAllLines($PortableManifestPath, $PortableManifestFiles, [Text.UTF8Encoding]::new($false))
 
 Copy-Item -Path (Join-Path $Publish '*') -Destination $Portable -Recurse -Force
 New-Item -ItemType File -Force -Path (Join-Path $Portable 'portable.flag') | Out-Null

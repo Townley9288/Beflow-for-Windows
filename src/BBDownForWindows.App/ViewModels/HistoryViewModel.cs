@@ -24,10 +24,10 @@ public sealed class HistoryViewModel : ObservableObject
     {
         _services = services;
         _dispatcher = DispatcherQueue.GetForCurrentThread();
-        ReloadCommand = new AsyncRelayCommand(LoadAsync);
-        DeleteCommand = new AsyncRelayCommand(DeleteAsync, () => SelectedRecord is not null);
-        ClearCommand = new AsyncRelayCommand(ClearAsync, () => Records.Count > 0);
-        RefreshTitlesCommand = new AsyncRelayCommand(RefreshTitlesAsync, () => Records.Count > 0);
+        ReloadCommand = new AsyncRelayCommand(LoadAsync, () => !IsLoading);
+        DeleteCommand = new AsyncRelayCommand(DeleteAsync, () => !IsLoading && SelectedRecord is not null);
+        ClearCommand = new AsyncRelayCommand(ClearAsync, () => !IsLoading && Records.Count > 0);
+        RefreshTitlesCommand = new AsyncRelayCommand(RefreshTitlesAsync, () => !IsLoading && Records.Count > 0);
         PreviousPageCommand = new RelayCommand(PreviousPage, () => PageNumber > 1);
         NextPageCommand = new RelayCommand(NextPage, () => PageNumber < TotalPages);
     }
@@ -38,7 +38,18 @@ public sealed class HistoryViewModel : ObservableObject
         get => _selected;
         set { if (SetProperty(ref _selected, value)) DeleteCommand.NotifyCanExecuteChanged(); }
     }
-    public bool IsLoading { get => _isLoading; private set => SetProperty(ref _isLoading, value); }
+    public bool IsLoading
+    {
+        get => _isLoading;
+        private set
+        {
+            if (!SetProperty(ref _isLoading, value)) return;
+            ReloadCommand.NotifyCanExecuteChanged();
+            DeleteCommand.NotifyCanExecuteChanged();
+            ClearCommand.NotifyCanExecuteChanged();
+            RefreshTitlesCommand.NotifyCanExecuteChanged();
+        }
+    }
     public int PageNumber
     {
         get => _pageNumber;
@@ -96,8 +107,8 @@ public sealed class HistoryViewModel : ObservableObject
     private async Task DeleteAsync()
     {
         if (SelectedRecord is null) return;
-        var index = _allRecords.IndexOf(SelectedRecord);
-        await SuppressStoreChangeAsync(() => _services.History.DeleteAsync(index));
+        var id = SelectedRecord.Id;
+        await SuppressStoreChangeAsync(() => _services.History.DeleteAsync(id));
         await LoadAsync();
     }
 
@@ -110,13 +121,29 @@ public sealed class HistoryViewModel : ObservableObject
     private async Task RefreshTitlesAsync()
     {
         IsLoading = true;
-        foreach (var record in _allRecords.Where(record => string.IsNullOrWhiteSpace(record.Title) && record.TaskType != TaskKind.DualAudioRemux))
+        try
         {
-            try { record.Title = await _services.BBDown.GetTitleAsync(record.Url, CancellationToken.None); } catch { }
+            var targets = _allRecords
+                .Where(record => string.IsNullOrWhiteSpace(record.Title) && record.TaskType != TaskKind.DualAudioRemux)
+                .Select(record => (record.Id, record.Url))
+                .ToList();
+            var titles = new Dictionary<Guid, string>();
+            foreach (var target in targets)
+            {
+                try
+                {
+                    var title = await _services.BBDown.GetTitleAsync(target.Url, CancellationToken.None);
+                    if (!string.IsNullOrWhiteSpace(title)) titles[target.Id] = title.Trim();
+                }
+                catch { }
+            }
+            await SuppressStoreChangeAsync(() => _services.History.UpdateTitlesAsync(titles));
+            await LoadAsync();
         }
-        await SuppressStoreChangeAsync(() => _services.History.SaveAllAsync(_allRecords));
-        IsLoading = false;
-        ApplyPage();
+        finally
+        {
+            IsLoading = false;
+        }
     }
 
     private async Task SuppressStoreChangeAsync(Func<Task> operation)

@@ -26,6 +26,7 @@ public sealed class DownloadViewModel : ObservableObject
     private bool _saveTaskLogs = true;
     private string _resolvedTitle = string.Empty;
     private string _resolvedTitleUrl = string.Empty;
+    private bool _active;
 
     public DownloadViewModel(AppServices services)
     {
@@ -34,10 +35,6 @@ public sealed class DownloadViewModel : ObservableObject
         GetInfoCommand = new AsyncRelayCommand(GetInfoAsync, CanStart);
         DownloadCommand = new AsyncRelayCommand(() => StartDownloadAsync(false), CanStart);
         SeasonCommand = new AsyncRelayCommand(() => StartDownloadAsync(true), CanStart);
-        Console.PropertyChanged += (_, args) =>
-        {
-            if (args.PropertyName == nameof(Console.IsBusy)) NotifyCommands();
-        };
     }
 
     public IReadOnlyList<string> QualityOptions { get; } = ["杜比视界", "HDR 真彩", "4K", "1080P 高码率", "1080P", "720P", "480P", "360P"];
@@ -96,6 +93,20 @@ public sealed class DownloadViewModel : ObservableObject
     public IAsyncRelayCommand GetInfoCommand { get; }
     public IAsyncRelayCommand DownloadCommand { get; }
     public IAsyncRelayCommand SeasonCommand { get; }
+
+    public void Activate()
+    {
+        if (_active) return;
+        _active = true;
+        Console.PropertyChanged += Console_PropertyChanged;
+    }
+
+    public void Deactivate()
+    {
+        if (!_active) return;
+        _active = false;
+        Console.PropertyChanged -= Console_PropertyChanged;
+    }
 
     public async Task InitializeAsync(HistoryRecord? restore = null)
     {
@@ -187,5 +198,10 @@ public sealed class DownloadViewModel : ObservableObject
     private void NotifyCommands()
     {
         GetInfoCommand.NotifyCanExecuteChanged(); DownloadCommand.NotifyCanExecuteChanged(); SeasonCommand.NotifyCanExecuteChanged();
+    }
+
+    private void Console_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(Console.IsBusy)) NotifyCommands();
     }
 }

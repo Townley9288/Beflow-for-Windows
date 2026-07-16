@@ -51,9 +51,25 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
     {
         var primary = Directory.EnumerateFiles(primaryDirectory).Where(file => new[] { ".mp4", ".mkv" }.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase)).Order().ToList();
         var secondary = Directory.EnumerateFiles(secondaryDirectory).Where(file => new[] { ".m4a", ".mp4", ".mkv", ".aac", ".flac", ".eac3", ".ac3", ".dts" }.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase)).Order().ToList();
-        if (mode == DualAudioSourceMode.Interleaved) return primary.Zip(secondary).Select(pair => (pair.First, pair.Second)).ToList();
-        var byPrefix = secondary.Select(file => (File: file, Prefix: EpisodePrefix(file))).Where(item => item.Prefix is not null).GroupBy(item => item.Prefix!).ToDictionary(group => group.Key, group => group.First().File);
-        return primary.Select(file => (File: file, Prefix: EpisodePrefix(file))).Where(item => item.Prefix is not null && byPrefix.ContainsKey(item.Prefix)).Select(item => (item.File, byPrefix[item.Prefix!])).ToList();
+        if (mode == DualAudioSourceMode.Interleaved)
+        {
+            if (primary.Count != secondary.Count)
+                throw new InvalidOperationException($"奇偶分P配对不完整：主版本 {primary.Count} 个，副音轨 {secondary.Count} 个");
+            return primary.Zip(secondary).Select(pair => (pair.First, pair.Second)).ToList();
+        }
+
+        var primaryByPrefix = BuildEpisodeMap(primary, "主版本");
+        var secondaryByPrefix = BuildEpisodeMap(secondary, "副音轨");
+        var missingSecondary = primaryByPrefix.Keys.Except(secondaryByPrefix.Keys, StringComparer.OrdinalIgnoreCase).Order().ToList();
+        var missingPrimary = secondaryByPrefix.Keys.Except(primaryByPrefix.Keys, StringComparer.OrdinalIgnoreCase).Order().ToList();
+        if (missingSecondary.Count > 0 || missingPrimary.Count > 0)
+        {
+            var details = new List<string>();
+            if (missingSecondary.Count > 0) details.Add($"缺少副音轨 P{string.Join(",P", missingSecondary)}");
+            if (missingPrimary.Count > 0) details.Add($"缺少主版本 P{string.Join(",P", missingPrimary)}");
+            throw new InvalidOperationException($"独立链接配对不完整：{string.Join("；", details)}");
+        }
+        return primaryByPrefix.OrderBy(pair => int.Parse(pair.Key)).Select(pair => (pair.Value, secondaryByPrefix[pair.Key])).ToList();
     }
 
     public static IReadOnlyList<string> BuildMkvmergeArguments(string primary, string secondary, string output, DualAudioRequest request)
@@ -163,6 +179,17 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
     }
 
     private static string? EpisodePrefix(string path) => Regex.Match(Path.GetFileName(path), "^\\[P(\\d+)\\]").Groups[1].Value is { Length: > 0 } value ? value : null;
+    private static Dictionary<string, string> BuildEpisodeMap(IEnumerable<string> files, string label)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in files)
+        {
+            var prefix = EpisodePrefix(file) ?? throw new InvalidOperationException($"{label}文件缺少 [Pxx] 前缀：{Path.GetFileName(file)}");
+            var normalized = int.Parse(prefix).ToString();
+            if (!map.TryAdd(normalized, file)) throw new InvalidOperationException($"{label}存在重复分P：P{normalized}");
+        }
+        return map;
+    }
     private static string DisplayAudioCodec(string codec) => codec.Equals("auto", StringComparison.OrdinalIgnoreCase) ? "自动" : codec;
     private static string Sanitize(string value)
     {

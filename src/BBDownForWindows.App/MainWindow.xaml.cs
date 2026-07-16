@@ -9,6 +9,7 @@ namespace BBDownForWindows.App;
 public sealed partial class MainWindow : Window
 {
     private bool _forceClosing;
+    private bool _closingDialogOpen;
     public MainWindow()
     {
         InitializeComponent();
@@ -138,9 +139,28 @@ public sealed partial class MainWindow : Window
         if (manager.ActiveTask?.State == Core.TaskState.Running)
         {
             args.Cancel = true;
-            await manager.CancelActiveAsync();
-            _forceClosing = true;
-            Close();
+            if (_closingDialogOpen) return;
+            _closingDialogOpen = true;
+            try
+            {
+                var dialog = new ContentDialog
+                {
+                    XamlRoot = WindowRoot.XamlRoot,
+                    Title = "任务仍在运行",
+                    Content = "关闭 Beflow 将取消当前下载、登录或封装任务。已下载文件和 .aria2 文件会保留。",
+                    PrimaryButtonText = "取消任务并退出",
+                    CloseButtonText = "继续运行",
+                    DefaultButton = ContentDialogButton.Close
+                };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+                await manager.CancelActiveAsync();
+                _forceClosing = true;
+                Close();
+            }
+            finally
+            {
+                _closingDialogOpen = false;
+            }
         }
     }
 }

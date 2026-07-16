@@ -36,6 +36,42 @@ public sealed class DualAudioTests
     }
 
     [Fact]
+    public void SeparateModeRejectsMissingEpisodeInsteadOfProducingPartialOutput()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var primary = Directory.CreateDirectory(Path.Combine(root.FullName, "主版本"));
+            var secondary = Directory.CreateDirectory(Path.Combine(root.FullName, "副音轨"));
+            File.WriteAllText(Path.Combine(primary.FullName, "[P01]第一集.mp4"), "");
+            File.WriteAllText(Path.Combine(primary.FullName, "[P02]第二集.mp4"), "");
+            File.WriteAllText(Path.Combine(secondary.FullName, "[P1]粤语.m4a"), "");
+
+            var error = Assert.Throws<InvalidOperationException>(() => DualAudioService.FindPairs(primary.FullName, secondary.FullName, DualAudioSourceMode.Separate));
+
+            Assert.Contains("P2", error.Message, StringComparison.Ordinal);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public void InterleavedModeRejectsUnequalFileCounts()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var primary = Directory.CreateDirectory(Path.Combine(root.FullName, "主版本"));
+            var secondary = Directory.CreateDirectory(Path.Combine(root.FullName, "副音轨"));
+            File.WriteAllText(Path.Combine(primary.FullName, "[P01]第一集.mp4"), "");
+            File.WriteAllText(Path.Combine(primary.FullName, "[P02]第二集.mp4"), "");
+            File.WriteAllText(Path.Combine(secondary.FullName, "[P01]粤语.m4a"), "");
+
+            Assert.Throws<InvalidOperationException>(() => DualAudioService.FindPairs(primary.FullName, secondary.FullName, DualAudioSourceMode.Interleaved));
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
     public void RejectsOutOfRangeDelay()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => DualAudioService.BuildMkvmergeArguments("a", "b", "c", new DualAudioRequest { SecondaryAudioDelayMs = 10001 }));

@@ -22,6 +22,7 @@ public sealed partial class DualAudioPage : Page
     public DualAudioViewModel ViewModel { get; }
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
+        ViewModel.Activate();
         ViewModel.Console.PropertyChanged += Console_PropertyChanged;
         await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
         _logAutoScroller.FollowLatest();
@@ -30,6 +31,7 @@ public sealed partial class DualAudioPage : Page
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         ViewModel.Console.PropertyChanged -= Console_PropertyChanged;
+        ViewModel.Deactivate();
         base.OnNavigatedFrom(e);
     }
     private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow); if (value is not null) ViewModel.WorkDirectory = value; }

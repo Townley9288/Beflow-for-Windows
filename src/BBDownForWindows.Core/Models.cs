@@ -205,6 +205,7 @@ public sealed class TaskSnapshot
 
 public sealed class HistoryRecord
 {
+    [JsonPropertyName("id")] public Guid Id { get; set; }
     public TaskKind TaskType { get; set; }
     public string Url { get; set; } = string.Empty;
     public string SecondaryUrl { get; set; } = string.Empty;

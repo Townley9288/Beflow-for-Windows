@@ -23,6 +23,7 @@ public sealed partial class DownloadPage : Page
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
+        ViewModel.Activate();
         ViewModel.Console.PropertyChanged += Console_PropertyChanged;
         await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
         ControlsScrollViewer.ChangeView(null, 0, null, true);
@@ -33,6 +34,7 @@ public sealed partial class DownloadPage : Page
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         ViewModel.Console.PropertyChanged -= Console_PropertyChanged;
+        ViewModel.Deactivate();
         base.OnNavigatedFrom(e);
     }
 

@@ -17,6 +17,7 @@ public sealed class SettingsViewModel : ObservableObject
     private string _loginMessage = string.Empty;
     private string _lastAccountCheckText = "尚未检测";
     private InfoBarSeverity _loginMessageSeverity = InfoBarSeverity.Informational;
+    private bool _active;
 
     public SettingsViewModel(AppServices services)
     {
@@ -31,14 +32,6 @@ public sealed class SettingsViewModel : ObservableObject
         Console = services.TaskConsole;
         WebAccount = new AccountChannelViewModel(AccountChannel.Web);
         TvAccount = new AccountChannelViewModel(AccountChannel.Tv);
-        Console.PropertyChanged += (_, args) =>
-        {
-            if (args.PropertyName == nameof(Console.IsBusy))
-            {
-                LoginWebCommand.NotifyCanExecuteChanged();
-                LoginTvCommand.NotifyCanExecuteChanged();
-            }
-        };
     }
 
     public IReadOnlyList<string> QualityOptions { get; } = ["杜比视界", "HDR 真彩", "4K", "1080P 高码率", "1080P", "720P", "480P", "360P"];
@@ -98,6 +91,20 @@ public sealed class SettingsViewModel : ObservableObject
     public IAsyncRelayCommand LoginWebCommand { get; }
     public IAsyncRelayCommand LoginTvCommand { get; }
 
+    public void Activate()
+    {
+        if (_active) return;
+        _active = true;
+        Console.PropertyChanged += Console_PropertyChanged;
+    }
+
+    public void Deactivate()
+    {
+        if (!_active) return;
+        _active = false;
+        Console.PropertyChanged -= Console_PropertyChanged;
+    }
+
     public async Task InitializeAsync()
     {
         Settings = await _services.Settings.LoadAsync();
@@ -126,9 +133,14 @@ public sealed class SettingsViewModel : ObservableObject
 
     public async Task SaveAsync()
     {
-        Settings.SchemaVersion = 2;
+        var snapshot = Settings.Clone();
+        snapshot.SchemaVersion = 2;
+        Settings = await _services.Settings.UpdateAsync(current =>
+        {
+            snapshot.ThemeMode = current.ThemeMode;
+            return snapshot;
+        });
         Settings.ThemeMode = _services.Theme.CurrentMode;
-        await _services.Settings.SaveAsync(Settings);
         Message = "设置已保存";
     }
 
@@ -198,4 +210,11 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     private bool CanStartLogin() => !Console.IsBusy;
+
+    private void Console_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName != nameof(Console.IsBusy)) return;
+        LoginWebCommand.NotifyCanExecuteChanged();
+        LoginTvCommand.NotifyCanExecuteChanged();
+    }
 }

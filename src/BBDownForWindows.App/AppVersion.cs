@@ -15,5 +15,7 @@ public static class AppVersion
         return Normalize(assembly.GetName().Version ?? new Version(1, 0, 0));
     }
 
-    private static Version Normalize(Version version) => new(version.Major, Math.Max(0, version.Minor), Math.Max(0, version.Build));
+    private static Version Normalize(Version version) => version.Revision >= 0
+        ? new Version(version.Major, Math.Max(0, version.Minor), Math.Max(0, version.Build), version.Revision)
+        : new Version(version.Major, Math.Max(0, version.Minor), Math.Max(0, version.Build));
 }

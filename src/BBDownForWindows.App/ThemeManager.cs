@@ -35,10 +35,12 @@ public sealed class ThemeManager(ISettingsStore settingsStore)
     {
         if (mode == CurrentMode) return;
 
-        var settings = await settingsStore.LoadAsync(cancellationToken);
-        settings.SchemaVersion = 2;
-        settings.ThemeMode = mode;
-        await settingsStore.SaveAsync(settings, cancellationToken);
+        await settingsStore.UpdateAsync(settings =>
+        {
+            settings.SchemaVersion = 2;
+            settings.ThemeMode = mode;
+            return settings;
+        }, cancellationToken);
 
         CurrentMode = mode;
         ApplyCurrentMode();

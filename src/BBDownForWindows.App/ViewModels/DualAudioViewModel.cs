@@ -28,6 +28,7 @@ public sealed class DualAudioViewModel : ObservableObject
     private string _mkvmergePath = string.Empty;
     private string _resolvedPrimaryTitle = string.Empty;
     private string _resolvedPrimaryUrl = string.Empty;
+    private bool _active;
 
     public DualAudioViewModel(AppServices services)
     {
@@ -36,7 +37,6 @@ public sealed class DualAudioViewModel : ObservableObject
         StartCommand = new AsyncRelayCommand(StartAsync, CanStart);
         InfoCommand = new AsyncRelayCommand(GetInfoAsync, CanStart);
         RemuxCommand = new AsyncRelayCommand(RemuxAsync, CanRemux);
-        Console.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(Console.IsBusy)) NotifyCommands(); };
     }
 
     public IReadOnlyList<string> SourceModes { get; } = ["两个独立链接", "同一链接奇偶分P"];
@@ -87,6 +87,20 @@ public sealed class DualAudioViewModel : ObservableObject
     public IAsyncRelayCommand InfoCommand { get; }
     public IAsyncRelayCommand RemuxCommand { get; }
     public Func<Task<bool>>? ConfirmMkvmergeAvailableAsync { get; set; }
+
+    public void Activate()
+    {
+        if (_active) return;
+        _active = true;
+        Console.PropertyChanged += Console_PropertyChanged;
+    }
+
+    public void Deactivate()
+    {
+        if (!_active) return;
+        _active = false;
+        Console.PropertyChanged -= Console_PropertyChanged;
+    }
 
     public async Task InitializeAsync(HistoryRecord? restore = null)
     {
@@ -194,4 +208,5 @@ public sealed class DualAudioViewModel : ObservableObject
     private bool CanStart() => !Console.IsBusy && !string.IsNullOrWhiteSpace(PrimaryUrl) && (SourceModeText == "同一链接奇偶分P" || !string.IsNullOrWhiteSpace(SecondaryUrl));
     private bool CanRemux() => !Console.IsBusy && !string.IsNullOrWhiteSpace(ExistingTaskDirectory);
     private void NotifyCommands() { StartCommand.NotifyCanExecuteChanged(); InfoCommand.NotifyCanExecuteChanged(); RemuxCommand.NotifyCanExecuteChanged(); }
+    private void Console_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args) { if (args.PropertyName == nameof(Console.IsBusy)) NotifyCommands(); }
 }

@@ -19,8 +19,8 @@ public sealed partial class SettingsPage : Page
         _qrTimer.Tick += QrTimer_Tick;
     }
     public SettingsViewModel ViewModel { get; }
-    protected override async void OnNavigatedTo(NavigationEventArgs e) { base.OnNavigatedTo(e); _qrTimer.Start(); await ViewModel.InitializeAsync(); }
-    protected override void OnNavigatedFrom(NavigationEventArgs e) { _qrTimer.Stop(); base.OnNavigatedFrom(e); }
+    protected override async void OnNavigatedTo(NavigationEventArgs e) { base.OnNavigatedTo(e); ViewModel.Activate(); _qrTimer.Start(); await ViewModel.InitializeAsync(); }
+    protected override void OnNavigatedFrom(NavigationEventArgs e) { _qrTimer.Stop(); ViewModel.Deactivate(); base.OnNavigatedFrom(e); }
     private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow); if (value is not null) ViewModel.Settings.WorkDirectory = value; }
     private async void BrowseAria_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (value is not null) ViewModel.Settings.Aria2cPath = value; }
     private async void BrowseMkv_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (value is not null) ViewModel.Settings.MkvmergePath = value; }

@@ -97,6 +97,37 @@ public sealed class StoreTests
     }
 
     [Fact]
+    public async Task ConcurrentSettingsUpdatesPreserveIndependentChanges()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var store = new SettingsStore(paths);
+            await store.SaveAsync(new AppSettings { Quality = "720P", CheckUpdatesOnStartup = true });
+            var start = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var quality = Task.Run(async () =>
+            {
+                await start.Task;
+                await store.UpdateAsync(settings => { settings.Quality = "4K"; return settings; });
+            });
+            var updates = Task.Run(async () =>
+            {
+                await start.Task;
+                await store.UpdateAsync(settings => { settings.CheckUpdatesOnStartup = false; return settings; });
+            });
+
+            start.SetResult(true);
+            await Task.WhenAll(quality, updates);
+            var restored = await store.LoadAsync();
+
+            Assert.Equal("4K", restored.Quality);
+            Assert.False(restored.CheckUpdatesOnStartup);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
     public async Task UpdateStateIsStoredSeparatelyFromSettings()
     {
         var root = Directory.CreateTempSubdirectory();
@@ -176,6 +207,95 @@ public sealed class StoreTests
     }
 
     [Fact]
+    public async Task ConcurrentHistoryAddsAreSerializedWithoutLosingRecords()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var store = new HistoryStore(paths);
+            var start = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var tasks = Enumerable.Range(1, 20).Select(index => Task.Run(async () =>
+            {
+                await start.Task;
+                await store.AddAsync(new HistoryRecord { Title = $"记录{index}", Url = index.ToString() });
+            })).ToArray();
+
+            start.SetResult(true);
+            await Task.WhenAll(tasks);
+            var history = await store.LoadAsync();
+
+            Assert.Equal(20, history.Count);
+            Assert.Equal(20, history.Select(record => record.Id).Distinct().Count());
+            Assert.DoesNotContain(history, record => record.Id == Guid.Empty);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task DeleteUsesStableIdWhenNewRecordsWereInserted()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var store = new HistoryStore(paths);
+            var selected = new HistoryRecord { Title = "B", Url = "B" };
+            await store.AddAsync(selected);
+            await store.AddAsync(new HistoryRecord { Title = "A", Url = "A" });
+            await store.AddAsync(new HistoryRecord { Title = "C", Url = "C" });
+
+            await store.DeleteAsync(selected.Id);
+            var titles = (await store.LoadAsync()).Select(record => record.Title).ToList();
+
+            Assert.Equal(["C", "A"], titles);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task TitleUpdatesMergeIntoLatestHistorySnapshot()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var store = new HistoryStore(paths);
+            var old = new HistoryRecord { Url = "old" };
+            await store.AddAsync(old);
+            await store.AddAsync(new HistoryRecord { Title = "新下载", Url = "new" });
+
+            await store.UpdateTitlesAsync(new Dictionary<Guid, string> { [old.Id] = "补全标题" });
+            var history = await store.LoadAsync();
+
+            Assert.Equal(2, history.Count);
+            Assert.Equal("补全标题", history.Single(record => record.Id == old.Id).Title);
+            Assert.Contains(history, record => record.Title == "新下载");
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task LegacyHistoryWithoutIdsIsMigratedOnce()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            paths.EnsureCreated();
+            await File.WriteAllTextAsync(paths.HistoryFile, "[{\"title\":\"旧记录\",\"url\":\"old\"}]");
+            var store = new HistoryStore(paths);
+
+            var first = Assert.Single(await store.LoadAsync()).Id;
+            var second = Assert.Single(await store.LoadAsync()).Id;
+
+            Assert.NotEqual(Guid.Empty, first);
+            Assert.Equal(first, second);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
     public async Task HistoryStoreNotifiesAfterMutations()
     {
         var root = Directory.CreateTempSubdirectory();
@@ -189,8 +309,9 @@ public sealed class StoreTests
 
             await store.AddAsync(record);
             var serialized = await File.ReadAllTextAsync(paths.HistoryFile);
-            await store.SaveAllAsync(await store.LoadAsync());
-            await store.DeleteAsync(0);
+            var loaded = await store.LoadAsync();
+            await store.UpdateTitlesAsync(new Dictionary<Guid, string> { [loaded[0].Id] = "新标题" });
+            await store.DeleteAsync(loaded[0].Id);
             await store.ClearAsync();
 
             Assert.Equal(4, changes);

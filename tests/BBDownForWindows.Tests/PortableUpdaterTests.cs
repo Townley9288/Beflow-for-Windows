@@ -13,6 +13,9 @@ public sealed class PortableUpdaterTests
         var target = Directory.CreateDirectory(Path.Combine(root.Info.FullName, "便携版"));
         File.WriteAllText(Path.Combine(target.FullName, "portable.flag"), string.Empty);
         File.WriteAllText(Path.Combine(target.FullName, "Beflow.exe"), "old");
+        File.WriteAllText(Path.Combine(target.FullName, "obsolete.dll"), "old-component");
+        File.WriteAllText(Path.Combine(target.FullName, "user-note.txt"), "keep-me");
+        File.WriteAllLines(Path.Combine(target.FullName, "Beflow.files.txt"), ["Beflow.exe", "obsolete.dll", "Beflow.files.txt"]);
         Directory.CreateDirectory(Path.Combine(target.FullName, "Data"));
         File.WriteAllText(Path.Combine(target.FullName, "Data", "config.json"), "user-data");
         var package = CreatePackage(root.Info.FullName, new Dictionary<string, string>
@@ -29,6 +32,8 @@ public sealed class PortableUpdaterTests
         Assert.Equal("user-data", File.ReadAllText(Path.Combine(target.FullName, "Data", "config.json")));
         Assert.Equal(string.Empty, File.ReadAllText(Path.Combine(target.FullName, "portable.flag")));
         Assert.Equal("asset", File.ReadAllText(Path.Combine(target.FullName, "Assets", "icon.txt")));
+        Assert.False(File.Exists(Path.Combine(target.FullName, "obsolete.dll")));
+        Assert.Equal("keep-me", File.ReadAllText(Path.Combine(target.FullName, "user-note.txt")));
     }
 
     [Fact]
@@ -61,6 +66,31 @@ public sealed class PortableUpdaterTests
         Assert.Throws<InvalidOperationException>(() => new PortableUpdateEngine().Apply(new PortableUpdateOptions(package, target.FullName, Path.Combine(root.Info.FullName, "work"), Path.Combine(root.Info.FullName, "update.log"))));
     }
 
+    [Fact]
+    public void RetainsBackupAndReportsWhenRollbackAlsoFails()
+    {
+        using var root = new TempDirectory();
+        var target = Directory.CreateDirectory(Path.Combine(root.Info.FullName, "portable"));
+        File.WriteAllText(Path.Combine(target.FullName, "portable.flag"), string.Empty);
+        File.WriteAllText(Path.Combine(target.FullName, "Beflow.exe"), "old-exe");
+        File.WriteAllText(Path.Combine(target.FullName, "second.txt"), "old-second");
+        var package = CreatePackage(root.Info.FullName, new Dictionary<string, string> { ["Beflow.exe"] = "new-exe", ["second.txt"] = "new-second" });
+        var copies = 0;
+        var engine = new PortableUpdateEngine(
+            (source, destination) =>
+            {
+                if (++copies == 2) throw new IOException("simulated update failure");
+                File.Copy(source, destination, true);
+            },
+            (_, _) => throw new IOException("simulated rollback failure"));
+        var working = Path.Combine(root.Info.FullName, "work");
+
+        var error = Assert.Throws<AggregateException>(() => engine.Apply(new PortableUpdateOptions(package, target.FullName, working, Path.Combine(root.Info.FullName, "update.log"))));
+
+        Assert.Contains("未能完整回滚", error.Message, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(working, "backup", "Beflow.exe")));
+    }
+
     private static string CreatePackage(string root, IReadOnlyDictionary<string, string> files)
     {
         var package = Path.Combine(root, Guid.NewGuid().ToString("N") + ".zip");
@@ -71,6 +101,14 @@ public sealed class PortableUpdaterTests
             using var writer = new StreamWriter(entry.Open());
             writer.Write(content);
         }
+        var managedFiles = files.Keys
+            .Where(name => !name.Equals("portable.flag", StringComparison.OrdinalIgnoreCase))
+            .Where(name => !name.Equals("Data", StringComparison.OrdinalIgnoreCase) && !name.StartsWith("Data/", StringComparison.OrdinalIgnoreCase) && !name.StartsWith("Data\\", StringComparison.OrdinalIgnoreCase))
+            .Select(name => name.Replace('/', Path.DirectorySeparatorChar))
+            .Append("Beflow.files.txt")
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        var manifest = archive.CreateEntry("Beflow.files.txt");
+        using (var writer = new StreamWriter(manifest.Open())) writer.Write(string.Join(Environment.NewLine, managedFiles));
         return package;
     }
 

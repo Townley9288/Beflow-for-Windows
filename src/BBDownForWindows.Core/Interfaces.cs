@@ -10,15 +10,16 @@ public interface ISettingsStore
 {
     Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default);
     Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default);
+    Task<AppSettings> UpdateAsync(Func<AppSettings, AppSettings> update, CancellationToken cancellationToken = default);
 }
 
 public interface IHistoryStore
 {
     event EventHandler? Changed;
     Task<IReadOnlyList<HistoryRecord>> LoadAsync(CancellationToken cancellationToken = default);
-    Task SaveAllAsync(IReadOnlyList<HistoryRecord> records, CancellationToken cancellationToken = default);
     Task AddAsync(HistoryRecord record, CancellationToken cancellationToken = default);
-    Task DeleteAsync(int index, CancellationToken cancellationToken = default);
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+    Task UpdateTitlesAsync(IReadOnlyDictionary<Guid, string> titles, CancellationToken cancellationToken = default);
     Task ClearAsync(CancellationToken cancellationToken = default);
 }
 

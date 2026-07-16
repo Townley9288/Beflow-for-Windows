@@ -30,8 +30,8 @@
 
 从 [GitHub Releases](https://github.com/Townley9288/Beflow-for-Windows/releases) 下载：
 
-- `Beflow-for-Windows-vX.Y.Z-win-x64-setup.exe`：安装版
-- `Beflow-for-Windows-vX.Y.Z-win-x64-portable.zip`：绿色便携版
+- `Beflow-for-Windows-vX.Y.Z[.R]-win-x64-setup.exe`：安装版
+- `Beflow-for-Windows-vX.Y.Z[.R]-win-x64-portable.zip`：绿色便携版
 
 项目暂未购买代码签名证书，Windows SmartScreen 可能在首次运行时显示“未知发布者”。请只从本仓库 Release 下载，并可使用同名 `.sha256` 文件核对完整性。
 
@@ -63,7 +63,7 @@ dotnet build src\BBDownForWindows.App\BBDownForWindows.App.csproj -c Release -p:
 生成发行包：
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 1.0.3
+.\scripts\Build-Release.ps1 -Version 1.0.4
 ```
 
 正式 CI 使用 Native AOT 构建便携更新助手。本地 Native AOT 构建需要 Visual Studio 的 Desktop development with C++ 与 Windows 10/11 SDK；缺少时脚本会为本地测试回退到自包含单文件助手。

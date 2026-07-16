@@ -119,5 +119,8 @@ public sealed class BBDownRuntimeTests
 
         public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+
+        public Task<AppSettings> UpdateAsync(Func<AppSettings, AppSettings> update, CancellationToken cancellationToken = default) =>
+            Task.FromResult(update(new AppSettings()));
     }
 }

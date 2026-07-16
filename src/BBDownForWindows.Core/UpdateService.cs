@@ -170,12 +170,16 @@ public sealed class UpdateService : IUpdateService
     {
         var value = tag.Trim();
         if (value.StartsWith('v') || value.StartsWith('V')) value = value[1..];
-        if (!Version.TryParse(value, out var version) || version.Major < 0 || version.Minor < 0 || version.Build < 0 || version.Revision >= 0)
+        if (!Version.TryParse(value, out var version) || version.Major < 0 || version.Minor < 0 || version.Build < 0)
             throw new InvalidDataException($"无法识别版本标签：{tag}");
         return version;
     }
 
-    public static string FormatVersion(Version version) => $"{version.Major}.{version.Minor}.{Math.Max(0, version.Build)}";
+    public static string FormatVersion(Version version)
+    {
+        var value = $"{version.Major}.{version.Minor}.{Math.Max(0, version.Build)}";
+        return version.Revision >= 0 ? $"{value}.{version.Revision}" : value;
+    }
 
     internal static string ParseChecksum(string value)
     {
