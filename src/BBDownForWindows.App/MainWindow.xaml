@@ -9,34 +9,40 @@
     </InfoBar>
     <NavigationView Grid.Row="1" x:Name="RootNavigation" Background="{ThemeResource BeflowWindowBackgroundBrush}" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" PaneDisplayMode="LeftCompact" ItemInvoked="RootNavigation_ItemInvoked" Loaded="RootNavigation_Loaded">
         <NavigationView.MenuItems>
+            <NavigationViewItemHeader Content="下载与封装" />
             <NavigationViewItem Content="下载" Tag="download" Icon="Download" />
             <NavigationViewItem Content="多音轨封装" Tag="dual" Icon="Document" />
+            <NavigationViewItemHeader Content="文件整理" />
             <NavigationViewItem Content="重命名" Tag="rename">
                 <NavigationViewItem.Icon><FontIcon Glyph="&#xE8AC;" /></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem Content="命名模板" Tag="rename-templates">
                 <NavigationViewItem.Icon><FontIcon Glyph="&#xE70F;" /></NavigationViewItem.Icon>
             </NavigationViewItem>
-            <NavigationViewItem Content="历史" Tag="history" Icon="Clock" />
+            <NavigationViewItemHeader Content="历史记录" />
+            <NavigationViewItem Content="下载历史" Tag="history" Icon="Clock" />
+            <NavigationViewItem Content="重命名历史" Tag="rename-history">
+                <NavigationViewItem.Icon><FontIcon Glyph="&#xE81C;" /></NavigationViewItem.Icon>
+            </NavigationViewItem>
+        </NavigationView.MenuItems>
+        <NavigationView.FooterMenuItems>
+            <NavigationViewItem x:Name="ThemeNavigationItem" Content="主题" Tag="theme" SelectsOnInvoked="False" AutomationProperties.Name="选择界面主题">
+                <NavigationViewItem.Icon><FontIcon x:Name="ThemeIcon" Glyph="&#xE977;" FontSize="16" /></NavigationViewItem.Icon>
+                <NavigationViewItem.ContextFlyout>
+                    <MenuFlyout Placement="TopEdgeAlignedLeft">
+                        <RadioMenuFlyoutItem x:Name="SystemThemeItem" Text="跟随系统" GroupName="ThemeMode" Tag="system" Click="ThemeMenuItem_Click" />
+                        <RadioMenuFlyoutItem x:Name="LightThemeItem" Text="浅色" GroupName="ThemeMode" Tag="light" Click="ThemeMenuItem_Click" />
+                        <RadioMenuFlyoutItem x:Name="DarkThemeItem" Text="深色" GroupName="ThemeMode" Tag="dark" Click="ThemeMenuItem_Click" />
+                    </MenuFlyout>
+                </NavigationViewItem.ContextFlyout>
+            </NavigationViewItem>
             <NavigationViewItem Content="设置" Tag="settings" Icon="Setting" />
             <NavigationViewItem Content="关于" Tag="about">
                 <NavigationViewItem.Icon>
                     <FontIcon Glyph="&#xE946;" />
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
-        </NavigationView.MenuItems>
-        <NavigationView.PaneFooter>
-            <Button x:Name="ThemeButton" Width="40" Height="40" Margin="4,0,0,8" Padding="0" HorizontalAlignment="Left" Background="Transparent" BorderThickness="0" AutomationProperties.Name="选择界面主题">
-                <FontIcon x:Name="ThemeIcon" Glyph="&#xE771;" FontSize="18" />
-                <Button.Flyout>
-                    <MenuFlyout Placement="TopEdgeAlignedLeft">
-                        <RadioMenuFlyoutItem x:Name="SystemThemeItem" Text="跟随系统" GroupName="ThemeMode" Tag="system" Click="ThemeMenuItem_Click" />
-                        <RadioMenuFlyoutItem x:Name="LightThemeItem" Text="浅色" GroupName="ThemeMode" Tag="light" Click="ThemeMenuItem_Click" />
-                        <RadioMenuFlyoutItem x:Name="DarkThemeItem" Text="深色" GroupName="ThemeMode" Tag="dark" Click="ThemeMenuItem_Click" />
-                    </MenuFlyout>
-                </Button.Flyout>
-            </Button>
-        </NavigationView.PaneFooter>
+        </NavigationView.FooterMenuItems>
         <Frame x:Name="ContentFrame" />
     </NavigationView>
     </Grid>

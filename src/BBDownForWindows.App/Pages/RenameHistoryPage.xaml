@@ -19,14 +19,14 @@
 
             <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="10">
-                    <Grid ColumnSpacing="8">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><Grid MinWidth="760" ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <TextBox PlaceholderText="搜索片名、目录或模板" Text="{Binding HistorySearch, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         <Button Grid.Column="1" Content="刷新" Click="Refresh_Click"/>
                         <Button Grid.Column="2" Content="查看详情" Click="HistoryDetail_Click"/>
                         <Button Grid.Column="3" Content="撤销所选" Click="UndoHistory_Click" IsEnabled="{Binding CanUndoSelectedHistory}"/>
                         <Button Grid.Column="4" Content="删除记录" Click="DeleteHistory_Click"/>
-                    </Grid>
+                    </Grid></ScrollViewer>
 
                     <ListView ItemsSource="{Binding HistoryRecords}" SelectedItem="{Binding SelectedHistory, Mode=TwoWay}" MinHeight="460" SelectionMode="Single">
                         <ListView.ItemTemplate>

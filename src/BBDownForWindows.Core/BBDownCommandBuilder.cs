@@ -22,6 +22,16 @@ public static class BBDownCommandBuilder
         return arguments;
     }
 
+    public static List<string> BuildExactDownloadArguments(DownloadRequest request, ToolPaths tools)
+    {
+        var arguments = new List<string> { request.Url };
+        if (!string.IsNullOrWhiteSpace(request.Pages)) arguments.AddRange(["-p", request.Pages]);
+        if (!string.IsNullOrWhiteSpace(request.MultiFilePattern)) arguments.AddRange(["-M", request.MultiFilePattern]);
+        AppendCommon(arguments, request, tools, includeSelectionPreferences: false);
+        arguments.Add("--interactive");
+        return arguments;
+    }
+
     public static List<string> BuildInfoArguments(DownloadRequest request)
     {
         var arguments = new List<string> { request.Url, "-info", "--show-all" };
@@ -33,15 +43,15 @@ public static class BBDownCommandBuilder
         return arguments;
     }
 
-    private static void AppendCommon(List<string> arguments, DownloadRequest request, ToolPaths tools)
+    private static void AppendCommon(List<string> arguments, DownloadRequest request, ToolPaths tools, bool includeSelectionPreferences = true)
     {
         if (request.ApiMode.Equals("TV", StringComparison.OrdinalIgnoreCase)) arguments.Add("-tv");
         else if (request.ApiMode.Equals("APP", StringComparison.OrdinalIgnoreCase)) arguments.Add("-app");
-        if (QualityMap.TryGetValue(request.Quality, out var quality)) arguments.AddRange(["-q", quality]);
-        if (EncodingMap.TryGetValue(request.Encoding, out var encoding)) arguments.AddRange(["--encoding-priority", encoding]);
+        if (includeSelectionPreferences && QualityMap.TryGetValue(request.Quality, out var quality)) arguments.AddRange(["-q", quality]);
+        if (includeSelectionPreferences && EncodingMap.TryGetValue(request.Encoding, out var encoding)) arguments.AddRange(["--encoding-priority", encoding]);
         if (request.DownloadMode == DownloadMode.VideoOnly) arguments.Add("--video-only");
         else if (request.DownloadMode == DownloadMode.AudioOnly) arguments.Add("--audio-only");
-        if (request.AudioBitratePriority == AudioBitratePriority.Lowest) arguments.Add("--audio-ascending");
+        if (includeSelectionPreferences && request.AudioBitratePriority == AudioBitratePriority.Lowest) arguments.Add("--audio-ascending");
         if (request.Danmaku) arguments.Add("--download-danmaku");
         if (!request.Subtitle) arguments.Add("--skip-subtitle");
         if (!request.Cover) arguments.Add("--skip-cover");
@@ -55,7 +65,9 @@ public static class BBDownCommandBuilder
             arguments.Add("--use-aria2c");
             var aria = !string.IsNullOrWhiteSpace(request.Aria2cPath) ? request.Aria2cPath : tools.Aria2c;
             if (!string.IsNullOrWhiteSpace(aria)) arguments.AddRange(["--aria2c-path", aria]);
-            arguments.AddRange(["--aria2c-args", $"-x{request.Aria2MaxConnection} -s{request.Aria2Split} -j{request.Aria2MaxConcurrentDownloads} -k {request.Aria2MinSplitSize}M"]);
+            var ariaArguments = $"-x{request.Aria2MaxConnection} -s{request.Aria2Split} -j{request.Aria2MaxConcurrentDownloads} -k {request.Aria2MinSplitSize}M";
+            if (request.Aria2AutoTune) ariaArguments += " --file-allocation=none --disk-cache=64M";
+            arguments.AddRange(["--aria2c-args", ariaArguments]);
         }
     }
 }

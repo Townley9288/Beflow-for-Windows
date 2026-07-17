@@ -21,6 +21,10 @@ public sealed partial class HistoryPage : Page
         base.OnNavigatedFrom(e);
     }
     private void Restore_Click(object sender, RoutedEventArgs e) { if (ViewModel.SelectedRecord is not null) ((App)Application.Current).MainWindow.RestoreHistory(ViewModel.SelectedRecord); }
+    private void ViewDetails_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedRecord?.DownloadBatch is not null) ((App)Application.Current).MainWindow.Navigate("history-detail", ViewModel.SelectedRecord);
+    }
     private async void ViewLog_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel.SelectedRecord is null) return;

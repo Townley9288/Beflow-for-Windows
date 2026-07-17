@@ -9,7 +9,7 @@ public enum DownloadMode { VideoAndAudio, VideoOnly, AudioOnly }
 public enum AudioBitratePriority { Highest, Lowest }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum TaskKind { Info, Download, SeasonDownload, LoginWeb, LoginTv, DualAudioMux, DualAudioRemux, RenamePreview, RenameExecute, RenameUndo }
+public enum TaskKind { Info, Download, SeasonDownload, LoginWeb, LoginTv, DualAudioMux, DualAudioRemux, RenamePreview, RenameExecute, RenameUndo, DownloadParse, DownloadBatch }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TaskState { Pending, Running, Completed, Failed, Cancelled }
@@ -42,7 +42,14 @@ public sealed record AccountStatusSnapshot(AccountChannelStatus Web, AccountChan
 
 public sealed class AppSettings
 {
-    [JsonPropertyName("schemaVersion")] public int SchemaVersion { get; set; } = 2;
+    private int _schemaVersion = 3;
+    [JsonIgnore] private bool _schemaVersionSpecified;
+    [JsonPropertyName("schemaVersion")]
+    public int SchemaVersion
+    {
+        get => _schemaVersion;
+        set { _schemaVersion = value; _schemaVersionSpecified = true; }
+    }
     [JsonIgnore] public AppThemeMode ThemeMode { get; set; } = AppThemeMode.System;
     [JsonPropertyName("themeMode")] public string SerializedThemeMode
     {
@@ -60,6 +67,8 @@ public sealed class AppSettings
         };
     }
     [JsonPropertyName("quality")] public string Quality { get; set; } = "4K";
+    [JsonPropertyName("videoQualityRule")] public string VideoQualityRule { get; set; } = "4K 超清";
+    [JsonPropertyName("includeHdrDolbyInAutoSelection")] public bool IncludeHdrDolbyInAutoSelection { get; set; }
     [JsonPropertyName("encoding")] public string Encoding { get; set; } = "AVC";
     [JsonPropertyName("audioOnly")] public string LegacyAudioOnly
     {
@@ -93,6 +102,7 @@ public sealed class AppSettings
     [JsonPropertyName("multiThread")] public bool MultiThread { get; set; } = true;
     [JsonPropertyName("uposHost")] public string UposHost { get; set; } = string.Empty;
     [JsonPropertyName("useAria2c")] public bool UseAria2c { get; set; } = true;
+    [JsonPropertyName("aria2AutoTune")] public bool Aria2AutoTune { get; set; } = true;
     [JsonPropertyName("aria2cPath")] public string Aria2cPath { get; set; } = string.Empty;
     [JsonPropertyName("aria2MaxConnection")] public int Aria2MaxConnection { get; set; } = 16;
     [JsonPropertyName("aria2Split")] public int Aria2Split { get; set; } = 16;
@@ -100,6 +110,18 @@ public sealed class AppSettings
     [JsonPropertyName("aria2MinSplitSize")] public int Aria2MinSplitSize { get; set; } = 5;
     [JsonPropertyName("mkvmergePath")] public string MkvmergePath { get; set; } = string.Empty;
     [JsonPropertyName("checkUpdatesOnStartup")] public bool CheckUpdatesOnStartup { get; set; } = true;
+
+    public void EnsureCurrentSchema()
+    {
+        if (!_schemaVersionSpecified || SchemaVersion < 3) VideoQualityRule = StreamSelectionPolicy.NormalizeQualityRule(Quality);
+        VideoQualityRule = StreamSelectionPolicy.NormalizeQualityRule(VideoQualityRule);
+        if (!StreamSelectionPolicy.IsKnownQualityRule(VideoQualityRule)) VideoQualityRule = "4K 超清";
+        Encoding = Encoding?.Trim().ToUpperInvariant() ?? "AVC";
+        if (Encoding is not ("AVC" or "HEVC" or "AV1")) Encoding = "AVC";
+        var knownAudio = new[] { "auto", "E-AC-3", "M4A", "FLAC", "AC-3", "DTS" };
+        if (!knownAudio.Contains(AudioCodec, StringComparer.OrdinalIgnoreCase)) AudioCodec = "auto";
+        SchemaVersion = 3;
+    }
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 }
@@ -150,6 +172,7 @@ public sealed class DownloadRequest
     public bool MultiThread { get; set; } = true;
     public string UposHost { get; set; } = string.Empty;
     public bool UseAria2c { get; set; }
+    public bool Aria2AutoTune { get; set; } = true;
     public string Aria2cPath { get; set; } = string.Empty;
     public int Aria2MaxConnection { get; set; } = 16;
     public int Aria2Split { get; set; } = 16;
@@ -192,6 +215,7 @@ public sealed class DualAudioRequest
     public bool MultiThread { get; set; } = true;
     public string UposHost { get; set; } = string.Empty;
     public bool UseAria2c { get; set; }
+    public bool Aria2AutoTune { get; set; } = true;
     public string Aria2cPath { get; set; } = string.Empty;
     public int Aria2MaxConnection { get; set; } = 16;
     public int Aria2Split { get; set; } = 16;
@@ -224,15 +248,80 @@ public sealed class HistoryRecord
     public string OutputDirectory { get; set; } = string.Empty;
     public List<string> OutputFiles { get; set; } = [];
     public DownloadRequest? Download { get; set; }
+    public DownloadBatchHistory? DownloadBatch { get; set; }
     public DualAudioRequest? DualAudio { get; set; }
+
+    [JsonIgnore]
+    public IReadOnlyList<string> SpecificationTags
+    {
+        get
+        {
+            List<string> tags = [];
+            if (DownloadBatch is not null)
+            {
+                var attempted = DownloadBatch.Episodes.Count;
+                var succeeded = DownloadBatch.Episodes.Count(item => item.State == DownloadEpisodeResultState.Completed);
+                var failed = DownloadBatch.Episodes.Count(item => item.State == DownloadEpisodeResultState.Failed);
+                tags.Add($"{attempted} 集");
+                if (succeeded > 0) tags.Add($"成功 {succeeded}");
+                if (failed > 0) tags.Add($"失败 {failed}");
+                tags.Add(DownloadBatch.Options.DownloadMode switch
+                {
+                    DownloadMode.VideoOnly => "仅视频",
+                    DownloadMode.AudioOnly => "仅音频",
+                    _ => "视频+音频"
+                });
+                return tags;
+            }
+            if (Download is not null)
+            {
+                if (Download.DownloadMode == DownloadMode.AudioOnly)
+                {
+                    tags.Add(string.Equals(Download.AudioCodec, "auto", StringComparison.OrdinalIgnoreCase) ? "音频自动" : Download.AudioCodec);
+                }
+                else
+                {
+                    AddIfPresent(tags, Download.Quality);
+                    AddIfPresent(tags, Download.Encoding);
+                }
+
+                tags.Add(Download.DownloadMode switch
+                {
+                    DownloadMode.VideoOnly => "仅视频",
+                    DownloadMode.AudioOnly => "仅音频",
+                    _ => "视频+音频"
+                });
+                return tags;
+            }
+
+            if (DualAudio is not null)
+            {
+                if (TaskType == TaskKind.DualAudioRemux) return ["仅重新封装"];
+                AddIfPresent(tags, DualAudio.Quality);
+                AddIfPresent(tags, DualAudio.Encoding);
+                tags.Add("双音轨封装");
+            }
+            return tags;
+        }
+    }
+
+    private static void AddIfPresent(List<string> tags, string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value)) tags.Add(value.Trim());
+    }
 }
 
 public sealed record PageInfo(int Number, string Cid, string Title, string Duration);
 public sealed record VideoStreamInfo(int Index, string Quality, string Resolution, int Width, int Height, string Codec, string Fps, string Bitrate, int BitrateKbps, string Size)
 {
     public long Pixels => (long)Width * Height;
+    [JsonIgnore] public long EstimatedSizeBytes => StreamSelectionPolicy.ParseSizeBytes(Size);
 }
-public sealed record AudioStreamInfo(int Index, string Codec, string Bitrate, int BitrateKbps, string Size);
+public sealed record AudioStreamInfo(int Index, string Codec, string Bitrate, int BitrateKbps, string Size)
+{
+    [JsonIgnore] public long EstimatedSizeBytes => StreamSelectionPolicy.ParseSizeBytes(Size);
+    [JsonIgnore] public string DisplayName => $"{Codec} · {Bitrate} · {Size.TrimStart('~')}";
+}
 
 public sealed class VideoInfo
 {
@@ -254,5 +343,12 @@ public sealed class ToolPaths
     public string Mkvmerge { get; set; } = string.Empty;
 }
 
-public sealed record ProcessRunRequest(string FileName, IReadOnlyList<string> Arguments, string WorkingDirectory, string? StandardInput = null);
+public sealed record ProcessRunRequest(
+    string FileName,
+    IReadOnlyList<string> Arguments,
+    string WorkingDirectory,
+    string? StandardInput = null,
+    bool UsePseudoConsole = false,
+    int PseudoConsoleColumns = 160,
+    int PseudoConsoleRows = 40);
 public sealed record ProcessResult(int ExitCode, string Output, bool Cancelled);

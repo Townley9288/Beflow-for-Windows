@@ -57,7 +57,9 @@ public sealed class SettingsStore(ApplicationPaths paths) : ISettingsStore
         try
         {
             await using var stream = File.OpenRead(paths.SettingsFile);
-            return await JsonSerializer.DeserializeAsync<AppSettings>(stream, Options, cancellationToken) ?? new AppSettings();
+            var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, Options, cancellationToken) ?? new AppSettings();
+            settings.EnsureCurrentSchema();
+            return settings;
         }
         catch (JsonException)
         {

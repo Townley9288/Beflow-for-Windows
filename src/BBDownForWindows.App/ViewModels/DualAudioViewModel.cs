@@ -173,7 +173,7 @@ public sealed class DualAudioViewModel : ObservableObject
             SecondaryIsDefault = DefaultAudio == "副版本音轨", SecondaryAudioDelayMs = checked((int)SecondaryAudioDelay),
             WorkDirectory = WorkDirectory, ExistingTaskDirectory = ExistingTaskDirectory, MkvmergePath = MkvmergePath,
             AudioBitratePriority = settings.AudioBitratePriority, MultiThread = settings.MultiThread, UposHost = settings.UposHost,
-            UseAria2c = settings.UseAria2c, Aria2cPath = settings.Aria2cPath, Aria2MaxConnection = settings.Aria2MaxConnection,
+            UseAria2c = settings.UseAria2c, Aria2AutoTune = settings.Aria2AutoTune, Aria2cPath = settings.Aria2cPath, Aria2MaxConnection = settings.Aria2MaxConnection,
             Aria2Split = settings.Aria2Split, Aria2MaxConcurrentDownloads = settings.Aria2MaxConcurrentDownloads,
             Aria2MinSplitSize = settings.Aria2MinSplitSize, SaveTaskLogs = settings.SaveTaskLogs
         };

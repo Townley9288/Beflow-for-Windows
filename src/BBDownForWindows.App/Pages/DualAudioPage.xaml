@@ -11,7 +11,7 @@
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
                 <VisualState x:Name="Wide">
-                    <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="1000" /></VisualState.StateTriggers>
+                    <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="1250" /></VisualState.StateTriggers>
                 </VisualState>
                 <VisualState x:Name="Narrow">
                     <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="0" /></VisualState.StateTriggers>

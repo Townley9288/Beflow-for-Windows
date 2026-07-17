@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace BBDownForWindows.Core;
 
-public sealed class BBDownService(ApplicationPaths paths, IProcessRunner processRunner, IToolLocator toolLocator, ISettingsStore settingsStore) : IBBDownService
+public sealed class BBDownService(ApplicationPaths paths, IProcessRunner processRunner, IToolLocator toolLocator, ISettingsStore settingsStore, IBilibiliMetadataService? metadataService = null) : IBBDownService
 {
     private readonly BBDownRuntimeManager _runtimeManager = new(paths);
 
@@ -14,6 +14,169 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request), context, cancellationToken);
         if (result.ExitCode != 0) throw new InvalidOperationException($"BBDown 信息解析失败，退出码 {result.ExitCode}");
         return BBDownParser.ParseInfo(result.Output);
+    }
+
+    public async Task<DownloadCatalog> ParseDownloadAsync(DownloadParseRequest request, IProgress<DownloadParseProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Url)) throw new ArgumentException("视频 URL 不能为空");
+        var metadataTask = metadataService?.GetAsync(request.Url, cancellationToken) ?? Task.FromResult<BilibiliVideoMetadata?>(null);
+        var tools = await ResolveToolsAsync(cancellationToken);
+        var infoRequest = new DownloadRequest
+        {
+            Url = request.Url.Trim(),
+            Season = request.Mode == DownloadParseMode.All && string.IsNullOrWhiteSpace(request.Pages),
+            Pages = request.Pages,
+            ApiMode = request.ApiMode
+        };
+        var expectedTotal = string.IsNullOrWhiteSpace(request.Pages) ? 0 : BBDownParser.ExpandPageExpression(request.Pages).Distinct().Count();
+        var parser = new StreamingDownloadParser(request.Mode, progress, expectedTotal);
+        var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(infoRequest), context, cancellationToken, observer: parser.Consume);
+        parser.Complete();
+        if ((result.Cancelled || cancellationToken.IsCancellationRequested) && parser.Episodes.Count == 0) throw new OperationCanceledException(cancellationToken);
+        if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"BBDown 信息解析失败，退出码 {result.ExitCode}");
+        if (parser.Episodes.Count == 0) throw new InvalidOperationException("没有解析到可下载的分集");
+        var metadata = await metadataTask;
+        var title = !string.IsNullOrWhiteSpace(parser.Title) ? parser.Title : metadata?.Title ?? string.Empty;
+        return new DownloadCatalog
+        {
+            SourceUrl = request.Url.Trim(),
+            Title = title,
+            Metadata = metadata,
+            ParsedAt = DateTimeOffset.Now,
+            AllPages = parser.Pages.ToList(),
+            Episodes = parser.Episodes.OrderBy(item => item.Page.Number).ToList()
+        };
+    }
+
+    public async Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken)
+    {
+        if (request.Episodes.Count == 0) throw new InvalidOperationException("没有选择要下载的分集");
+        var tools = await ResolveToolsAsync(cancellationToken);
+        var title = string.IsNullOrWhiteSpace(request.Title) ? request.Options.TitleHint : request.Title;
+        if (string.IsNullOrWhiteSpace(title)) title = await GetTitleAsync(request.Options.Url, cancellationToken);
+        if (string.IsNullOrWhiteSpace(title)) title = "Beflow 下载";
+        var baseDirectory = string.IsNullOrWhiteSpace(request.Options.WorkDirectory)
+            ? (await settingsStore.LoadAsync(cancellationToken)).WorkDirectory
+            : request.Options.WorkDirectory;
+        var outputDirectory = ResolveTitleDirectory(baseDirectory, title);
+        Directory.CreateDirectory(outputDirectory);
+        context.AppendLog($"输出文件夹: {outputDirectory}\n");
+
+        var episodeResults = request.Episodes.Select(item => new DownloadEpisodeResult
+        {
+            PageNumber = item.PageNumber,
+            PageTitle = item.PageTitle,
+            State = DownloadEpisodeResultState.Pending,
+            Video = item.Video,
+            Audio = item.Audio,
+            FallbackReason = item.FallbackReason
+        }).ToList();
+        var allFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var completed = 0;
+        var cancelled = false;
+
+        for (var index = 0; index < request.Episodes.Count; index++)
+        {
+            var desired = request.Episodes[index];
+            var episodeResult = episodeResults[index];
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                episodeResult.State = DownloadEpisodeResultState.Validating;
+                ReportProgress(progress, DownloadProgressPhase.Validating, completed, request.Episodes.Count, desired, 0, null, string.Empty, string.Empty, "正在确认所选规格");
+                var current = await ParseExactPageAsync(request.Options.Url, desired.PageNumber, request.Options.ApiMode, context, cancellationToken);
+                var decision = StreamSelectionPolicy.Resolve(current, desired, request.Options);
+                episodeResult.Video = decision.Video is null ? null : new VideoStreamSelection(decision.Video.Quality, decision.Video.Resolution, decision.Video.Codec, decision.Video.BitrateKbps, desired.Video?.IsManual == true);
+                episodeResult.Audio = decision.Audio is null ? null : new AudioStreamSelection(decision.Audio.Codec, decision.Audio.BitrateKbps, desired.Audio?.IsManual == true);
+                episodeResult.FallbackReason = decision.FallbackReason;
+
+                var part = Clone(request.Options);
+                part.Pages = desired.PageNumber.ToString();
+                part.Season = false;
+                part.WorkDirectory = outputDirectory;
+                part.OrganizeInTitleDirectory = false;
+                part.TitleHint = title;
+                if (string.IsNullOrWhiteSpace(part.MultiFilePattern)) part.MultiFilePattern = "[P<pageNumberWithZero>]<pageTitle>";
+                if (part.UseAria2c)
+                {
+                    var largestStream = Math.Max(decision.Video?.EstimatedSizeBytes ?? 0, decision.Audio?.EstimatedSizeBytes ?? 0);
+                    var tuning = Aria2TuningPolicy.Apply(part, largestStream);
+                    if (tuning.Applied) context.AppendLog(tuning.Description + "\n");
+                }
+                var arguments = BBDownCommandBuilder.BuildExactDownloadArguments(part, tools);
+                var input = BuildExactInput(decision.Video, decision.Audio, part.DownloadMode);
+                var before = SnapshotDirectory(outputDirectory);
+                var aria = new Aria2ProgressParser();
+                var internalProgress = new BBDownInternalProgressParser(
+                    decision.Video?.EstimatedSizeBytes ?? 0,
+                    decision.Audio?.EstimatedSizeBytes ?? 0,
+                    part.DownloadMode);
+                var observerGate = new object();
+                episodeResult.State = DownloadEpisodeResultState.Downloading;
+                var downloadMessage = part.UseAria2c ? "正在使用 aria2c 下载" : "正在使用 BBDown 内置下载器下载";
+                ReportProgress(progress, DownloadProgressPhase.Downloading, completed, request.Episodes.Count, desired, 0, 0, string.Empty, string.Empty, downloadMessage);
+                var process = await RunAsync(tools.BBDown, arguments, context, cancellationToken, input, line =>
+                {
+                    lock (observerGate)
+                    {
+                        var hasTransfer = part.UseAria2c
+                            ? aria.TryConsume(line, out var transfer)
+                            : internalProgress.TryConsume(line, out transfer);
+                        if (hasTransfer)
+                        {
+                            episodeResult.State = DownloadEpisodeResultState.Downloading;
+                            ReportProgress(progress, DownloadProgressPhase.Downloading, completed, request.Episodes.Count, desired,
+                                transfer.Percent, transfer.Percent, transfer.Speed, transfer.Eta, downloadMessage);
+                        }
+                        else if (line.Contains("合并音视频", StringComparison.Ordinal) || line.Contains("混流", StringComparison.Ordinal))
+                        {
+                            episodeResult.State = DownloadEpisodeResultState.Muxing;
+                            ReportProgress(progress, DownloadProgressPhase.Muxing, completed, request.Episodes.Count, desired, 100, null, string.Empty, string.Empty, "正在合并音视频");
+                        }
+                    }
+                }, usePseudoConsole: !part.UseAria2c,
+                    shouldLog: line => part.UseAria2c || !BBDownInternalProgressParser.IsProgressOutput(line));
+                if (process.Cancelled || cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
+                if (process.ExitCode != 0) throw new InvalidOperationException($"BBDown 下载失败，退出码 {process.ExitCode}");
+                episodeResult.OutputFiles = FindChangedFiles(outputDirectory, before).ToList();
+                foreach (var file in episodeResult.OutputFiles) allFiles.Add(file);
+                episodeResult.State = DownloadEpisodeResultState.Completed;
+                completed++;
+                ReportProgress(progress, DownloadProgressPhase.Completed, completed, request.Episodes.Count, desired, 100, 100, string.Empty, string.Empty, $"P{desired.PageNumber} 下载完成");
+            }
+            catch (OperationCanceledException)
+            {
+                episodeResult.State = DownloadEpisodeResultState.Cancelled;
+                episodeResult.Error = "任务已取消";
+                cancelled = true;
+                for (var remaining = index + 1; remaining < episodeResults.Count; remaining++)
+                {
+                    episodeResults[remaining].State = DownloadEpisodeResultState.Cancelled;
+                    episodeResults[remaining].Error = "任务取消，尚未开始";
+                }
+                break;
+            }
+            catch (Exception exception)
+            {
+                episodeResult.State = DownloadEpisodeResultState.Failed;
+                episodeResult.Error = exception.Message;
+                completed++;
+                context.AppendLog($"\nP{desired.PageNumber} 下载失败：{exception.Message}\n");
+                ReportProgress(progress, DownloadProgressPhase.Failed, completed, request.Episodes.Count, desired, 100, null, string.Empty, string.Empty, $"P{desired.PageNumber} 下载失败，继续下一集");
+            }
+        }
+
+        var finalPhase = cancelled ? DownloadProgressPhase.Cancelled : DownloadProgressPhase.Completed;
+        progress?.Report(new DownloadProgressSnapshot(finalPhase, completed, request.Episodes.Count, 0, string.Empty,
+            request.Episodes.Count == 0 ? 0 : completed * 100d / request.Episodes.Count, null, string.Empty, string.Empty,
+            cancelled ? "下载任务已取消" : "批量下载完成"));
+        return new DownloadBatchResult
+        {
+            Title = title,
+            OutputDirectory = outputDirectory,
+            Episodes = episodeResults,
+            OutputFiles = allFiles.Order(StringComparer.OrdinalIgnoreCase).ToList()
+        };
     }
 
     public async Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
@@ -169,12 +332,43 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         return tools;
     }
 
-    private Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, TaskExecutionContext context, CancellationToken cancellationToken, string? input = null)
+    private async Task<DownloadEpisodeInfo> ParseExactPageAsync(string url, int page, string apiMode, TaskExecutionContext context, CancellationToken cancellationToken)
+    {
+        var tools = await ResolveToolsAsync(cancellationToken);
+        var request = new DownloadRequest { Url = url, Pages = page.ToString(), ApiMode = apiMode };
+        var parser = new StreamingDownloadParser(DownloadParseMode.Current, null);
+        var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request), context, cancellationToken, observer: parser.Consume);
+        parser.Complete();
+        if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"P{page} 规格确认失败，退出码 {result.ExitCode}");
+        return parser.Episodes.FirstOrDefault(item => item.Page.Number == page)
+               ?? throw new InvalidOperationException($"P{page} 没有解析到可用规格");
+    }
+
+    private static string BuildExactInput(VideoStreamInfo? video, AudioStreamInfo? audio, DownloadMode mode) => mode switch
+    {
+        DownloadMode.VideoOnly when video is not null => $"{video.Index}\n",
+        DownloadMode.AudioOnly when audio is not null => $"{audio.Index}\n",
+        DownloadMode.VideoAndAudio when video is not null && audio is not null => $"{video.Index}\n{audio.Index}\n",
+        _ => throw new InvalidOperationException("所选下载类型缺少对应的视频或音频流")
+    };
+
+    private static void ReportProgress(IProgress<DownloadProgressSnapshot>? progress, DownloadProgressPhase phase, int completed, int total,
+        EpisodeStreamSelection episode, double currentContribution, double? currentPercent, string speed, string eta, string message)
+    {
+        var overall = total <= 0 ? 0 : Math.Clamp((completed + currentContribution / 100d) * 100d / total, 0, 100);
+        progress?.Report(new DownloadProgressSnapshot(phase, completed, total, episode.PageNumber, episode.PageTitle, overall, currentPercent, speed, eta, message));
+    }
+
+    private Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, TaskExecutionContext context,
+        CancellationToken cancellationToken, string? input = null, Action<string>? observer = null,
+        bool usePseudoConsole = false, Func<string, bool>? shouldLog = null)
     {
         context.AppendLog($"\n$ {Path.GetFileName(executable)} {string.Join(' ', arguments.Select(Quote))}\n");
-        return processRunner.RunAsync(new ProcessRunRequest(executable, arguments, paths.RuntimeDirectory, input), line =>
+        return processRunner.RunAsync(new ProcessRunRequest(executable, arguments, paths.RuntimeDirectory, input, usePseudoConsole), line =>
         {
-            if (!Regex.IsMatch(line.Trim(), "^https?://.*bilivideo\\.com", RegexOptions.IgnoreCase)) context.AppendLog(line);
+            observer?.Invoke(line);
+            if ((shouldLog?.Invoke(line) ?? true) &&
+                !Regex.IsMatch(line.Trim(), "^https?://.*bilivideo\\.com", RegexOptions.IgnoreCase)) context.AppendLog(line);
         }, cancellationToken);
     }
 
@@ -198,6 +392,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         DownloadMode = source.DownloadMode, AudioCodec = source.AudioCodec, AudioBitratePriority = source.AudioBitratePriority,
         Danmaku = source.Danmaku, Subtitle = source.Subtitle, Cover = source.Cover, WorkDirectory = source.WorkDirectory,
         MultiThread = source.MultiThread, UposHost = source.UposHost, UseAria2c = source.UseAria2c, Aria2cPath = source.Aria2cPath,
+        Aria2AutoTune = source.Aria2AutoTune,
         Aria2MaxConnection = source.Aria2MaxConnection, Aria2Split = source.Aria2Split,
         Aria2MaxConcurrentDownloads = source.Aria2MaxConcurrentDownloads, Aria2MinSplitSize = source.Aria2MinSplitSize,
         SaveTaskLogs = source.SaveTaskLogs, ApiMode = source.ApiMode, Language = source.Language, MultiFilePattern = source.MultiFilePattern,

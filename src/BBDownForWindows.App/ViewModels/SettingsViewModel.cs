@@ -24,8 +24,12 @@ public sealed class SettingsViewModel : ObservableObject
     public SettingsViewModel(AppServices services)
     {
         _services = services;
-        SaveCommand = new AsyncRelayCommand(SaveAsync);
-        ResetCommand = new RelayCommand(Reset);
+        SaveDownloadCommand = new AsyncRelayCommand(SaveDownloadSettingsAsync);
+        ResetDownloadCommand = new RelayCommand(ResetDownloadSettings);
+        SaveRenameCommand = new AsyncRelayCommand(SaveRenameSettingsAsync);
+        SaveAriaCommand = new AsyncRelayCommand(SaveAriaSettingsAsync);
+        SaveMkvCommand = new AsyncRelayCommand(SaveMkvSettingsAsync);
+        SaveUpdateCommand = new AsyncRelayCommand(SaveUpdateSettingsAsync);
         DetectToolsCommand = new AsyncRelayCommand(DetectToolsAsync);
         CleanupCommand = new AsyncRelayCommand(CleanupAsync);
         RefreshAccountsCommand = new AsyncRelayCommand(RefreshAccountsAsync);
@@ -37,7 +41,12 @@ public sealed class SettingsViewModel : ObservableObject
         TvAccount = new AccountChannelViewModel(AccountChannel.Tv);
     }
 
-    public IReadOnlyList<string> QualityOptions { get; } = ["杜比视界", "HDR 真彩", "4K", "1080P 高码率", "1080P", "720P", "480P", "360P"];
+    public IReadOnlyList<OptionItem> QualityOptions { get; } =
+    [
+        new("杜比视界", "杜比视界"), new("HDR 真彩", "HDR 真彩"),
+        new("4K 超清", "4K 超清"), new("1080P 高码率", "1080P 高码率"), new("1080P 高清", "1080P 高清"),
+        new("720P 高清", "720P 高清"), new("480P 清晰", "480P 清晰"), new("360P 流畅", "360P 流畅")
+    ];
     public IReadOnlyList<string> EncodingOptions { get; } = ["HEVC", "AVC", "AV1"];
     public IReadOnlyList<string> DownloadModeOptions { get; } = ["视频+音频", "仅视频", "仅音频"];
     public IReadOnlyList<OptionItem> AudioCodecOptions { get; } =
@@ -88,8 +97,12 @@ public sealed class SettingsViewModel : ObservableObject
     public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
     public Visibility MessageVisibility => HasMessage ? Visibility.Visible : Visibility.Collapsed;
     public InfoBarSeverity MessageSeverity { get => _messageSeverity; private set => SetProperty(ref _messageSeverity, value); }
-    public IAsyncRelayCommand SaveCommand { get; }
-    public IRelayCommand ResetCommand { get; }
+    public IAsyncRelayCommand SaveDownloadCommand { get; }
+    public IRelayCommand ResetDownloadCommand { get; }
+    public IAsyncRelayCommand SaveRenameCommand { get; }
+    public IAsyncRelayCommand SaveAriaCommand { get; }
+    public IAsyncRelayCommand SaveMkvCommand { get; }
+    public IAsyncRelayCommand SaveUpdateCommand { get; }
     public IAsyncRelayCommand DetectToolsCommand { get; }
     public IAsyncRelayCommand CleanupCommand { get; }
     public IAsyncRelayCommand RefreshAccountsCommand { get; }
@@ -149,26 +162,85 @@ public sealed class SettingsViewModel : ObservableObject
         LastAccountCheckText = $"最近检测：{status.CheckedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
     }
 
-    public async Task SaveAsync()
+    public async Task SaveDownloadSettingsAsync()
     {
-        var snapshot = Settings.Clone();
-        snapshot.SchemaVersion = 2;
-        Settings = await _services.Settings.UpdateAsync(current =>
+        var edited = Settings.Clone();
+        await UpdateStoredSettingsAsync(settings => CopyDownloadSettings(edited, settings));
+        SetMessage("默认下载设置已保存", InfoBarSeverity.Success);
+    }
+
+    private void ResetDownloadSettings()
+    {
+        var defaults = new AppSettings();
+        UpdateSettings(settings => CopyDownloadSettings(defaults, settings));
+        SetMessage("默认下载设置已恢复（尚未保存）", InfoBarSeverity.Warning);
+    }
+
+    private async Task SaveRenameSettingsAsync()
+    {
+        await _services.RenameSettings.UpdateAsync(_ => RenameSettings.Clone());
+        SetMessage("影视重命名设置已保存", InfoBarSeverity.Success);
+    }
+
+    private async Task SaveAriaSettingsAsync()
+    {
+        var edited = Settings.Clone();
+        await UpdateStoredSettingsAsync(settings => CopyAriaSettings(edited, settings));
+        SetMessage("aria2c 设置已保存", InfoBarSeverity.Success);
+    }
+
+    private async Task SaveMkvSettingsAsync()
+    {
+        var path = Settings.MkvmergePath;
+        await UpdateStoredSettingsAsync(settings => settings.MkvmergePath = path);
+        SetMessage("MKVToolNix 设置已保存", InfoBarSeverity.Success);
+    }
+
+    private async Task SaveUpdateSettingsAsync()
+    {
+        var checkOnStartup = Settings.CheckUpdatesOnStartup;
+        await UpdateStoredSettingsAsync(settings => settings.CheckUpdatesOnStartup = checkOnStartup);
+        SetMessage("软件更新设置已保存", InfoBarSeverity.Success);
+    }
+
+    private async Task UpdateStoredSettingsAsync(Action<AppSettings> update)
+    {
+        await _services.Settings.UpdateAsync(current =>
         {
+            var snapshot = current.Clone();
+            snapshot.SchemaVersion = 3;
+            update(snapshot);
             snapshot.ThemeMode = current.ThemeMode;
             return snapshot;
         });
-        Settings.ThemeMode = _services.Theme.CurrentMode;
-        RenameSettings = await _services.RenameSettings.UpdateAsync(_ => RenameSettings.Clone());
-        SetMessage("设置已保存", InfoBarSeverity.Success);
     }
 
-    private void Reset()
+    private static void CopyDownloadSettings(AppSettings source, AppSettings target)
     {
-        Settings = new AppSettings { ThemeMode = _services.Theme.CurrentMode };
-        RenameSettings = new RenameSettings();
-        RenameSettings.EnsureDefaults();
-        SetMessage("已恢复默认值（尚未保存）", InfoBarSeverity.Warning);
+        target.Quality = source.VideoQualityRule;
+        target.VideoQualityRule = source.VideoQualityRule;
+        target.IncludeHdrDolbyInAutoSelection = false;
+        target.Encoding = source.Encoding;
+        target.DownloadMode = source.DownloadMode;
+        target.AudioCodec = source.AudioCodec;
+        target.AudioBitratePriority = source.AudioBitratePriority;
+        target.WorkDirectory = source.WorkDirectory;
+        target.Danmaku = source.Danmaku;
+        target.Subtitle = source.Subtitle;
+        target.Cover = source.Cover;
+        target.MultiThread = source.MultiThread;
+        target.SaveTaskLogs = source.SaveTaskLogs;
+    }
+
+    private static void CopyAriaSettings(AppSettings source, AppSettings target)
+    {
+        target.UseAria2c = source.UseAria2c;
+        target.Aria2AutoTune = source.Aria2AutoTune;
+        target.Aria2cPath = source.Aria2cPath;
+        target.Aria2MaxConnection = source.Aria2MaxConnection;
+        target.Aria2Split = source.Aria2Split;
+        target.Aria2MaxConcurrentDownloads = source.Aria2MaxConcurrentDownloads;
+        target.Aria2MinSplitSize = source.Aria2MinSplitSize;
     }
 
     private async Task DetectToolsAsync()

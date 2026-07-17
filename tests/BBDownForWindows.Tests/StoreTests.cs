@@ -16,16 +16,39 @@ public sealed class StoreTests
             await File.WriteAllTextAsync(paths.SettingsFile, "{\"quality\":\"1080P\",\"audioOnly\":\"仅音频\"}");
             var settings = await new SettingsStore(paths).LoadAsync();
             Assert.Equal("1080P", settings.Quality);
+            Assert.Equal("1080P 高清", settings.VideoQualityRule);
+            Assert.Equal(3, settings.SchemaVersion);
             Assert.Equal(DownloadMode.AudioOnly, settings.DownloadMode);
             Assert.Equal(AudioBitratePriority.Highest, settings.AudioBitratePriority);
             Assert.Equal(AppThemeMode.System, settings.ThemeMode);
             Assert.True(settings.SaveTaskLogs);
             Assert.True(settings.CheckUpdatesOnStartup);
+            Assert.True(settings.Aria2AutoTune);
         }
         finally
         {
             root.Delete(true);
         }
+    }
+
+    [Fact]
+    public async Task InvalidStreamSelectionSettingsFallBackWithoutResettingOtherValues()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, Path.Combine(root.FullName, "local"));
+            paths.EnsureCreated();
+            await File.WriteAllTextAsync(paths.SettingsFile, "{\"schemaVersion\":3,\"videoQualityRule\":\"unknown\",\"encoding\":\"vp9\",\"audioCodec\":\"opus\",\"checkUpdatesOnStartup\":false}");
+
+            var settings = await new SettingsStore(paths).LoadAsync();
+
+            Assert.Equal("4K 超清", settings.VideoQualityRule);
+            Assert.Equal("AVC", settings.Encoding);
+            Assert.Equal("auto", settings.AudioCodec);
+            Assert.False(settings.CheckUpdatesOnStartup);
+        }
+        finally { root.Delete(true); }
     }
 
     [Theory]
@@ -319,5 +342,48 @@ public sealed class StoreTests
             Assert.DoesNotContain("timestampText", serialized, StringComparison.OrdinalIgnoreCase);
         }
         finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public void HistoryRecordBuildsSpecificationTagsWithoutPersistingThem()
+    {
+        var download = new HistoryRecord
+        {
+            TaskType = TaskKind.Download,
+            Download = new DownloadRequest
+            {
+                Url = "https://example.test/video",
+                Quality = "4K",
+                Encoding = "AVC",
+                DownloadMode = DownloadMode.VideoAndAudio
+            }
+        };
+        var audioOnly = new HistoryRecord
+        {
+            TaskType = TaskKind.Download,
+            Download = new DownloadRequest
+            {
+                Url = "https://example.test/audio",
+                AudioCodec = "FLAC",
+                DownloadMode = DownloadMode.AudioOnly
+            }
+        };
+        var dualAudio = new HistoryRecord
+        {
+            TaskType = TaskKind.DualAudioMux,
+            DualAudio = new DualAudioRequest { Quality = "1080P", Encoding = "HEVC" }
+        };
+        var remux = new HistoryRecord
+        {
+            TaskType = TaskKind.DualAudioRemux,
+            DualAudio = new DualAudioRequest()
+        };
+
+        Assert.Equal(["4K", "AVC", "视频+音频"], download.SpecificationTags);
+        Assert.Equal(["FLAC", "仅音频"], audioOnly.SpecificationTags);
+        Assert.Equal(["1080P", "HEVC", "双音轨封装"], dualAudio.SpecificationTags);
+        Assert.Equal(["仅重新封装"], remux.SpecificationTags);
+        Assert.Empty(new HistoryRecord().SpecificationTags);
+        Assert.DoesNotContain("specificationTags", System.Text.Json.JsonSerializer.Serialize(download), StringComparison.OrdinalIgnoreCase);
     }
 }

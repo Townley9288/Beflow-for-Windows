@@ -14,6 +14,16 @@ public sealed class ProcessRunner : IProcessRunner
             throw new FileNotFoundException("找不到外部工具", request.FileName);
 
         Directory.CreateDirectory(request.WorkingDirectory);
+        if (request.UsePseudoConsole)
+        {
+            if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("伪终端进程仅支持 Windows");
+            return await RunPseudoConsoleAsync(request, onOutput, cancellationToken);
+        }
+        return await RunRedirectedAsync(request, onOutput, cancellationToken);
+    }
+
+    private async Task<ProcessResult> RunRedirectedAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
+    {
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -55,6 +65,40 @@ public sealed class ProcessRunner : IProcessRunner
             var stdout = ReadLinesAsync(process.StandardOutput.BaseStream, Consume);
             var stderr = ReadLinesAsync(process.StandardError.BaseStream, Consume);
             await Task.WhenAll(stdout, stderr, process.WaitForExitAsync());
+            return new ProcessResult(process.ExitCode, output.ToString(), cancellationToken.IsCancellationRequested);
+        }
+        finally
+        {
+            _ownedProcesses.TryRemove(process.Id, out _);
+        }
+    }
+
+    private async Task<ProcessResult> RunPseudoConsoleAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var session = PseudoConsoleSession.Start(request);
+        var process = session.Process;
+        _ownedProcesses[process.Id] = process;
+        using var registration = cancellationToken.Register(() => TryKill(process));
+        var output = new StringBuilder();
+        var outputLock = new object();
+        void Consume(string text)
+        {
+            lock (outputLock) output.Append(text);
+            onOutput?.Invoke(text);
+        }
+
+        try
+        {
+            var readTask = Task.Factory.StartNew(
+                () => session.ReadOutput(Consume),
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
+            if (request.StandardInput is not null) await Task.Run(() => session.WriteInput(request.StandardInput));
+            await process.WaitForExitAsync();
+            session.ClosePseudoConsole();
+            await readTask;
             return new ProcessResult(process.ExitCode, output.ToString(), cancellationToken.IsCancellationRequested);
         }
         finally

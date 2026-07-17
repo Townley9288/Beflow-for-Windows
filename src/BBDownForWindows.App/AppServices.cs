@@ -19,7 +19,8 @@ public sealed class AppServices
         ToolLocator = new ToolLocator(paths);
         TaskManager = new TaskManager(paths, ProcessRunner);
         TaskConsole = new ViewModels.TaskConsoleViewModel(TaskManager);
-        BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings);
+        BilibiliMetadata = new BilibiliMetadataService(HttpClient);
+        BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata);
         DualAudio = new DualAudioService(paths, BBDown, ProcessRunner, Settings, ToolLocator);
         Tmdb = new TmdbService(RenameSettings);
         Rename = new RenameService(ProcessRunner, ToolLocator, Settings, RenameHistory);
@@ -41,6 +42,7 @@ public sealed class AppServices
     public IToolLocator ToolLocator { get; }
     public ITaskManager TaskManager { get; }
     public ViewModels.TaskConsoleViewModel TaskConsole { get; }
+    public IBilibiliMetadataService BilibiliMetadata { get; }
     public IBBDownService BBDown { get; }
     public IDualAudioService DualAudio { get; }
     public ITmdbService Tmdb { get; }

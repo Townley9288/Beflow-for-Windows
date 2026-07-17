@@ -64,6 +64,11 @@ public interface IAccountStatusService
     Task<AccountChannelStatus> GetStatusAsync(AccountChannel channel, CancellationToken cancellationToken = default);
 }
 
+public interface IBilibiliMetadataService
+{
+    Task<BilibiliVideoMetadata?> GetAsync(string url, CancellationToken cancellationToken = default);
+}
+
 public interface ITmdbService
 {
     Task ValidateApiKeyAsync(CancellationToken cancellationToken = default);
@@ -94,6 +99,8 @@ public interface ITaskManager
 public interface IBBDownService
 {
     Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<DownloadCatalog> ParseDownloadAsync(DownloadParseRequest request, IProgress<DownloadParseProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken);
     Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
     Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken);
     Task<string> GetTitleAsync(string url, CancellationToken cancellationToken);

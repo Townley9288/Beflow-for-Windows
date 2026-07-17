@@ -116,7 +116,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         Url = url, Pages = pages, Quality = request.Quality, Encoding = request.Encoding, DownloadMode = mode,
         AudioCodec = audioCodec, AudioBitratePriority = request.AudioBitratePriority, WorkDirectory = directory, Language = language,
         MultiFilePattern = "[P<pageNumberWithZero>]<pageTitle>", MultiThread = request.MultiThread, UposHost = request.UposHost,
-        UseAria2c = request.UseAria2c, Aria2cPath = request.Aria2cPath, Aria2MaxConnection = request.Aria2MaxConnection,
+        UseAria2c = request.UseAria2c, Aria2AutoTune = request.Aria2AutoTune, Aria2cPath = request.Aria2cPath, Aria2MaxConnection = request.Aria2MaxConnection,
         Aria2Split = request.Aria2Split, Aria2MaxConcurrentDownloads = request.Aria2MaxConcurrentDownloads,
         Aria2MinSplitSize = request.Aria2MinSplitSize, Subtitle = false, Cover = false, Danmaku = false
     };
