@@ -35,6 +35,12 @@
                     <TextBlock Text="下载" Style="{StaticResource TitleTextBlockStyle}" />
                     <TextBlock Text="下载普通视频、多分P及整季内容" Opacity="0.65" />
                 </StackPanel>
+                <InfoBar IsOpen="{Binding HasDownloadResult}" IsClosable="False" Severity="Success" Title="下载完成" Message="{Binding DownloadResultMessage}">
+                    <InfoBar.ActionButton>
+                        <Button Content="去重命名" Click="GoRename_Click" IsEnabled="{Binding CanRenameDownload}" Style="{StaticResource AccentButtonStyle}" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+                <HyperlinkButton Content="打开下载文件夹" Click="OpenDownloadFolder_Click" Visibility="{Binding DownloadResultVisibility}" HorizontalAlignment="Left" Margin="0,-8,0,0"/>
                 <StackPanel Spacing="8">
                 <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <StackPanel Spacing="8">

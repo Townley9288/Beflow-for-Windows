@@ -21,11 +21,12 @@ public sealed partial class SettingsPage : Page
     public SettingsViewModel ViewModel { get; }
     protected override async void OnNavigatedTo(NavigationEventArgs e) { base.OnNavigatedTo(e); ViewModel.Activate(); _qrTimer.Start(); await ViewModel.InitializeAsync(); }
     protected override void OnNavigatedFrom(NavigationEventArgs e) { _qrTimer.Stop(); ViewModel.Deactivate(); base.OnNavigatedFrom(e); }
-    private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow); if (value is not null) ViewModel.Settings.WorkDirectory = value; }
-    private async void BrowseAria_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (value is not null) ViewModel.Settings.Aria2cPath = value; }
-    private async void BrowseMkv_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (value is not null) ViewModel.Settings.MkvmergePath = value; }
+    private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetWorkDirectory(value); }
+    private async void BrowseAria_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetAria2cPath(value); }
+    private async void BrowseMkv_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetMkvmergePath(value); }
     private async void Apply_Click(object sender, RoutedEventArgs e) { await ViewModel.SaveAsync(); ((App)Application.Current).MainWindow.Navigate("download"); }
-    private void SettingsScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e) { SettingsContent.Width = Math.Min(1600, Math.Max(0, e.NewSize.Width)); }
+    private void SettingsScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e) { SettingsContent.Width = Math.Max(0, e.NewSize.Width); }
+    private void SettingsNotification_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
 
     private void QrTimer_Tick(object? sender, object e)
     {

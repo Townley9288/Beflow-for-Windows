@@ -77,15 +77,55 @@ public sealed class BBDownRuntimeTests
             var runner = new RecordingProcessRunner();
             var service = new BBDownService(paths, runner, new FixedToolLocator(source), new FixedSettingsStore());
             var manager = new TaskManager(paths, runner);
-            var title = string.Empty;
+            DownloadResult? download = null;
 
             var snapshot = await manager.RunExclusiveAsync(TaskKind.Download, false, "download", async (context, token) =>
             {
-                title = await service.DownloadAsync(new DownloadRequest { Url = "https://example.test/video" }, context, token);
+                download = await service.DownloadAsync(new DownloadRequest { Url = "https://example.test/video" }, context, token);
             });
 
             Assert.Equal(TaskState.Completed, snapshot.State);
-            Assert.Equal("测试标题", title);
+            Assert.NotNull(download);
+            Assert.Equal("测试标题", download!.Title);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task OrganizedDownloadUsesSanitizedTitleFolderAndReportsCreatedVideo()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "app"));
+            var output = Directory.CreateDirectory(Path.Combine(root.FullName, "下载"));
+            var paths = new ApplicationPaths(app.FullName, Path.Combine(root.FullName, "local"));
+            paths.EnsureCreated();
+            var source = Path.Combine(app.FullName, "BBDown.exe");
+            File.WriteAllText(source, "binary");
+            var runner = new DownloadWritingProcessRunner();
+            var service = new BBDownService(paths, runner, new FixedToolLocator(source), new FixedSettingsStore());
+            var manager = new TaskManager(paths, runner);
+            DownloadResult? download = null;
+
+            var snapshot = await manager.RunExclusiveAsync(TaskKind.Download, false, "download", async (context, token) =>
+            {
+                download = await service.DownloadAsync(new DownloadRequest
+                {
+                    Url = "https://example.test/video",
+                    WorkDirectory = output.FullName,
+                    OrganizeInTitleDirectory = true,
+                    TitleHint = "测试:标题"
+                }, context, token);
+            });
+
+            Assert.Equal(TaskState.Completed, snapshot.State);
+            Assert.NotNull(download);
+            Assert.Equal(Path.Combine(output.FullName, "测试_标题"), download!.OutputDirectory);
+            Assert.True(download.HasVideo);
+            Assert.Single(download.OutputFiles);
+            Assert.Contains("-M", runner.LastRequest!.Arguments);
+            Assert.Contains("[P<pageNumberWithZero>]<pageTitle>", runner.LastRequest.Arguments);
         }
         finally { root.Delete(true); }
     }
@@ -102,6 +142,26 @@ public sealed class BBDownRuntimeTests
             return Task.FromResult(new ProcessResult(0, output, false));
         }
 
+        public Task TerminateAllAsync() => Task.CompletedTask;
+    }
+
+    private sealed class DownloadWritingProcessRunner : IProcessRunner
+    {
+        public ProcessRunRequest? LastRequest { get; private set; }
+        public Task<ProcessResult> RunAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            var index = request.Arguments.ToList().FindIndex(argument => argument == "--work-dir");
+            if (index >= 0)
+            {
+                var directory = request.Arguments[index + 1];
+                Directory.CreateDirectory(directory);
+                File.WriteAllText(Path.Combine(directory, "[P01]第一集.mp4"), "video");
+            }
+            const string output = "[2026-07-15 00:00:00.000] - 视频标题: 测试标题";
+            onOutput?.Invoke(output);
+            return Task.FromResult(new ProcessResult(0, output, false));
+        }
         public Task TerminateAllAsync() => Task.CompletedTask;
     }
 

@@ -10,6 +10,8 @@ public sealed partial class MainWindow : Window
 {
     private bool _forceClosing;
     private bool _closingDialogOpen;
+    private bool _navigationInProgress;
+    private string _currentNavigationTag = string.Empty;
     public MainWindow()
     {
         InitializeComponent();
@@ -44,19 +46,59 @@ public sealed partial class MainWindow : Window
         if (args.InvokedItemContainer?.Tag is string tag) Navigate(tag);
     }
 
-    public void Navigate(string tag, object? parameter = null)
+    public async void Navigate(string tag, object? parameter = null)
     {
-        var page = tag switch
+        if (_navigationInProgress) return;
+        var resolvedTag = tag switch
         {
-            "dual" => typeof(Pages.DualAudioPage),
-            "history" => typeof(Pages.HistoryPage),
-            "settings" => typeof(Pages.SettingsPage),
-            "about" => typeof(Pages.AboutPage),
-            _ => typeof(Pages.DownloadPage)
+            "dual" or "rename" or "rename-templates" or "rename-history" or "history" or "settings" or "about" or "download" => tag,
+            _ => "download"
         };
-        ContentFrame.Navigate(page, parameter);
+        if (parameter is null && string.Equals(resolvedTag, _currentNavigationTag, StringComparison.Ordinal))
+        {
+            SelectNavigationItem(resolvedTag);
+            return;
+        }
+
+        _navigationInProgress = true;
+        try
+        {
+            if (ContentFrame.Content is Pages.RenameTemplatesPage templatePage && resolvedTag != "rename-templates" &&
+                !await templatePage.ConfirmDiscardChangesAsync())
+            {
+                SelectNavigationItem(_currentNavigationTag);
+                return;
+            }
+
+            var page = resolvedTag switch
+            {
+                "dual" => typeof(Pages.DualAudioPage),
+                "rename" => typeof(Pages.RenamePage),
+                "rename-templates" => typeof(Pages.RenameTemplatesPage),
+                "rename-history" => typeof(Pages.RenameHistoryPage),
+                "history" => typeof(Pages.HistoryPage),
+                "settings" => typeof(Pages.SettingsPage),
+                "about" => typeof(Pages.AboutPage),
+                _ => typeof(Pages.DownloadPage)
+            };
+            if (!ContentFrame.Navigate(page, parameter)) return;
+            _currentNavigationTag = resolvedTag;
+            SelectNavigationItem(resolvedTag);
+        }
+        finally
+        {
+            _navigationInProgress = false;
+        }
+    }
+
+    private void SelectNavigationItem(string tag)
+    {
+        // Rename history is a detail page without its own sidebar item, so it
+        // belongs under Rename. Rename templates has a dedicated item and must
+        // keep its own selection state.
+        var menuTag = tag == "rename-history" ? "rename" : tag;
         foreach (var item in RootNavigation.MenuItems.OfType<NavigationViewItem>())
-            if (Equals(item.Tag, tag)) RootNavigation.SelectedItem = item;
+            if (Equals(item.Tag, menuTag)) RootNavigation.SelectedItem = item;
     }
 
     public void RestoreHistory(Core.HistoryRecord record) => Navigate(record.TaskType is Core.TaskKind.DualAudioMux or Core.TaskKind.DualAudioRemux ? "dual" : "download", record);
@@ -128,6 +170,7 @@ public sealed partial class MainWindow : Window
             AppThemeMode.Dark => "\uE708",
             _ => "\uE771"
         };
+        ThemeIcon.FontSize = mode == AppThemeMode.System ? 16 : 18;
         ToolTipService.SetToolTip(ThemeButton, $"主题：{label}");
         AutomationProperties.SetName(ThemeButton, $"界面主题：{label}");
     }
@@ -136,24 +179,31 @@ public sealed partial class MainWindow : Window
     {
         if (_forceClosing) return;
         var manager = ((App)Application.Current).Services.TaskManager;
-        if (manager.ActiveTask?.State == Core.TaskState.Running)
+        var templatePage = ContentFrame.Content as Pages.RenameTemplatesPage;
+        var hasUnsavedTemplate = templatePage?.ViewModel.HasUnsavedChanges == true;
+        var hasRunningTask = manager.ActiveTask?.State == Core.TaskState.Running;
+        if (hasUnsavedTemplate || hasRunningTask)
         {
             args.Cancel = true;
             if (_closingDialogOpen) return;
             _closingDialogOpen = true;
             try
             {
-                var dialog = new ContentDialog
+                if (hasUnsavedTemplate && !await templatePage!.ConfirmDiscardChangesAsync()) return;
+                if (hasRunningTask)
                 {
-                    XamlRoot = WindowRoot.XamlRoot,
-                    Title = "任务仍在运行",
-                    Content = "关闭 Beflow 将取消当前下载、登录或封装任务。已下载文件和 .aria2 文件会保留。",
-                    PrimaryButtonText = "取消任务并退出",
-                    CloseButtonText = "继续运行",
-                    DefaultButton = ContentDialogButton.Close
-                };
-                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-                await manager.CancelActiveAsync();
+                    var dialog = new ContentDialog
+                    {
+                        XamlRoot = WindowRoot.XamlRoot,
+                        Title = "任务仍在运行",
+                        Content = "关闭 Beflow 将取消当前下载、登录、封装或重命名任务。已下载文件和 .aria2 文件会保留。",
+                        PrimaryButtonText = "取消任务并退出",
+                        CloseButtonText = "继续运行",
+                        DefaultButton = ContentDialogButton.Close
+                    };
+                    if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+                    await manager.CancelActiveAsync();
+                }
                 _forceClosing = true;
                 Close();
             }

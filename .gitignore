@@ -10,6 +10,8 @@ Data/
 portable.flag
 config.json
 history.json
+rename-settings.json
+rename-history.json
 BBDown.data
 BBDownTV.data
 qrcode.png

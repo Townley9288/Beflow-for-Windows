@@ -30,8 +30,9 @@ public sealed partial class AboutPage : Page
                 services.ToolLocator.GetVersionAsync(tools.BBDown),
                 services.ToolLocator.GetVersionAsync(tools.Aria2c),
                 services.ToolLocator.GetVersionAsync(tools.Ffmpeg),
+                services.ToolLocator.GetVersionAsync(tools.Ffprobe),
                 services.ToolLocator.GetVersionAsync(tools.Mkvmerge));
-            ToolVersions.Text = $"BBDown：{versions[0]}\naria2c：{versions[1]}\nFFmpeg：{versions[2]}\nmkvmerge：{versions[3]}";
+            ToolVersions.Text = $"BBDown：{versions[0]}\naria2c：{versions[1]}\nFFmpeg：{versions[2]}\nffprobe：{versions[3]}\nmkvmerge：{versions[4]}";
         }
         catch (Exception exception)
         {

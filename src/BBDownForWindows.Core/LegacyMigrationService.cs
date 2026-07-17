@@ -19,6 +19,7 @@ public sealed class LegacyMigrationService
     public IReadOnlyList<string> Migrate()
     {
         _paths.EnsureCreated();
+        if (File.Exists(_paths.MigrationMarkerFile)) return [];
         var copied = new List<string>();
         foreach (var sourceRoot in _candidates)
         {
@@ -31,6 +32,7 @@ public sealed class LegacyMigrationService
             CopyIfMissing(Path.Combine(sourceRoot, "Runtime", "BBDownTV.data"), _paths.TvCredentialFile, copied);
             CopyLogsIfMissing(Path.Combine(sourceRoot, "Logs"), copied);
         }
+        File.WriteAllText(_paths.MigrationMarkerFile, DateTimeOffset.UtcNow.ToString("O"));
         return copied;
     }
 

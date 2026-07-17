@@ -11,6 +11,12 @@
         <NavigationView.MenuItems>
             <NavigationViewItem Content="下载" Tag="download" Icon="Download" />
             <NavigationViewItem Content="多音轨封装" Tag="dual" Icon="Document" />
+            <NavigationViewItem Content="重命名" Tag="rename">
+                <NavigationViewItem.Icon><FontIcon Glyph="&#xE8AC;" /></NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Content="命名模板" Tag="rename-templates">
+                <NavigationViewItem.Icon><FontIcon Glyph="&#xE70F;" /></NavigationViewItem.Icon>
+            </NavigationViewItem>
             <NavigationViewItem Content="历史" Tag="history" Icon="Clock" />
             <NavigationViewItem Content="设置" Tag="settings" Icon="Setting" />
             <NavigationViewItem Content="关于" Tag="about">

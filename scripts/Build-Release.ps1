@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.0.4',
+    [string]$Version = '1.0.5.0',
     [string]$FfmpegArchiveUrl = $env:FFMPEG_ARCHIVE_URL,
     [switch]$RequireNativeUpdater
 )
@@ -63,6 +63,9 @@ $RequiredPublishFiles = @(
     'MainWindow.xbf',
     'Pages\DownloadPage.xbf',
     'Pages\DualAudioPage.xbf',
+    'Pages\RenamePage.xbf',
+    'Pages\RenameTemplatesPage.xbf',
+    'Pages\RenameHistoryPage.xbf',
     'Pages\HistoryPage.xbf',
     'Pages\SettingsPage.xbf',
     'Pages\AboutPage.xbf',

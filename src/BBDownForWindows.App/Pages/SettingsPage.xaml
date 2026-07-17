@@ -24,7 +24,7 @@
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
-        <ScrollViewer x:Name="SettingsScrollViewer" HorizontalScrollBarVisibility="Disabled" SizeChanged="SettingsScrollViewer_SizeChanged"><StackPanel x:Name="SettingsContent" Padding="24,16" Spacing="12" MaxWidth="1600" HorizontalAlignment="Left">
+        <ScrollViewer x:Name="SettingsScrollViewer" HorizontalScrollBarVisibility="Disabled" SizeChanged="SettingsScrollViewer_SizeChanged"><StackPanel x:Name="SettingsContent" Padding="24,16" Spacing="12" HorizontalAlignment="Left">
         <StackPanel><TextBlock Text="设置" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock Text="默认下载参数、外部工具和任务日志" Opacity="0.65"/></StackPanel>
         <StackPanel Spacing="8">
         <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
@@ -98,19 +98,32 @@
                 <ComboBox Grid.Column="3" Header="音频格式" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioCodecOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Settings.AudioCodec, Mode=TwoWay}"/>
                 <ComboBox Grid.Column="4" Header="音频码率" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioBitrateOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Settings.LegacyAudioBitratePriority, Mode=TwoWay}"/>
             </Grid>
-            <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="下载目录" Text="{Binding Settings.WorkDirectory, Mode=TwoWay}"/><Button Grid.Column="1" Content="浏览…" VerticalAlignment="Bottom" Click="BrowseWorkDir_Click"/></Grid>
+            <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="下载目录" Text="{Binding Settings.WorkDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="浏览…" VerticalAlignment="Bottom" Click="BrowseWorkDir_Click"/></Grid>
             <StackPanel Orientation="Horizontal" Spacing="16"><CheckBox Content="弹幕" IsChecked="{Binding Settings.Danmaku, Mode=TwoWay}"/><CheckBox Content="字幕" IsChecked="{Binding Settings.Subtitle, Mode=TwoWay}"/><CheckBox Content="封面" IsChecked="{Binding Settings.Cover, Mode=TwoWay}"/><CheckBox Content="多线程" IsChecked="{Binding Settings.MultiThread, Mode=TwoWay}"/><CheckBox Content="保存日志" IsChecked="{Binding Settings.SaveTaskLogs, Mode=TwoWay}"/></StackPanel>
         </StackPanel></Border>
+        <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="影视重命名" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                <TextBlock Text="重命名功能通过 TMDB 获取中英文片名、年份和剧集名称，需要有效的 API Key 与网络连接。" Opacity="0.65" TextWrapping="Wrap"/>
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <PasswordBox Header="TMDB API Key" Password="{Binding RenameSettings.TmdbApiKey, Mode=TwoWay}" PasswordRevealMode="Peek" PlaceholderText="输入自己的 TMDB v3 API Key"/>
+                    <TextBox Grid.Column="1" Header="HTTP 代理（可选）" Text="{Binding RenameSettings.ProxyUrl, Mode=TwoWay}" PlaceholderText="例如 http://127.0.0.1:7890"/>
+                    <Button Grid.Column="2" Content="验证 Key" Command="{Binding ValidateTmdbCommand}" VerticalAlignment="Bottom"/>
+                </Grid>
+                <TextBlock Text="密钥仅保存在本机 Beflow 数据目录，不写入任务日志、重命名历史或下载历史。" Opacity="0.55" FontSize="12"/>
+            </StackPanel>
+        </Border>
         <Grid x:Name="ToolCards" ColumnSpacing="16">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition x:Name="ToolSecondaryRow" Height="0"/></Grid.RowDefinitions>
             <Grid.ColumnDefinitions><ColumnDefinition x:Name="ToolPrimaryColumn" Width="3*"/><ColumnDefinition x:Name="ToolSecondaryColumn" Width="2*"/></Grid.ColumnDefinitions>
             <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="8"><TextBlock Text="aria2c" Style="{StaticResource SubtitleTextBlockStyle}"/><CheckBox Content="默认使用 aria2c" IsChecked="{Binding Settings.UseAria2c, Mode=TwoWay}"/>
-                <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="aria2c.exe 路径" Text="{Binding Settings.Aria2cPath, Mode=TwoWay}"/><Button Grid.Column="1" Content="选择…" VerticalAlignment="Bottom" Click="BrowseAria_Click"/></Grid>
+                <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="aria2c.exe 路径" Text="{Binding Settings.Aria2cPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="选择…" VerticalAlignment="Bottom" Click="BrowseAria_Click"/></Grid>
                 <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <NumberBox Header="每服务器连接数" Minimum="1" Maximum="32" Value="{Binding Settings.Aria2MaxConnection, Mode=TwoWay}"/><NumberBox Grid.Column="1" Header="文件分片数" Minimum="1" Maximum="32" Value="{Binding Settings.Aria2Split, Mode=TwoWay}"/><NumberBox Grid.Column="2" Header="同时任务数" Minimum="1" Maximum="32" Value="{Binding Settings.Aria2MaxConcurrentDownloads, Mode=TwoWay}"/><NumberBox Grid.Column="3" Header="最小分片 MB" Minimum="1" Maximum="64" Value="{Binding Settings.Aria2MinSplitSize, Mode=TwoWay}"/>
                 </Grid>
             </StackPanel></Border>
-            <Border x:Name="MkvCard" Grid.Column="1" Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="8"><TextBlock Text="MKVToolNix" Style="{StaticResource SubtitleTextBlockStyle}"/><Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="mkvmerge.exe 路径" Text="{Binding Settings.MkvmergePath, Mode=TwoWay}"/><Button Grid.Column="1" Content="选择…" VerticalAlignment="Bottom" Click="BrowseMkv_Click"/></Grid><TextBlock Text="{Binding ToolStatus}" FontFamily="Consolas" TextWrapping="Wrap"/></StackPanel></Border>
+            <Border x:Name="MkvCard" Grid.Column="1" Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="8"><TextBlock Text="MKVToolNix" Style="{StaticResource SubtitleTextBlockStyle}"/><Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="mkvmerge.exe 路径" Text="{Binding Settings.MkvmergePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="选择…" VerticalAlignment="Bottom" Click="BrowseMkv_Click"/></Grid><TextBlock Text="{Binding ToolStatus}" FontFamily="Consolas" TextWrapping="Wrap"/></StackPanel></Border>
         </Grid>
         <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
             <Grid ColumnSpacing="12">
@@ -121,7 +134,19 @@
         </Border>
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="8" Margin="16,0,0,0"><Button Content="保存设置" Command="{Binding SaveCommand}" Style="{StaticResource AccentButtonStyle}"/><Button Content="恢复默认" Command="{Binding ResetCommand}"/><Button Content="重新检测工具" Command="{Binding DetectToolsCommand}"/><Button Content="应用到下载页" Click="Apply_Click"/><Button Content="清理本会话进程" Command="{Binding CleanupCommand}"/></StackPanel>
-        <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" Severity="Informational" Message="{Binding Message}" IsClosable="False" Margin="16,0,0,0"/>
         </StackPanel></ScrollViewer>
+        <InfoBar x:Name="SettingsNotification"
+                 IsOpen="{Binding HasMessage}"
+                 Visibility="{Binding MessageVisibility}"
+                 Severity="{Binding MessageSeverity}"
+                 Message="{Binding Message}"
+                 IsClosable="True"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Top"
+                 MaxWidth="720"
+                 MinWidth="360"
+                 Margin="24,20,24,0"
+                 Canvas.ZIndex="20"
+                 Closed="SettingsNotification_Closed"/>
     </Grid>
 </Page>

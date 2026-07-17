@@ -16,15 +16,49 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         return BBDownParser.ParseInfo(result.Output);
     }
 
-    public async Task<string> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
+    public async Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Url)) throw new ArgumentException("视频 URL 不能为空");
-        if (request.Season && request.Quality.Equals("4K", StringComparison.OrdinalIgnoreCase))
-            return await RunResolutionFirstSeasonAsync(request, context, cancellationToken);
-        else if (ShouldSelectAudio(request))
-            return await RunAudioSelectionAsync(request, context, cancellationToken);
+        var effectiveRequest = Clone(request);
+        var title = request.TitleHint.Trim();
+        var outputDirectory = request.WorkDirectory;
+        if (request.OrganizeInTitleDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                context.AppendLog("正在解析标题并准备独立下载文件夹…\n");
+                var tools = await ResolveToolsAsync(cancellationToken);
+                var info = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request), context, cancellationToken);
+                if (info.ExitCode != 0) throw new InvalidOperationException($"下载前标题解析失败，退出码 {info.ExitCode}");
+                title = BBDownParser.ParseInfo(info.Output).Title;
+            }
+            if (string.IsNullOrWhiteSpace(title)) title = "Beflow 下载";
+            var baseDirectory = request.WorkDirectory;
+            if (string.IsNullOrWhiteSpace(baseDirectory)) baseDirectory = (await settingsStore.LoadAsync(cancellationToken)).WorkDirectory;
+            outputDirectory = ResolveTitleDirectory(baseDirectory, title);
+            Directory.CreateDirectory(outputDirectory);
+            effectiveRequest.WorkDirectory = outputDirectory;
+            if (string.IsNullOrWhiteSpace(effectiveRequest.MultiFilePattern))
+                effectiveRequest.MultiFilePattern = "[P<pageNumberWithZero>]<pageTitle>";
+            context.AppendLog($"输出文件夹: {outputDirectory}\n");
+        }
+
+        var before = SnapshotDirectory(outputDirectory);
+        string downloadedTitle;
+        if (effectiveRequest.Season && effectiveRequest.Quality.Equals("4K", StringComparison.OrdinalIgnoreCase))
+            downloadedTitle = await RunResolutionFirstSeasonAsync(effectiveRequest, context, cancellationToken);
+        else if (ShouldSelectAudio(effectiveRequest))
+            downloadedTitle = await RunAudioSelectionAsync(effectiveRequest, context, cancellationToken);
         else
-            return await RunDirectDownloadAsync(request, context, cancellationToken);
+            downloadedTitle = await RunDirectDownloadAsync(effectiveRequest, context, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(downloadedTitle)) title = downloadedTitle;
+        var outputFiles = FindChangedFiles(outputDirectory, before);
+        return new DownloadResult(
+            title,
+            outputDirectory,
+            outputFiles,
+            outputFiles.Any(IsVideoFile));
     }
 
     public async Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken)
@@ -166,8 +200,63 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         MultiThread = source.MultiThread, UposHost = source.UposHost, UseAria2c = source.UseAria2c, Aria2cPath = source.Aria2cPath,
         Aria2MaxConnection = source.Aria2MaxConnection, Aria2Split = source.Aria2Split,
         Aria2MaxConcurrentDownloads = source.Aria2MaxConcurrentDownloads, Aria2MinSplitSize = source.Aria2MinSplitSize,
-        SaveTaskLogs = source.SaveTaskLogs, ApiMode = source.ApiMode, Language = source.Language, MultiFilePattern = source.MultiFilePattern
+        SaveTaskLogs = source.SaveTaskLogs, ApiMode = source.ApiMode, Language = source.Language, MultiFilePattern = source.MultiFilePattern,
+        OrganizeInTitleDirectory = source.OrganizeInTitleDirectory, TitleHint = source.TitleHint
     };
+
+    private static Dictionary<string, FileStamp> SnapshotDirectory(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return new Dictionary<string, FileStamp>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            return new DirectoryInfo(directory).EnumerateFiles()
+                .ToDictionary(file => file.FullName, file => new FileStamp(file.Length, file.LastWriteTimeUtc.Ticks), StringComparer.OrdinalIgnoreCase);
+        }
+        catch (IOException) { return new Dictionary<string, FileStamp>(StringComparer.OrdinalIgnoreCase); }
+        catch (UnauthorizedAccessException) { return new Dictionary<string, FileStamp>(StringComparer.OrdinalIgnoreCase); }
+    }
+
+    private static IReadOnlyList<string> FindChangedFiles(string directory, IReadOnlyDictionary<string, FileStamp> before)
+    {
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return [];
+        try
+        {
+            return new DirectoryInfo(directory).EnumerateFiles()
+                .Where(file => !before.TryGetValue(file.FullName, out var previous) || previous.Length != file.Length || previous.LastWriteTicks != file.LastWriteTimeUtc.Ticks)
+                .OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(file => file.FullName)
+                .ToList();
+        }
+        catch (IOException) { return []; }
+        catch (UnauthorizedAccessException) { return []; }
+    }
+
+    private static string ResolveTitleDirectory(string baseDirectory, string title)
+    {
+        var folderName = RenameService.SanitizeTitleDirectoryName(title);
+        var available = 235 - Path.GetFullPath(baseDirectory).TrimEnd(Path.DirectorySeparatorChar).Length - 1;
+        if (available < 8) throw new PathTooLongException("下载目录路径过长，无法创建安全的片名文件夹");
+        available = Math.Min(120, available);
+        if (folderName.Length > available) folderName = folderName[..available].TrimEnd('.', ' ');
+        var candidate = Path.Combine(baseDirectory, folderName);
+        if (!File.Exists(candidate)) return candidate;
+        for (var index = 2; index < 1000; index++)
+        {
+            var suffix = $" ({index})";
+            var stem = folderName.Length + suffix.Length > available ? folderName[..Math.Max(1, available - suffix.Length)].TrimEnd('.', ' ') : folderName;
+            candidate = Path.Combine(baseDirectory, stem + suffix);
+            if (!File.Exists(candidate)) return candidate;
+        }
+        throw new IOException("无法为下载任务创建可用的片名文件夹");
+    }
+
+    private static bool IsVideoFile(string path) => Path.GetExtension(path) is var extension && (
+        extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase) || extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
+        extension.Equals(".avi", StringComparison.OrdinalIgnoreCase) || extension.Equals(".ts", StringComparison.OrdinalIgnoreCase) ||
+        extension.Equals(".m2ts", StringComparison.OrdinalIgnoreCase) || extension.Equals(".mov", StringComparison.OrdinalIgnoreCase) ||
+        extension.Equals(".webm", StringComparison.OrdinalIgnoreCase));
+
+    private sealed record FileStamp(long Length, long LastWriteTicks);
 
     private static string Quote(string value) => value.Any(char.IsWhiteSpace) ? $"\"{value}\"" : value;
 }

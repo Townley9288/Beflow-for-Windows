@@ -9,7 +9,7 @@ public enum DownloadMode { VideoAndAudio, VideoOnly, AudioOnly }
 public enum AudioBitratePriority { Highest, Lowest }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum TaskKind { Info, Download, SeasonDownload, LoginWeb, LoginTv, DualAudioMux, DualAudioRemux }
+public enum TaskKind { Info, Download, SeasonDownload, LoginWeb, LoginTv, DualAudioMux, DualAudioRemux, RenamePreview, RenameExecute, RenameUndo }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TaskState { Pending, Running, Completed, Failed, Cancelled }
@@ -159,7 +159,15 @@ public sealed class DownloadRequest
     public string ApiMode { get; set; } = "WEB";
     public string Language { get; set; } = string.Empty;
     public string MultiFilePattern { get; set; } = string.Empty;
+    public bool OrganizeInTitleDirectory { get; set; }
+    [JsonIgnore] public string TitleHint { get; set; } = string.Empty;
 }
+
+public sealed record DownloadResult(
+    string Title,
+    string OutputDirectory,
+    IReadOnlyList<string> OutputFiles,
+    bool HasVideo);
 
 public sealed class DualAudioRequest
 {
@@ -213,6 +221,8 @@ public sealed class HistoryRecord
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.Now;
     [JsonIgnore] public string TimestampText => Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
     public string LogPath { get; set; } = string.Empty;
+    public string OutputDirectory { get; set; } = string.Empty;
+    public List<string> OutputFiles { get; set; } = [];
     public DownloadRequest? Download { get; set; }
     public DualAudioRequest? DualAudio { get; set; }
 }
@@ -240,6 +250,7 @@ public sealed class ToolPaths
     public string BBDown { get; set; } = string.Empty;
     public string Aria2c { get; set; } = string.Empty;
     public string Ffmpeg { get; set; } = string.Empty;
+    public string Ffprobe { get; set; } = string.Empty;
     public string Mkvmerge { get; set; } = string.Empty;
 }
 

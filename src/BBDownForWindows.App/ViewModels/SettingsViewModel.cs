@@ -12,8 +12,10 @@ public sealed class SettingsViewModel : ObservableObject
 
     private readonly AppServices _services;
     private AppSettings _settings = new();
+    private RenameSettings _renameSettings = new();
     private string _toolStatus = "尚未检测";
     private string _message = string.Empty;
+    private InfoBarSeverity _messageSeverity = InfoBarSeverity.Informational;
     private string _loginMessage = string.Empty;
     private string _lastAccountCheckText = "尚未检测";
     private InfoBarSeverity _loginMessageSeverity = InfoBarSeverity.Informational;
@@ -29,6 +31,7 @@ public sealed class SettingsViewModel : ObservableObject
         RefreshAccountsCommand = new AsyncRelayCommand(RefreshAccountsAsync);
         LoginWebCommand = new AsyncRelayCommand(() => LoginAsync(AccountChannel.Web), CanStartLogin);
         LoginTvCommand = new AsyncRelayCommand(() => LoginAsync(AccountChannel.Tv), CanStartLogin);
+        ValidateTmdbCommand = new AsyncRelayCommand(ValidateTmdbAsync);
         Console = services.TaskConsole;
         WebAccount = new AccountChannelViewModel(AccountChannel.Web);
         TvAccount = new AccountChannelViewModel(AccountChannel.Tv);
@@ -49,6 +52,7 @@ public sealed class SettingsViewModel : ObservableObject
     public IReadOnlyList<OptionItem> AudioBitrateOptions { get; } =
     [new("highest", "最高码率"), new("lowest", "最低码率")];
     public AppSettings Settings { get => _settings; private set => SetProperty(ref _settings, value); }
+    public RenameSettings RenameSettings { get => _renameSettings; private set => SetProperty(ref _renameSettings, value); }
     public TaskConsoleViewModel Console { get; }
     public AccountChannelViewModel WebAccount { get; }
     public AccountChannelViewModel TvAccount { get; }
@@ -83,6 +87,7 @@ public sealed class SettingsViewModel : ObservableObject
     }
     public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
     public Visibility MessageVisibility => HasMessage ? Visibility.Visible : Visibility.Collapsed;
+    public InfoBarSeverity MessageSeverity { get => _messageSeverity; private set => SetProperty(ref _messageSeverity, value); }
     public IAsyncRelayCommand SaveCommand { get; }
     public IRelayCommand ResetCommand { get; }
     public IAsyncRelayCommand DetectToolsCommand { get; }
@@ -90,6 +95,18 @@ public sealed class SettingsViewModel : ObservableObject
     public IAsyncRelayCommand RefreshAccountsCommand { get; }
     public IAsyncRelayCommand LoginWebCommand { get; }
     public IAsyncRelayCommand LoginTvCommand { get; }
+    public IAsyncRelayCommand ValidateTmdbCommand { get; }
+
+    public void SetWorkDirectory(string value) => UpdateSettings(settings => settings.WorkDirectory = value);
+    public void SetAria2cPath(string value) => UpdateSettings(settings => settings.Aria2cPath = value);
+    public void SetMkvmergePath(string value) => UpdateSettings(settings => settings.MkvmergePath = value);
+
+    private void UpdateSettings(Action<AppSettings> update)
+    {
+        var snapshot = Settings.Clone();
+        update(snapshot);
+        Settings = snapshot;
+    }
 
     public void Activate()
     {
@@ -108,6 +125,7 @@ public sealed class SettingsViewModel : ObservableObject
     public async Task InitializeAsync()
     {
         Settings = await _services.Settings.LoadAsync();
+        RenameSettings = await _services.RenameSettings.LoadAsync();
         Settings.ThemeMode = _services.Theme.CurrentMode;
         await Task.WhenAll(DetectToolsAsync(), RefreshAccountsAsync());
     }
@@ -141,13 +159,16 @@ public sealed class SettingsViewModel : ObservableObject
             return snapshot;
         });
         Settings.ThemeMode = _services.Theme.CurrentMode;
-        Message = "设置已保存";
+        RenameSettings = await _services.RenameSettings.UpdateAsync(_ => RenameSettings.Clone());
+        SetMessage("设置已保存", InfoBarSeverity.Success);
     }
 
     private void Reset()
     {
         Settings = new AppSettings { ThemeMode = _services.Theme.CurrentMode };
-        Message = "已恢复默认值（尚未保存）";
+        RenameSettings = new RenameSettings();
+        RenameSettings.EnsureDefaults();
+        SetMessage("已恢复默认值（尚未保存）", InfoBarSeverity.Warning);
     }
 
     private async Task DetectToolsAsync()
@@ -170,14 +191,15 @@ public sealed class SettingsViewModel : ObservableObject
             _services.ToolLocator.GetVersionAsync(tools.BBDown),
             _services.ToolLocator.GetVersionAsync(tools.Aria2c),
             _services.ToolLocator.GetVersionAsync(tools.Ffmpeg),
+            _services.ToolLocator.GetVersionAsync(tools.Ffprobe),
             _services.ToolLocator.GetVersionAsync(tools.Mkvmerge));
-        ToolStatus = $"BBDown: {versions[0]}\naria2c: {versions[1]}\nFFmpeg: {versions[2]}\nmkvmerge: {versions[3]}";
+        ToolStatus = $"BBDown: {versions[0]}\naria2c: {versions[1]}\nFFmpeg: {versions[2]}\nffprobe: {versions[3]}\nmkvmerge: {versions[4]}";
     }
 
     private async Task CleanupAsync()
     {
         await _services.TaskManager.CleanupAsync();
-        Message = "本会话启动的进程已清理；下载文件和 .aria2 文件均已保留。";
+        SetMessage("本会话启动的进程已清理；下载文件和 .aria2 文件均已保留。", InfoBarSeverity.Success);
     }
 
     private async Task LoginAsync(AccountChannel channel)
@@ -210,6 +232,28 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     private bool CanStartLogin() => !Console.IsBusy;
+
+    private async Task ValidateTmdbAsync()
+    {
+        try
+        {
+            await _services.RenameSettings.SaveAsync(RenameSettings);
+            await _services.Tmdb.ValidateApiKeyAsync();
+            SetMessage("TMDB API Key 验证成功", InfoBarSeverity.Success);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or HttpRequestException)
+        {
+            SetMessage(exception.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    public void DismissMessage() => Message = string.Empty;
+
+    private void SetMessage(string message, InfoBarSeverity severity)
+    {
+        MessageSeverity = severity;
+        Message = message;
+    }
 
     private void Console_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {

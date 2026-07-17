@@ -18,12 +18,14 @@ public sealed class ToolLocatorTests
             var bbdown = Path.Combine(paths.ToolsDirectory, "BBDown", "BBDown.exe");
             var aria = Path.Combine(paths.ToolsDirectory, "aria2", "aria2c.exe");
             var ffmpeg = Path.Combine(paths.ToolsDirectory, "ffmpeg", "ffmpeg.exe");
+            var ffprobe = Path.Combine(paths.ToolsDirectory, "ffmpeg", "ffprobe.exe");
             var mkv = Path.Combine(root.FullName, "mkvmerge.exe");
-            foreach (var file in new[] { bbdown, aria, ffmpeg, mkv }) File.WriteAllText(file, string.Empty);
+            foreach (var file in new[] { bbdown, aria, ffmpeg, ffprobe, mkv }) File.WriteAllText(file, string.Empty);
             var tools = new ToolLocator(paths).Locate(new AppSettings { MkvmergePath = mkv });
             Assert.Equal(bbdown, tools.BBDown);
             Assert.Equal(aria, tools.Aria2c);
             Assert.Equal(ffmpeg, tools.Ffmpeg);
+            Assert.Equal(ffprobe, tools.Ffprobe);
             Assert.Equal(mkv, tools.Mkvmerge);
         }
         finally { root.Delete(true); }

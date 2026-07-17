@@ -12,10 +12,11 @@
 
 - `BBDown.data`、`BBDownTV.data` 或二维码文件
 - Cookie、SESSDATA、access token、refresh token
+- TMDB API Key 或包含账号信息的代理地址
 - 包含个人目录、下载历史或账号资料的完整配置和日志
 
 ## Local data and updates
 
-Beflow 的设置、历史、日志和 B 站登录凭据保存在本地，不会由应用上传。在线更新只访问本仓库的 GitHub Releases，下载完成后必须通过同一 Release 提供的 SHA-256 校验才会执行。
+Beflow 的设置、下载历史、重命名历史、日志、TMDB API Key 和 B 站登录凭据保存在本地，不会由应用上传。TMDB Key 仅用于用户主动发起的 TMDB 请求，不写入任务日志或历史。在线更新只访问本仓库的 GitHub Releases，下载完成后必须通过同一 Release 提供的 SHA-256 校验才会执行。
 
 当前发行版未进行商业代码签名，SHA-256 可以检测下载损坏，但不能替代发布者代码签名。请只从 <https://github.com/Townley9288/Beflow-for-Windows/releases> 获取安装包和便携包。

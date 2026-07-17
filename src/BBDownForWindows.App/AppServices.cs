@@ -11,6 +11,8 @@ public sealed class AppServices
         UpdateHttpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
         Settings = new SettingsStore(paths);
         History = new HistoryStore(paths);
+        RenameSettings = new RenameSettingsStore(paths);
+        RenameHistory = new RenameHistoryStore(paths);
         UpdateState = new UpdateStateStore(paths);
         Theme = new ThemeManager(Settings);
         ProcessRunner = new ProcessRunner();
@@ -19,6 +21,8 @@ public sealed class AppServices
         TaskConsole = new ViewModels.TaskConsoleViewModel(TaskManager);
         BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings);
         DualAudio = new DualAudioService(paths, BBDown, ProcessRunner, Settings, ToolLocator);
+        Tmdb = new TmdbService(RenameSettings);
+        Rename = new RenameService(ProcessRunner, ToolLocator, Settings, RenameHistory);
         AccountStatus = new AccountStatusService(paths, HttpClient);
         Updates = new UpdateService(UpdateHttpClient);
         UpdateCoordinator = new UpdateCoordinator(this);
@@ -29,6 +33,8 @@ public sealed class AppServices
     public HttpClient UpdateHttpClient { get; }
     public ISettingsStore Settings { get; }
     public IHistoryStore History { get; }
+    public IRenameSettingsStore RenameSettings { get; }
+    public IRenameHistoryStore RenameHistory { get; }
     public IUpdateStateStore UpdateState { get; }
     public ThemeManager Theme { get; }
     public IProcessRunner ProcessRunner { get; }
@@ -37,6 +43,8 @@ public sealed class AppServices
     public ViewModels.TaskConsoleViewModel TaskConsole { get; }
     public IBBDownService BBDown { get; }
     public IDualAudioService DualAudio { get; }
+    public ITmdbService Tmdb { get; }
+    public IRenameService Rename { get; }
     public IAccountStatusService AccountStatus { get; }
     public IUpdateService Updates { get; }
     public UpdateCoordinator UpdateCoordinator { get; }

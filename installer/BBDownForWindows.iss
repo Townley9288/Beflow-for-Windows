@@ -1,6 +1,6 @@
 #define MyAppName "Beflow for Windows"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.4"
+  #define MyAppVersion "1.0.5.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\artifacts\publish"

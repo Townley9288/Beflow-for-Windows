@@ -15,6 +15,9 @@ public sealed class ApplicationPaths
         LogsDirectory = Path.Combine(DataRoot, "Logs");
         SettingsFile = Path.Combine(DataRoot, "config.json");
         HistoryFile = Path.Combine(DataRoot, "history.json");
+        RenameSettingsFile = Path.Combine(DataRoot, "rename-settings.json");
+        RenameHistoryFile = Path.Combine(DataRoot, "rename-history.json");
+        MigrationMarkerFile = Path.Combine(DataRoot, "migration-v1.complete");
         UpdateStateFile = Path.Combine(DataRoot, "update-state.json");
         ToolsDirectory = Path.Combine(ApplicationDirectory, "tools");
     }
@@ -27,6 +30,9 @@ public sealed class ApplicationPaths
     public string LogsDirectory { get; }
     public string SettingsFile { get; }
     public string HistoryFile { get; }
+    public string RenameSettingsFile { get; }
+    public string RenameHistoryFile { get; }
+    public string MigrationMarkerFile { get; }
     public string UpdateStateFile { get; }
     public string ToolsDirectory { get; }
     public bool Portable { get; }

@@ -33,6 +33,9 @@ public sealed class ToolLocator(ApplicationPaths paths) : IToolLocator
             Ffmpeg = FirstExisting(
                 Path.Combine(paths.ToolsDirectory, "ffmpeg", "ffmpeg.exe"),
                 FindOnPath("ffmpeg.exe")),
+            Ffprobe = FirstExisting(
+                Path.Combine(paths.ToolsDirectory, "ffmpeg", "ffprobe.exe"),
+                FindOnPath("ffprobe.exe")),
             Mkvmerge = FindMkvmerge(settings.MkvmergePath)
         };
     }
@@ -48,7 +51,7 @@ public sealed class ToolLocator(ApplicationPaths paths) : IToolLocator
             RedirectStandardError = true
         };
         var fileName = Path.GetFileName(executable);
-        startInfo.ArgumentList.Add(fileName.Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase) ? "-version" : fileName.Equals("BBDown.exe", StringComparison.OrdinalIgnoreCase) ? "--help" : "--version");
+        startInfo.ArgumentList.Add(fileName.Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase) || fileName.Equals("ffprobe.exe", StringComparison.OrdinalIgnoreCase) ? "-version" : fileName.Equals("BBDown.exe", StringComparison.OrdinalIgnoreCase) ? "--help" : "--version");
         try
         {
             using var process = Process.Start(startInfo);

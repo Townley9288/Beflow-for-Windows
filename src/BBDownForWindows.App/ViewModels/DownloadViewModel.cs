@@ -27,6 +27,7 @@ public sealed class DownloadViewModel : ObservableObject
     private string _resolvedTitle = string.Empty;
     private string _resolvedTitleUrl = string.Empty;
     private bool _active;
+    private DownloadResult? _lastDownloadResult;
 
     public DownloadViewModel(AppServices services)
     {
@@ -79,7 +80,14 @@ public sealed class DownloadViewModel : ObservableObject
     public string Pages { get => _pages; set => SetProperty(ref _pages, value); }
     public string Quality { get => _quality; set => SetProperty(ref _quality, value); }
     public string Encoding { get => _encoding; set => SetProperty(ref _encoding, value); }
-    public string DownloadModeText { get => _downloadMode; set => SetProperty(ref _downloadMode, value); }
+    public string DownloadModeText
+    {
+        get => _downloadMode;
+        set
+        {
+            if (SetProperty(ref _downloadMode, value)) OnPropertyChanged(nameof(CanRenameDownload));
+        }
+    }
     public string AudioCodec { get => _audioCodec; set => SetProperty(ref _audioCodec, value); }
     public string AudioBitrate { get => _audioBitrate; set => SetProperty(ref _audioBitrate, value); }
     public string WorkDirectory { get => _workDirectory; set => SetProperty(ref _workDirectory, value); }
@@ -93,6 +101,27 @@ public sealed class DownloadViewModel : ObservableObject
     public IAsyncRelayCommand GetInfoCommand { get; }
     public IAsyncRelayCommand DownloadCommand { get; }
     public IAsyncRelayCommand SeasonCommand { get; }
+    public DownloadResult? LastDownloadResult
+    {
+        get => _lastDownloadResult;
+        private set
+        {
+            if (!SetProperty(ref _lastDownloadResult, value)) return;
+            OnPropertyChanged(nameof(HasDownloadResult));
+            OnPropertyChanged(nameof(CanRenameDownload));
+            OnPropertyChanged(nameof(DownloadResultMessage));
+            OnPropertyChanged(nameof(DownloadResultVisibility));
+        }
+    }
+    public bool HasDownloadResult => LastDownloadResult is not null;
+    public Microsoft.UI.Xaml.Visibility DownloadResultVisibility => HasDownloadResult ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+    public bool CanRenameDownload => LastDownloadResult?.HasVideo == true ||
+        (LastDownloadResult is { OutputDirectory.Length: > 0 } && DownloadModeText != "仅音频");
+    public string DownloadResultMessage => LastDownloadResult is null
+        ? string.Empty
+        : LastDownloadResult.HasVideo
+            ? $"已保存到 {LastDownloadResult.OutputDirectory}，可以直接进入重命名。"
+            : $"已保存到 {LastDownloadResult.OutputDirectory}，暂未识别到本次生成的视频，可进入重命名页重新扫描。";
 
     public void Activate()
     {
@@ -114,6 +143,8 @@ public sealed class DownloadViewModel : ObservableObject
         {
             Apply(saved);
             RememberTitle(restore.Url, restore.Title);
+            if (!string.IsNullOrWhiteSpace(restore.OutputDirectory))
+                LastDownloadResult = new DownloadResult(restore.Title, restore.OutputDirectory, restore.OutputFiles, restore.OutputFiles.Any(IsVideoFile));
             return;
         }
         var settings = await _services.Settings.LoadAsync();
@@ -132,17 +163,31 @@ public sealed class DownloadViewModel : ObservableObject
 
     private async Task StartDownloadAsync(bool season)
     {
+        LastDownloadResult = null;
         var request = await BuildRequestAsync(season);
         var kind = season ? TaskKind.SeasonDownload : TaskKind.Download;
-        var downloadedTitle = string.Empty;
+        DownloadResult? result = null;
         var snapshot = await _services.TaskManager.RunExclusiveAsync(kind, SaveTaskLogs, season ? "season_download" : "download", async (context, token) =>
         {
-            downloadedTitle = await _services.BBDown.DownloadAsync(request, context, token);
+            result = await _services.BBDown.DownloadAsync(request, context, token);
         });
         if (snapshot.State == TaskState.Completed)
         {
-            var title = !string.IsNullOrWhiteSpace(downloadedTitle) ? downloadedTitle : GetRememberedTitle(request.Url);
-            await _services.History.AddAsync(new HistoryRecord { TaskType = kind, Title = title, Url = request.Url, Timestamp = DateTimeOffset.Now, LogPath = snapshot.LogPath, Download = request });
+            result ??= new DownloadResult(GetRememberedTitle(request.Url), request.WorkDirectory, [], false);
+            LastDownloadResult = result;
+            var title = !string.IsNullOrWhiteSpace(result.Title) ? result.Title : GetRememberedTitle(request.Url);
+            RememberTitle(request.Url, title);
+            await _services.History.AddAsync(new HistoryRecord
+            {
+                TaskType = kind,
+                Title = title,
+                Url = request.Url,
+                Timestamp = DateTimeOffset.Now,
+                LogPath = snapshot.LogPath,
+                OutputDirectory = result.OutputDirectory,
+                OutputFiles = result.OutputFiles.ToList(),
+                Download = request
+            });
         }
     }
 
@@ -173,7 +218,8 @@ public sealed class DownloadViewModel : ObservableObject
             UposHost = UposHost, UseAria2c = UseAria2c, Aria2cPath = settings.Aria2cPath,
             Aria2MaxConnection = settings.Aria2MaxConnection, Aria2Split = settings.Aria2Split,
             Aria2MaxConcurrentDownloads = settings.Aria2MaxConcurrentDownloads, Aria2MinSplitSize = settings.Aria2MinSplitSize,
-            SaveTaskLogs = SaveTaskLogs, ApiMode = settings.ApiMode
+            SaveTaskLogs = SaveTaskLogs, ApiMode = settings.ApiMode,
+            OrganizeInTitleDirectory = true, TitleHint = GetRememberedTitle(Url)
         };
     }
 
@@ -203,5 +249,14 @@ public sealed class DownloadViewModel : ObservableObject
     private void Console_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {
         if (args.PropertyName == nameof(Console.IsBusy)) NotifyCommands();
+    }
+
+    private static bool IsVideoFile(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase) || extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".avi", StringComparison.OrdinalIgnoreCase) || extension.Equals(".ts", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".m2ts", StringComparison.OrdinalIgnoreCase) || extension.Equals(".mov", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".webm", StringComparison.OrdinalIgnoreCase);
     }
 }

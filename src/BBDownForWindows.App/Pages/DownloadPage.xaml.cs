@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.ApplicationModel.DataTransfer;
+using System.Diagnostics;
 
 namespace BBDownForWindows.App.Pages;
 
@@ -52,5 +53,19 @@ public sealed partial class DownloadPage : Page
     private void Console_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ViewModel.Console.IsBusy) && ViewModel.Console.IsBusy) _logAutoScroller.FollowLatest();
+    }
+
+    private void OpenDownloadFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var directory = ViewModel.LastDownloadResult?.OutputDirectory;
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return;
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
+    }
+
+    private void GoRename_Click(object sender, RoutedEventArgs e)
+    {
+        var result = ViewModel.LastDownloadResult;
+        if (result is null || string.IsNullOrWhiteSpace(result.OutputDirectory)) return;
+        ((App)Application.Current).MainWindow.Navigate("rename", new RenameNavigationContext(result.OutputDirectory, result.OutputFiles, result.Title));
     }
 }

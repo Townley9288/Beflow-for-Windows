@@ -8,7 +8,7 @@
     <AssemblyTitle>Beflow for Windows</AssemblyTitle>
     <Product>Beflow for Windows</Product>
     <Description>A Simple Desktop Video Downloader / 基于 BBDown 构建的桌面视频下载器图形界面</Description>
-    <Version>1.0.4</Version>
+    <Version>1.0.5.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>

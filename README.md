@@ -20,6 +20,7 @@
 - WEB/TV 扫码登录及独立账号状态
 - CDN、多线程、aria2c、字幕、弹幕和封面
 - 双链接或奇偶分P双音轨下载、延迟与 MKV 批量封装
+- 下载后直接进入原生影视重命名，支持 TMDB、独立命名模板管理、媒体规格识别、字幕/弹幕/封面联动及安全撤销
 - 下载历史、增量日志、持久日志和任务取消
 - 跟随系统、浅色与深色主题切换，并记忆上次选择
 - 安装版与便携版在线更新
@@ -48,7 +49,7 @@
 
 ## 隐私与账号数据
 
-Beflow 不上传配置、下载历史、任务日志或 B 站登录数据。`BBDown.data` 与 `BBDownTV.data` 只保存在本地数据目录，并已从 Git 排除。请不要在 Issue、日志截图或错误报告中公开这些文件的内容。
+Beflow 不上传配置、下载历史、重命名历史、任务日志或 B 站登录数据。`BBDown.data`、`BBDownTV.data` 和用户自行配置的 TMDB API Key 只保存在本地数据目录，并已从 Git 排除；TMDB Key 不会写入日志和历史。请不要在 Issue、日志截图或错误报告中公开这些文件的内容。
 
 ## 开发
 
@@ -63,7 +64,7 @@ dotnet build src\BBDownForWindows.App\BBDownForWindows.App.csproj -c Release -p:
 生成发行包：
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 1.0.4
+.\scripts\Build-Release.ps1 -Version 1.0.5.0
 ```
 
 正式 CI 使用 Native AOT 构建便携更新助手。本地 Native AOT 构建需要 Visual Studio 的 Desktop development with C++ 与 Windows 10/11 SDK；缺少时脚本会为本地测试回退到自包含单文件助手。

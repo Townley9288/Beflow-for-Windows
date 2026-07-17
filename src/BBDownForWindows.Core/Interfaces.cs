@@ -29,6 +29,23 @@ public interface IUpdateStateStore
     Task SaveAsync(UpdateState state, CancellationToken cancellationToken = default);
 }
 
+public interface IRenameSettingsStore
+{
+    Task<RenameSettings> LoadAsync(CancellationToken cancellationToken = default);
+    Task SaveAsync(RenameSettings settings, CancellationToken cancellationToken = default);
+    Task<RenameSettings> UpdateAsync(Func<RenameSettings, RenameSettings> update, CancellationToken cancellationToken = default);
+}
+
+public interface IRenameHistoryStore
+{
+    event EventHandler? Changed;
+    Task<IReadOnlyList<RenameHistoryRecord>> LoadAsync(CancellationToken cancellationToken = default);
+    Task AddAsync(RenameHistoryRecord record, CancellationToken cancellationToken = default);
+    Task MarkUndoneAsync(Guid id, DateTimeOffset undoneAt, CancellationToken cancellationToken = default);
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+    Task ClearAsync(CancellationToken cancellationToken = default);
+}
+
 public interface IUpdateService
 {
     Task<UpdateCheckResult> CheckAsync(Version currentVersion, CancellationToken cancellationToken = default);
@@ -47,6 +64,22 @@ public interface IAccountStatusService
     Task<AccountChannelStatus> GetStatusAsync(AccountChannel channel, CancellationToken cancellationToken = default);
 }
 
+public interface ITmdbService
+{
+    Task ValidateApiKeyAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TmdbSearchResult>> SearchAsync(string query, CancellationToken cancellationToken = default);
+    Task<TmdbTitleDetail> GetDetailAsync(TmdbSearchResult result, CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<int, string>> GetEpisodeNamesAsync(int tmdbId, int season, CancellationToken cancellationToken = default);
+}
+
+public interface IRenameService
+{
+    Task<IReadOnlyList<RenameFileEntry>> ScanAsync(string directoryPath, IReadOnlyCollection<string>? preferredFiles = null, CancellationToken cancellationToken = default);
+    Task<RenamePreview> BuildPreviewAsync(RenamePreviewRequest request, TaskExecutionContext context, CancellationToken cancellationToken = default);
+    Task<RenameExecutionResult> ExecuteAsync(RenamePreview preview, TaskExecutionContext context, CancellationToken cancellationToken = default);
+    Task<RenameExecutionResult> UndoAsync(Guid historyId, TaskExecutionContext context, CancellationToken cancellationToken = default);
+}
+
 public interface ITaskManager
 {
     TaskSnapshot? ActiveTask { get; }
@@ -61,7 +94,7 @@ public interface ITaskManager
 public interface IBBDownService
 {
     Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken);
-    Task<string> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
     Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken);
     Task<string> GetTitleAsync(string url, CancellationToken cancellationToken);
 }

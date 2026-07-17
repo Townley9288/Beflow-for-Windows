@@ -97,5 +97,7 @@ public sealed class DualAudioTests
         Assert.Equal("E-AC-3", secondary.AudioCodec);
         Assert.Equal(DownloadMode.AudioOnly, secondary.DownloadMode);
         Assert.Equal("secondary", secondary.Url);
+        Assert.False(primary.OrganizeInTitleDirectory);
+        Assert.False(secondary.OrganizeInTitleDirectory);
     }
 }

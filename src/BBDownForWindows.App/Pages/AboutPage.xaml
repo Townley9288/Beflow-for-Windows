@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid x:Name="LayoutRoot">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Width="{Binding ActualWidth, ElementName=LayoutRoot}" Padding="40" Spacing="20" MaxWidth="1440" HorizontalAlignment="Left">
+        <StackPanel Width="{Binding ActualWidth, ElementName=LayoutRoot}" Padding="40" Spacing="20" HorizontalAlignment="Left">
             <Border Padding="28" CornerRadius="16">
                 <Border.Background>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
