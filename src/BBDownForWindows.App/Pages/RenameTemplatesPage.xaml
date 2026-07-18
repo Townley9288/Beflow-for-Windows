@@ -2,129 +2,291 @@
     x:Class="BBDownForWindows.App.Pages.RenameTemplatesPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:BBDownForWindows.App.Controls"
+    xmlns:core="using:BBDownForWindows.Core"
     xmlns:vm="using:BBDownForWindows.App.ViewModels"
+    NavigationCacheMode="Required"
     DataContext="{x:Bind ViewModel, Mode=OneWay}">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Padding="24,16" Spacing="12">
-            <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock Text="命名模板" Style="{StaticResource TitleTextBlockStyle}"/>
-                    <TextBlock Text="管理电影和剧集的文件名字段、顺序与分隔符" Opacity="0.65"/>
-                </StackPanel>
-                <Button Grid.Column="1" Content="返回重命名" Click="BackToRename_Click" VerticalAlignment="Center"/>
-            </Grid>
+    <Grid Padding="24,16" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-            <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" IsClosable="False" Severity="{Binding MessageSeverity}" Message="{Binding Message}"/>
+        <StackPanel>
+            <TextBlock Text="命名规则" Style="{StaticResource TitleTextBlockStyle}"/>
+            <TextBlock Text="分别管理下载时直接生成的路径，以及影视整理使用的重命名模板" Opacity="0.65"/>
+        </StackPanel>
 
-            <Grid x:Name="TemplateWorkspace" ColumnSpacing="12" RowSpacing="12">
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition x:Name="EditorSecondaryRow" Height="0"/></Grid.RowDefinitions>
-                <Grid.ColumnDefinitions><ColumnDefinition x:Name="TemplateListColumn" Width="360"/><ColumnDefinition x:Name="TemplateEditorColumn" Width="*"/></Grid.ColumnDefinitions>
-                <VisualStateManager.VisualStateGroups>
-                    <VisualStateGroup>
-                        <VisualState x:Name="Wide"><VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="1050"/></VisualState.StateTriggers></VisualState>
-                        <VisualState x:Name="Narrow">
-                            <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="0"/></VisualState.StateTriggers>
-                            <VisualState.Setters>
-                                <Setter Target="TemplateListColumn.Width" Value="*"/>
-                                <Setter Target="TemplateEditorColumn.Width" Value="0"/>
-                                <Setter Target="EditorSecondaryRow.Height" Value="Auto"/>
-                                <Setter Target="TemplateEditorCard.(Grid.Column)" Value="0"/>
-                                <Setter Target="TemplateEditorCard.(Grid.Row)" Value="1"/>
-                            </VisualState.Setters>
-                        </VisualState>
-                    </VisualStateGroup>
-                </VisualStateManager.VisualStateGroups>
+        <TabView x:Name="RuleTabs" Grid.Row="1" IsAddTabButtonVisible="False" SelectionChanged="RuleTabs_SelectionChanged">
+            <TabViewItem Header="下载命名" IsClosable="False">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Padding="0,8,0,0" Spacing="12" DataContext="{x:Bind DownloadNamingViewModel, Mode=OneWay}">
+                        <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" IsClosable="False" Severity="{Binding MessageSeverity}" Message="{Binding Message}"/>
 
-                <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <StackPanel Spacing="8">
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="模板列表" Style="{StaticResource SubtitleTextBlockStyle}" VerticalAlignment="Center"/>
-                            <Button Grid.Column="1" Content="新建模板" Click="CreateTemplate_Click"/>
-                        </Grid>
-                        <ComboBox x:Name="MediaTypeBox" Header="模板类型" ItemsSource="{Binding MediaTypeOptions}" SelectionChanged="MediaTypeBox_SelectionChanged"/>
-                        <TextBlock Text="{Binding ActiveTemplateText}" Opacity="0.65"/>
-                        <ListView x:Name="TemplateList" ItemsSource="{Binding Templates}" SelectionMode="Single" SelectionChanged="TemplateList_SelectionChanged" MinHeight="360">
-                            <ListView.ItemTemplate>
-                                <DataTemplate x:DataType="vm:RenameTemplateListItem">
-                                    <StackPanel Padding="6" Spacing="3">
-                                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
-                                        <TextBlock Text="{x:Bind Description}" Opacity="0.6" FontSize="12"/>
-                                        <TextBlock Text="{x:Bind Pattern}" Opacity="0.5" FontFamily="Consolas" FontSize="12" TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
-                    </StackPanel>
-                </Border>
+                        <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="规则类型" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                    <TextBlock Text="{Binding ProfileDescription}" Opacity="0.65" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <ToggleButton x:Name="SingleProfileButton" Content="单集视频" Click="SingleProfile_Click" MinWidth="108"/>
+                                    <ToggleButton x:Name="MultiProfileButton" Content="多集内容" Click="MultiProfile_Click" MinWidth="108"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
 
-                <Border x:Name="TemplateEditorCard" Grid.Column="1" Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <StackPanel Spacing="12">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="{Binding SelectedTemplateTitle}" Style="{StaticResource SubtitleTextBlockStyle}"/>
-                                <TextBlock Text="{Binding EditingHint}" Opacity="0.65" TextWrapping="Wrap"/>
-                            </StackPanel>
-                            <TextBlock Grid.Column="1" Text="存在未保存修改" Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="{Binding UnsavedChangesVisibility}" VerticalAlignment="Center"/>
-                        </Grid>
-
-                        <TextBox Header="模板规则" Text="{Binding TemplatePattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" IsEnabled="{Binding HasSelectedTemplate}"/>
-
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="示例文件名" Opacity="0.55" FontSize="12"/>
-                            <TextBlock Text="{Binding TemplateExample}" FontFamily="Consolas" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-
-                        <Border Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                            <StackPanel Spacing="8">
+                        <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            <StackPanel Spacing="12">
                                 <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Text="支持的字段" FontWeight="SemiBold"/>
-                                        <TextBlock Text="选择一个字段，将它加入右侧的字段顺序" Opacity="0.6" FontSize="12"/>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3">
+                                        <TextBlock Text="路径规则" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                        <TextBlock Text="每一项只描述一个名称组件；扩展名由 BBDown 按实际封装格式添加。" Opacity="0.65" TextWrapping="Wrap"/>
                                     </StackPanel>
-                                    <Button Grid.Column="1" Content="添加所选字段" Click="AddLayoutField_Click" IsEnabled="{Binding HasSelectedTemplate}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="存在未保存修改" Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="{Binding UnsavedChangesVisibility}" VerticalAlignment="Center"/>
                                 </Grid>
-                                <Grid x:Name="FieldPalette" RowSpacing="8" SizeChanged="FieldPalette_SizeChanged"/>
+
+                                <Grid x:Name="DownloadNamingEditors" ColumnSpacing="12" RowSpacing="10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition x:Name="DownloadNamingSecondaryRow" Height="0"/>
+                                        <RowDefinition x:Name="DownloadNamingThirdRow" Height="0"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition x:Name="DownloadNamingColumn0" Width="*"/>
+                                        <ColumnDefinition x:Name="DownloadNamingColumn1" Width="*"/>
+                                        <ColumnDefinition x:Name="DownloadNamingColumn2" Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <VisualStateManager.VisualStateGroups>
+                                        <VisualStateGroup>
+                                            <VisualState x:Name="DownloadNamingWide">
+                                                <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="980"/></VisualState.StateTriggers>
+                                            </VisualState>
+                                            <VisualState x:Name="DownloadNamingNarrow">
+                                                <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="0"/></VisualState.StateTriggers>
+                                                <VisualState.Setters>
+                                                    <Setter Target="DownloadNamingColumn1.Width" Value="0"/>
+                                                    <Setter Target="DownloadNamingColumn2.Width" Value="0"/>
+                                                    <Setter Target="DownloadNamingSecondaryRow.Height" Value="Auto"/>
+                                                    <Setter Target="DownloadNamingThirdRow.Height" Value="Auto"/>
+                                                    <Setter Target="SubfolderTemplateBox.(Grid.Column)" Value="0"/>
+                                                    <Setter Target="SubfolderTemplateBox.(Grid.Row)" Value="1"/>
+                                                    <Setter Target="FileNameTemplateBox.(Grid.Column)" Value="0"/>
+                                                    <Setter Target="FileNameTemplateBox.(Grid.Row)" Value="2"/>
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                        </VisualStateGroup>
+                                    </VisualStateManager.VisualStateGroups>
+                                    <TextBox x:Name="MainFolderTemplateBox"
+                                             Header="视频主文件夹"
+                                             Text="{Binding MainFolderTemplate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             PlaceholderText="必填，例如 {视频标题}"
+                                             FontFamily="Consolas"
+                                             GotFocus="DownloadNamingTextBox_GotFocus"/>
+                                    <TextBox x:Name="SubfolderTemplateBox"
+                                             Grid.Column="1"
+                                             Header="子文件夹（可选）"
+                                             Text="{Binding SubfolderTemplate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             PlaceholderText="留空时不创建子文件夹"
+                                             FontFamily="Consolas"
+                                             GotFocus="DownloadNamingTextBox_GotFocus"/>
+                                    <TextBox x:Name="FileNameTemplateBox"
+                                             Grid.Column="2"
+                                             Header="文件名"
+                                             Text="{Binding FileNameTemplate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             PlaceholderText="必填，不包含扩展名"
+                                             FontFamily="Consolas"
+                                             GotFocus="DownloadNamingTextBox_GotFocus"/>
+                                </Grid>
+
+                                <Border Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="完整示例路径" Opacity="0.6" FontSize="12"/>
+                                        <TextBlock Text="{Binding PreviewPath}" FontFamily="Consolas" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding ValidationError}" Visibility="{Binding ErrorVisibility}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding WarningsText}" Visibility="{Binding WarningsVisibility}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
 
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="240"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                            <StackPanel Spacing="8">
-                                <ComboBox Header="字段分隔符" ItemsSource="{Binding SeparatorOptions}" DisplayMemberPath="Label" SelectedItem="{Binding SelectedSeparator, Mode=TwoWay}"/>
-                                <Button Content="应用字段编排" Click="ApplyFieldLayout_Click" IsEnabled="{Binding HasSelectedTemplate}"/>
-                                <Button Content="从当前规则重新读取" Click="ReadTemplateFields_Click" IsEnabled="{Binding HasSelectedTemplate}"/>
-                            </StackPanel>
-                            <Border Grid.Column="1" Padding="8" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                                <ListView ItemsSource="{Binding TemplateFields}" SelectionMode="None" MinHeight="260">
-                                    <ListView.ItemTemplate>
-                                        <DataTemplate x:DataType="x:String">
-                                            <Grid Padding="4" ColumnSpacing="6">
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                                <TextBlock Text="{x:Bind}" VerticalAlignment="Center"/>
-                                                <Button Grid.Column="1" Content="↑" Tag="{x:Bind}" Click="MoveFieldUp_Click"/>
-                                                <Button Grid.Column="2" Content="↓" Tag="{x:Bind}" Click="MoveFieldDown_Click"/>
-                                                <Button Grid.Column="3" Content="移除" Tag="{x:Bind}" Click="RemoveField_Click"/>
-                                            </Grid>
+                        <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            <StackPanel Spacing="12">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="支持的字段" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                    <TextBlock Text="先把光标放到主文件夹、子文件夹或文件名输入框，再点击字段卡片插入当前位置；不可用于当前组件的字段会自动禁用。" Opacity="0.65" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <ItemsControl ItemsSource="{Binding FieldGroups}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:DownloadNamingFieldGroup">
+                                            <StackPanel Spacing="7" Margin="0,0,0,10">
+                                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
+                                                    <ItemsControl ItemsSource="{x:Bind Fields}">
+                                                        <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><controls:VariableWrapPanel HorizontalSpacing="8" VerticalSpacing="8"/></ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="core:DownloadNamingField">
+                                                            <Button Content="{x:Bind Name}"
+                                                                    Tag="{x:Bind Name}"
+                                                                    Click="DownloadNamingField_Click"
+                                                                    Loaded="DownloadNamingField_Loaded"
+                                                                    Padding="12,6"
+                                                                    MinHeight="36"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
                                         </DataTemplate>
-                                    </ListView.ItemTemplate>
-                                </ListView>
-                            </Border>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                            <Button Content="恢复当前规则默认值" Click="RestoreDownloadNamingDefault_Click"/>
+                            <Button Content="保存下载规则" Click="SaveDownloadNaming_Click" IsEnabled="{Binding CanSave}" Style="{StaticResource AccentButtonStyle}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabViewItem>
+
+            <TabViewItem Header="影视重命名" IsClosable="False">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Padding="0,8,0,0" Spacing="12">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="影视重命名模板" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                <TextBlock Text="管理电影和剧集的文件名字段、顺序与分隔符" Opacity="0.65"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="返回重命名" Click="BackToRename_Click" VerticalAlignment="Center"/>
                         </Grid>
 
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalAlignment="Stretch"><StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                            <Button Content="设为当前模板" Click="SetActive_Click" IsEnabled="{Binding CanSetActive}"/>
-                            <Button Content="保存修改" Click="SaveChanges_Click" IsEnabled="{Binding CanSaveChanges}" Style="{StaticResource AccentButtonStyle}"/>
-                            <Button Content="另存为并应用" Click="SaveAs_Click" IsEnabled="{Binding CanSaveAs}"/>
-                            <Button Content="重命名" Click="RenameTemplate_Click" IsEnabled="{Binding CanRename}"/>
-                            <Button Content="删除" Click="DeleteTemplate_Click" IsEnabled="{Binding CanDelete}"/>
-                        </StackPanel></ScrollViewer>
+                        <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" IsClosable="False" Severity="{Binding MessageSeverity}" Message="{Binding Message}"/>
+
+                        <Grid x:Name="TemplateWorkspace" ColumnSpacing="12" RowSpacing="12">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition x:Name="EditorSecondaryRow" Height="0"/></Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions><ColumnDefinition x:Name="TemplateListColumn" Width="360"/><ColumnDefinition x:Name="TemplateEditorColumn" Width="*"/></Grid.ColumnDefinitions>
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup>
+                                    <VisualState x:Name="Wide"><VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="1050"/></VisualState.StateTriggers></VisualState>
+                                    <VisualState x:Name="Narrow">
+                                        <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="0"/></VisualState.StateTriggers>
+                                        <VisualState.Setters>
+                                            <Setter Target="TemplateListColumn.Width" Value="*"/>
+                                            <Setter Target="TemplateEditorColumn.Width" Value="0"/>
+                                            <Setter Target="EditorSecondaryRow.Height" Value="Auto"/>
+                                            <Setter Target="TemplateEditorCard.(Grid.Column)" Value="0"/>
+                                            <Setter Target="TemplateEditorCard.(Grid.Row)" Value="1"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+
+                            <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <StackPanel Spacing="8">
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="模板列表" Style="{StaticResource SubtitleTextBlockStyle}" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Content="新建模板" Click="CreateTemplate_Click"/>
+                                    </Grid>
+                                    <ComboBox x:Name="MediaTypeBox" Header="模板类型" ItemsSource="{Binding MediaTypeOptions}" SelectionChanged="MediaTypeBox_SelectionChanged"/>
+                                    <TextBlock Text="{Binding ActiveTemplateText}" Opacity="0.65"/>
+                                    <ListView x:Name="TemplateList" ItemsSource="{Binding Templates}" SelectionMode="Single" SelectionChanged="TemplateList_SelectionChanged" MinHeight="360">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:RenameTemplateListItem">
+                                                <StackPanel Padding="6" Spacing="3">
+                                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{x:Bind Description}" Opacity="0.6" FontSize="12"/>
+                                                    <TextBlock Text="{x:Bind Pattern}" Opacity="0.5" FontFamily="Consolas" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+
+                            <Border x:Name="TemplateEditorCard" Grid.Column="1" Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <StackPanel Spacing="12">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding SelectedTemplateTitle}" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                            <TextBlock Text="{Binding EditingHint}" Opacity="0.65" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="存在未保存修改" Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="{Binding UnsavedChangesVisibility}" VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <TextBox Header="模板规则" Text="{Binding TemplatePattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" IsEnabled="{Binding HasSelectedTemplate}"/>
+
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="示例文件名" Opacity="0.55" FontSize="12"/>
+                                        <TextBlock Text="{Binding TemplateExample}" FontFamily="Consolas" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+
+                                    <Border Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                        <StackPanel Spacing="8">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="支持的字段" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="选择一个字段，将它加入右侧的字段顺序" Opacity="0.6" FontSize="12"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Content="添加所选字段" Click="AddLayoutField_Click" IsEnabled="{Binding HasSelectedTemplate}" VerticalAlignment="Center"/>
+                                            </Grid>
+                                            <Grid x:Name="FieldPalette" RowSpacing="8" SizeChanged="FieldPalette_SizeChanged"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="240"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="8">
+                                            <ComboBox Header="字段分隔符" ItemsSource="{Binding SeparatorOptions}" DisplayMemberPath="Label" SelectedItem="{Binding SelectedSeparator, Mode=TwoWay}"/>
+                                            <Button Content="应用字段编排" Click="ApplyFieldLayout_Click" IsEnabled="{Binding HasSelectedTemplate}"/>
+                                            <Button Content="从当前规则重新读取" Click="ReadTemplateFields_Click" IsEnabled="{Binding HasSelectedTemplate}"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Padding="8" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                                            <ListView ItemsSource="{Binding TemplateFields}" SelectionMode="None" MinHeight="260">
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate x:DataType="x:String">
+                                                        <Grid Padding="4" ColumnSpacing="6">
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{x:Bind}" VerticalAlignment="Center"/>
+                                                            <Button Grid.Column="1" Content="↑" Tag="{x:Bind}" Click="MoveFieldUp_Click"/>
+                                                            <Button Grid.Column="2" Content="↓" Tag="{x:Bind}" Click="MoveFieldDown_Click"/>
+                                                            <Button Grid.Column="3" Content="移除" Tag="{x:Bind}" Click="RemoveField_Click"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                        </Border>
+                                    </Grid>
+
+                                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalAlignment="Stretch">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                            <Button Content="设为当前模板" Click="SetActive_Click" IsEnabled="{Binding CanSetActive}"/>
+                                            <Button Content="保存修改" Click="SaveChanges_Click" IsEnabled="{Binding CanSaveChanges}" Style="{StaticResource AccentButtonStyle}"/>
+                                            <Button Content="另存为并应用" Click="SaveAs_Click" IsEnabled="{Binding CanSaveAs}"/>
+                                            <Button Content="重命名" Click="RenameTemplate_Click" IsEnabled="{Binding CanRename}"/>
+                                            <Button Content="删除" Click="DeleteTemplate_Click" IsEnabled="{Binding CanDelete}"/>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
                     </StackPanel>
-                </Border>
-            </Grid>
-        </StackPanel>
-    </ScrollViewer>
+                </ScrollViewer>
+            </TabViewItem>
+        </TabView>
+    </Grid>
 </Page>

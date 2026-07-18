@@ -3,6 +3,7 @@ using BBDownForWindows.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace BBDownForWindows.App.Pages;
@@ -13,38 +14,119 @@ public sealed partial class RenameTemplatesPage : Page
     private readonly List<ToggleButton> _fieldButtons = [];
     private string? _selectedField;
     private double _fieldPaletteWidth;
+    private TextBox? _activeDownloadNamingTextBox;
 
     public RenameTemplatesPage()
     {
-        ViewModel = new RenameTemplatesViewModel(((App)Application.Current).Services);
+        var services = ((App)Application.Current).Services;
+        ViewModel = new RenameTemplatesViewModel(services);
+        DownloadNamingViewModel = new DownloadNamingViewModel(services);
         InitializeComponent();
     }
 
     public RenameTemplatesViewModel ViewModel { get; }
+    public DownloadNamingViewModel DownloadNamingViewModel { get; }
+    public bool HasUnsavedChanges => ViewModel.HasUnsavedChanges || DownloadNamingViewModel.HasUnsavedChanges;
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        await DownloadNamingViewModel.InitializeAsync(e.Parameter as DownloadNamingNavigationContext);
         await ViewModel.InitializeAsync(e.Parameter as RenameTemplatesNavigationContext);
+        RuleTabs.SelectedIndex = e.Parameter is RenameTemplatesNavigationContext ? 1 : 0;
         SyncSelectionControls();
+        SyncDownloadNamingControls();
         RebuildFieldPalette(FieldPalette.ActualWidth, true);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _activeDownloadNamingTextBox = MainFolderTemplateBox;
+            UpdateDownloadFieldButtons();
+        });
     }
 
     public async Task<bool> ConfirmDiscardChangesAsync()
     {
-        if (!ViewModel.HasUnsavedChanges) return true;
+        if (!HasUnsavedChanges) return true;
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "放弃未保存的模板修改？",
-            Content = "当前模板规则已经修改，但尚未保存。继续操作会丢弃这些修改。",
+            Title = "放弃未保存的命名规则？",
+            Content = "当前下载命名或影视重命名规则已经修改，但尚未保存。继续操作会丢弃这些修改。",
             PrimaryButtonText = "放弃修改",
             CloseButtonText = "继续编辑",
             DefaultButton = ContentDialogButton.Close
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return false;
         ViewModel.DiscardChanges();
+        DownloadNamingViewModel.DiscardChanges();
+        SyncDownloadNamingControls();
         return true;
+    }
+
+    private void RuleTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (RuleTabs.SelectedIndex == 1)
+            DispatcherQueue.TryEnqueue(() => RebuildFieldPalette(FieldPalette.ActualWidth, true));
+    }
+
+    private void SingleProfile_Click(object sender, RoutedEventArgs e)
+    {
+        DownloadNamingViewModel.ChangeProfile(DownloadNamingProfileKind.SingleVideo);
+        SyncDownloadNamingControls();
+    }
+
+    private void MultiProfile_Click(object sender, RoutedEventArgs e)
+    {
+        DownloadNamingViewModel.ChangeProfile(DownloadNamingProfileKind.MultiEpisode);
+        SyncDownloadNamingControls();
+    }
+
+    private void DownloadNamingTextBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        _activeDownloadNamingTextBox = sender as TextBox;
+        UpdateDownloadFieldButtons();
+    }
+
+    private void DownloadNamingField_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string fieldName }) return;
+        var target = _activeDownloadNamingTextBox ?? FileNameTemplateBox;
+        var section = GetSection(target);
+        var field = DownloadNamingViewModel.FieldGroups.SelectMany(group => group.Fields)
+            .FirstOrDefault(item => item.Name == fieldName);
+        if (field is null || !field.Sections.HasFlag(section)) return;
+
+        var start = Math.Clamp(target.SelectionStart, 0, target.Text.Length);
+        var length = Math.Clamp(target.SelectionLength, 0, target.Text.Length - start);
+        target.Text = target.Text.Remove(start, length).Insert(start, field.Token);
+        target.Focus(FocusState.Programmatic);
+        target.SelectionStart = start + field.Token.Length;
+        target.SelectionLength = 0;
+    }
+
+    private void DownloadNamingField_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || _activeDownloadNamingTextBox is null) return;
+        UpdateDownloadFieldButton(button, GetSection(_activeDownloadNamingTextBox));
+    }
+
+    private async void SaveDownloadNaming_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await DownloadNamingViewModel.SaveAsync();
+            SyncDownloadNamingControls();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            DownloadNamingViewModel.ReportError(exception);
+        }
+    }
+
+    private void RestoreDownloadNamingDefault_Click(object sender, RoutedEventArgs e)
+    {
+        DownloadNamingViewModel.RestoreCurrentDefault();
+        SyncDownloadNamingControls();
     }
 
     private async void MediaTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -234,5 +316,50 @@ public sealed partial class RenameTemplatesPage : Page
         MediaTypeBox.SelectedIndex = ViewModel.MediaType == RenameMediaType.Movie ? 1 : 0;
         TemplateList.SelectedItem = ViewModel.SelectedItem;
         _syncingSelection = false;
+    }
+
+    private void SyncDownloadNamingControls()
+    {
+        SingleProfileButton.IsChecked = DownloadNamingViewModel.ProfileKind == DownloadNamingProfileKind.SingleVideo;
+        MultiProfileButton.IsChecked = DownloadNamingViewModel.ProfileKind == DownloadNamingProfileKind.MultiEpisode;
+        UpdateDownloadFieldButtons();
+    }
+
+    private void UpdateDownloadFieldButtons()
+    {
+        if (_activeDownloadNamingTextBox is null) return;
+        var section = GetSection(_activeDownloadNamingTextBox);
+        var supported = DownloadNamingViewModel.FieldGroups.SelectMany(group => group.Fields)
+            .ToDictionary(field => field.Name, StringComparer.Ordinal);
+        foreach (var button in Descendants(RuleTabs).OfType<Button>())
+        {
+            if (button.Tag is string name && supported.ContainsKey(name)) UpdateDownloadFieldButton(button, section);
+        }
+    }
+
+    private void UpdateDownloadFieldButton(Button button, DownloadNamingFieldSections section)
+    {
+        if (button.Tag is not string name) return;
+        var field = DownloadNamingViewModel.FieldGroups.SelectMany(group => group.Fields)
+            .FirstOrDefault(item => item.Name == name);
+        if (field is null) return;
+        button.IsEnabled = field.Sections.HasFlag(section);
+        ToolTipService.SetToolTip(button, button.IsEnabled ? $"插入 {field.Token}" : "当前名称组件不支持此字段");
+    }
+
+    private DownloadNamingFieldSections GetSection(TextBox textBox) =>
+        ReferenceEquals(textBox, MainFolderTemplateBox) ? DownloadNamingFieldSections.MainFolder :
+        ReferenceEquals(textBox, SubfolderTemplateBox) ? DownloadNamingFieldSections.Subfolder :
+        DownloadNamingFieldSections.FileName;
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var index = 0; index < count; index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            yield return child;
+            foreach (var descendant in Descendants(child)) yield return descendant;
+        }
     }
 }

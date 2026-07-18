@@ -17,7 +17,7 @@ public sealed class StoreTests
             var settings = await new SettingsStore(paths).LoadAsync();
             Assert.Equal("1080P", settings.Quality);
             Assert.Equal("1080P 高清", settings.VideoQualityRule);
-            Assert.Equal(3, settings.SchemaVersion);
+            Assert.Equal(4, settings.SchemaVersion);
             Assert.Equal(DownloadMode.AudioOnly, settings.DownloadMode);
             Assert.Equal(AudioBitratePriority.Highest, settings.AudioBitratePriority);
             Assert.Equal(AppThemeMode.System, settings.ThemeMode);
@@ -386,4 +386,60 @@ public sealed class StoreTests
         Assert.Empty(new HistoryRecord().SpecificationTags);
         Assert.DoesNotContain("specificationTags", System.Text.Json.JsonSerializer.Serialize(download), StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void HistoryRecordProvidesLocalizedTaskTypeWithoutPersistingIt()
+    {
+        var download = new HistoryRecord { TaskType = TaskKind.Download };
+        var batch = new HistoryRecord { TaskType = TaskKind.DownloadBatch };
+        var dualAudio = new HistoryRecord { TaskType = TaskKind.DualAudioMux };
+
+        Assert.Equal("普通下载", download.TaskTypeText);
+        Assert.Equal("批量下载", batch.TaskTypeText);
+        Assert.Equal("多音轨封装", dualAudio.TaskTypeText);
+        Assert.DoesNotContain("taskTypeText", System.Text.Json.JsonSerializer.Serialize(download), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BatchHistorySummarizesUniformAndMixedStreamSpecifications()
+    {
+        var uniform = new HistoryRecord
+        {
+            TaskType = TaskKind.DownloadBatch,
+            DownloadBatch = new DownloadBatchHistory
+            {
+                Options = new DownloadRequest { Url = "ss1", DownloadMode = DownloadMode.VideoAndAudio },
+                Episodes =
+                [
+                    BatchEpisode(1, "360P 流畅", "640x268", "AV1", "M4A", 65),
+                    BatchEpisode(2, "360P 流畅", "640x268", "AV1", "M4A", 65)
+                ]
+            }
+        };
+        var mixed = new HistoryRecord
+        {
+            TaskType = TaskKind.DownloadBatch,
+            DownloadBatch = new DownloadBatchHistory
+            {
+                Options = new DownloadRequest { Url = "ss1", DownloadMode = DownloadMode.VideoAndAudio },
+                Episodes =
+                [
+                    BatchEpisode(1, "1080P 高清", "1920x1080", "HEVC", "M4A", 192),
+                    BatchEpisode(2, "HDR 真彩", "1920x1080", "HEVC", "E-AC-3", 384)
+                ]
+            }
+        };
+
+        Assert.Equal(["2 集", "成功 2", "360P 流畅 · 640×268", "AV1", "M4A · 65kbps", "视频+音频"], uniform.SpecificationTags);
+        Assert.Equal(["2 集", "成功 2", "多种视频规格", "多种音频规格", "视频+音频"], mixed.SpecificationTags);
+    }
+
+    private static DownloadEpisodeResult BatchEpisode(int page, string quality, string resolution, string codec,
+        string audioCodec, int audioBitrate) => new()
+    {
+        PageNumber = page,
+        State = DownloadEpisodeResultState.Completed,
+        Video = new VideoStreamSelection(quality, resolution, codec, 1000),
+        Audio = new AudioStreamSelection(audioCodec, audioBitrate)
+    };
 }

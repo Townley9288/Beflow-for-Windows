@@ -61,7 +61,16 @@ public sealed class DownloadHistoryDetailViewModel : ObservableObject
             Timestamp = Record.Timestamp,
             OutputDirectory = Record.OutputDirectory,
             OutputFiles = Record.OutputFiles,
-            DownloadBatch = new DownloadBatchHistory { Options = batch.Options, ParsedAt = batch.ParsedAt, Episodes = failed }
+            DownloadBatch = new DownloadBatchHistory
+            {
+                Options = batch.Options,
+                ParsedAt = batch.ParsedAt,
+                DownloadedAt = batch.DownloadedAt,
+                TotalPages = batch.TotalPages,
+                NamingProfileKind = batch.NamingProfileKind,
+                NamingProfile = (batch.NamingProfile ?? DownloadNamingProfile.Default()).Clone(),
+                Episodes = failed
+            }
         };
     }
 }

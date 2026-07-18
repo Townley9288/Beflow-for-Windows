@@ -20,7 +20,8 @@ public sealed class AppServices
         TaskManager = new TaskManager(paths, ProcessRunner);
         TaskConsole = new ViewModels.TaskConsoleViewModel(TaskManager);
         BilibiliMetadata = new BilibiliMetadataService(HttpClient);
-        BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata);
+        DownloadNaming = new DownloadNamingService();
+        BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata, DownloadNaming);
         DualAudio = new DualAudioService(paths, BBDown, ProcessRunner, Settings, ToolLocator);
         Tmdb = new TmdbService(RenameSettings);
         Rename = new RenameService(ProcessRunner, ToolLocator, Settings, RenameHistory);
@@ -43,6 +44,7 @@ public sealed class AppServices
     public ITaskManager TaskManager { get; }
     public ViewModels.TaskConsoleViewModel TaskConsole { get; }
     public IBilibiliMetadataService BilibiliMetadata { get; }
+    public IDownloadNamingService DownloadNaming { get; }
     public IBBDownService BBDown { get; }
     public IDualAudioService DualAudio { get; }
     public ITmdbService Tmdb { get; }

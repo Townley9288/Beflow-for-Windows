@@ -188,6 +188,10 @@ public sealed class DownloadSelectionTests
         var downloads = runner.Requests.Where(item => item.Arguments.Contains("--interactive")).ToList();
         Assert.Equal(2, downloads.Count);
         Assert.All(downloads, item => Assert.Equal("1\n2\n", item.StandardInput));
+        Assert.Contains(Path.Combine("测试合集", "[P01]第一集"), downloads[0].Arguments);
+        Assert.Contains(Path.Combine("测试合集", "[P02]第二集"), downloads[1].Arguments);
+        Assert.Equal(Path.Combine(output.FullName, "测试合集"), batch.OutputDirectory);
+        Assert.Contains(batch.OutputFiles, path => path.EndsWith(Path.Combine("测试合集", "[P01]第一集.mp4"), StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -201,8 +205,14 @@ public sealed class DownloadSelectionTests
 
         Assert.Equal("普通视频", ugc!.Title);
         Assert.StartsWith("https://", ugc.CoverUrl);
+        Assert.Equal("123", ugc.Aid);
+        Assert.Equal("456", ugc.OwnerId);
+        Assert.NotNull(ugc.FindEpisode("11"));
         Assert.Equal("番剧", pgc!.Title);
         Assert.Equal("出品方", pgc.OwnerName);
+        Assert.Equal("456", pgc.SeasonId);
+        Assert.Equal("999", pgc.OwnerId);
+        Assert.Equal("ep789", "ep" + pgc.FindEpisode("22")!.EpisodeId);
     }
 
     [Fact]
@@ -285,9 +295,12 @@ public sealed class DownloadSelectionTests
                 if (page != FailDownloadPage)
                 {
                     var workIndex = request.Arguments.ToList().IndexOf("--work-dir");
+                    var patternIndex = request.Arguments.ToList().IndexOf("-M");
                     var directory = request.Arguments[workIndex + 1];
-                    Directory.CreateDirectory(directory);
-                    File.WriteAllText(Path.Combine(directory, $"[P{page:00}]第{page}集.mp4"), "video");
+                    var relative = patternIndex >= 0 ? request.Arguments[patternIndex + 1] : $"[P{page:00}]第{page}集";
+                    var target = Path.Combine(directory, relative + ".mp4");
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    File.WriteAllText(target, "video");
                     onOutput?.Invoke("[#aaaa11 100MiB/100MiB(100%) CN:8 DL:10MiB ETA:0s]\n");
                 }
                 return Task.FromResult(new ProcessResult(page == FailDownloadPage ? 1 : 0, string.Empty, false));
@@ -333,8 +346,8 @@ public sealed class DownloadSelectionTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var json = request.RequestUri!.AbsolutePath.Contains("pgc/view", StringComparison.Ordinal)
-                ? """{"code":0,"result":{"title":"番剧","cover":"https://cover/pgc.jpg","season_id":456,"up_info":{"uname":"出品方","avatar":"https://face/pgc.jpg"}}}"""
-                : """{"code":0,"data":{"title":"普通视频","pic":"http://cover/ugc.jpg","bvid":"BV1TEST","owner":{"name":"UP主","face":"https://face/ugc.jpg"}}}""";
+                ? """{"code":0,"result":{"title":"番剧","cover":"https://cover/pgc.jpg","season_id":456,"publish":{"pub_time":"2026-01-01"},"up_info":{"uname":"出品方","mid":999,"avatar":"https://face/pgc.jpg"},"episodes":[{"cid":22,"aid":123,"bvid":"BV1EP","id":789,"pub_time":1767225600}]}}"""
+                : """{"code":0,"data":{"title":"普通视频","pic":"http://cover/ugc.jpg","aid":123,"bvid":"BV1TEST","pubdate":1767225600,"owner":{"name":"UP主","mid":456,"face":"https://face/ugc.jpg"},"pages":[{"cid":11,"page":1,"part":"第一集"}]}}""";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
         }
     }

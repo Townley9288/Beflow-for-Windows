@@ -3,9 +3,11 @@ using System.Text.RegularExpressions;
 
 namespace BBDownForWindows.Core;
 
-public sealed class BBDownService(ApplicationPaths paths, IProcessRunner processRunner, IToolLocator toolLocator, ISettingsStore settingsStore, IBilibiliMetadataService? metadataService = null) : IBBDownService
+public sealed class BBDownService(ApplicationPaths paths, IProcessRunner processRunner, IToolLocator toolLocator, ISettingsStore settingsStore,
+    IBilibiliMetadataService? metadataService = null, IDownloadNamingService? downloadNamingService = null) : IBBDownService
 {
     private readonly BBDownRuntimeManager _runtimeManager = new(paths);
+    private readonly IDownloadNamingService _downloadNaming = downloadNamingService ?? new DownloadNamingService();
 
     public async Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken)
     {
@@ -36,6 +38,8 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"BBDown 信息解析失败，退出码 {result.ExitCode}");
         if (parser.Episodes.Count == 0) throw new InvalidOperationException("没有解析到可下载的分集");
         var metadata = await metadataTask;
+        if (metadataService is not null && metadata is null)
+            context.AppendLog("B 站公开元数据暂不可用，命名规则中的账号、编号或发布时间字段可能留空。\n");
         var title = !string.IsNullOrWhiteSpace(parser.Title) ? parser.Title : metadata?.Title ?? string.Empty;
         return new DownloadCatalog
         {
@@ -58,9 +62,28 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var baseDirectory = string.IsNullOrWhiteSpace(request.Options.WorkDirectory)
             ? (await settingsStore.LoadAsync(cancellationToken)).WorkDirectory
             : request.Options.WorkDirectory;
-        var outputDirectory = ResolveTitleDirectory(baseDirectory, title);
+        if (string.IsNullOrWhiteSpace(baseDirectory)) throw new InvalidOperationException("请先设置下载目录");
+        baseDirectory = Path.GetFullPath(baseDirectory);
+        Directory.CreateDirectory(baseDirectory);
+        var profile = (request.NamingProfile ?? DownloadNamingProfile.Default()).Clone();
+        var profileKind = request.NamingProfileKind;
+        var first = request.Episodes[0];
+        var outputDirectory = _downloadNaming.ResolveMainDirectory(new DownloadNamingContext
+        {
+            RootDirectory = baseDirectory,
+            SourceUrl = request.Options.Url,
+            VideoTitle = title,
+            Page = new PageInfo(first.PageNumber, string.Empty, first.PageTitle, string.Empty),
+            Profile = profile,
+            ProfileKind = profileKind,
+            TotalPages = Math.Max(request.TotalPages, request.Episodes.Count),
+            DownloadMode = request.Options.DownloadMode,
+            ApiMode = request.Options.ApiMode,
+            DownloadedAt = request.DownloadedAt,
+            Metadata = request.Metadata
+        });
         Directory.CreateDirectory(outputDirectory);
-        context.AppendLog($"输出文件夹: {outputDirectory}\n");
+        context.AppendLog($"输出主文件夹: {outputDirectory}\n");
 
         var episodeResults = request.Episodes.Select(item => new DownloadEpisodeResult
         {
@@ -69,9 +92,11 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             State = DownloadEpisodeResultState.Pending,
             Video = item.Video,
             Audio = item.Audio,
-            FallbackReason = item.FallbackReason
+            FallbackReason = item.FallbackReason,
+            RelativeOutputPath = item.RelativeOutputPath
         }).ToList();
         var allFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var reservedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var completed = 0;
         var cancelled = false;
 
@@ -90,13 +115,37 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                 episodeResult.Audio = decision.Audio is null ? null : new AudioStreamSelection(decision.Audio.Codec, decision.Audio.BitrateKbps, desired.Audio?.IsManual == true);
                 episodeResult.FallbackReason = decision.FallbackReason;
 
+                var outputPlan = _downloadNaming.BuildPlan(new DownloadNamingContext
+                {
+                    RootDirectory = baseDirectory,
+                    SourceUrl = request.Options.Url,
+                    VideoTitle = title,
+                    Page = current.Page,
+                    Profile = profile,
+                    ProfileKind = profileKind,
+                    TotalPages = Math.Max(request.TotalPages, request.Episodes.Count),
+                    DownloadMode = request.Options.DownloadMode,
+                    ApiMode = request.Options.ApiMode,
+                    DownloadedAt = request.DownloadedAt,
+                    Metadata = request.Metadata,
+                    Video = decision.Video,
+                    Audio = decision.Audio,
+                    PreferredRelativePath = desired.RelativeOutputPath,
+                    AllowPartialReuse = !string.IsNullOrWhiteSpace(desired.RelativeOutputPath)
+                }, reservedPaths);
+                Directory.CreateDirectory(outputPlan.LeafDirectory);
+                episodeResult.RelativeOutputPath = outputPlan.RelativePath;
+                episodeResult.OutputDirectory = outputPlan.LeafDirectory;
+                foreach (var warning in outputPlan.Warnings) context.AppendLog($"P{desired.PageNumber} 命名提示：{warning}\n");
+                context.AppendLog($"P{desired.PageNumber} 输出: {outputPlan.RelativePath}\n");
+
                 var part = Clone(request.Options);
                 part.Pages = desired.PageNumber.ToString();
                 part.Season = false;
-                part.WorkDirectory = outputDirectory;
+                part.WorkDirectory = baseDirectory;
                 part.OrganizeInTitleDirectory = false;
                 part.TitleHint = title;
-                if (string.IsNullOrWhiteSpace(part.MultiFilePattern)) part.MultiFilePattern = "[P<pageNumberWithZero>]<pageTitle>";
+                part.MultiFilePattern = outputPlan.RelativePath;
                 if (part.UseAria2c)
                 {
                     var largestStream = Math.Max(decision.Video?.EstimatedSizeBytes ?? 0, decision.Audio?.EstimatedSizeBytes ?? 0);
@@ -105,7 +154,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                 }
                 var arguments = BBDownCommandBuilder.BuildExactDownloadArguments(part, tools);
                 var input = BuildExactInput(decision.Video, decision.Audio, part.DownloadMode);
-                var before = SnapshotDirectory(outputDirectory);
+                var before = SnapshotDirectory(outputPlan.LeafDirectory);
                 var aria = new Aria2ProgressParser();
                 var internalProgress = new BBDownInternalProgressParser(
                     decision.Video?.EstimatedSizeBytes ?? 0,
@@ -138,7 +187,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                     shouldLog: line => part.UseAria2c || !BBDownInternalProgressParser.IsProgressOutput(line));
                 if (process.Cancelled || cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
                 if (process.ExitCode != 0) throw new InvalidOperationException($"BBDown 下载失败，退出码 {process.ExitCode}");
-                episodeResult.OutputFiles = FindChangedFiles(outputDirectory, before).ToList();
+                episodeResult.OutputFiles = FindChangedFiles(outputPlan.LeafDirectory, before).ToList();
                 foreach (var file in episodeResult.OutputFiles) allFiles.Add(file);
                 episodeResult.State = DownloadEpisodeResultState.Completed;
                 completed++;
@@ -170,12 +219,18 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         progress?.Report(new DownloadProgressSnapshot(finalPhase, completed, request.Episodes.Count, 0, string.Empty,
             request.Episodes.Count == 0 ? 0 : completed * 100d / request.Episodes.Count, null, string.Empty, string.Empty,
             cancelled ? "下载任务已取消" : "批量下载完成"));
+        var videoDirectories = allFiles.Where(DownloadFileKinds.IsVideoFile)
+            .Select(Path.GetDirectoryName)
+            .Where(directory => !string.IsNullOrWhiteSpace(directory))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         return new DownloadBatchResult
         {
             Title = title,
             OutputDirectory = outputDirectory,
             Episodes = episodeResults,
-            OutputFiles = allFiles.Order(StringComparer.OrdinalIgnoreCase).ToList()
+            OutputFiles = allFiles.Order(StringComparer.OrdinalIgnoreCase).ToList(),
+            RenameDirectory = videoDirectories.Count == 1 ? videoDirectories[0]! : string.Empty
         };
     }
 
@@ -404,7 +459,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return new Dictionary<string, FileStamp>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            return new DirectoryInfo(directory).EnumerateFiles()
+            return new DirectoryInfo(directory).EnumerateFiles("*", SearchOption.AllDirectories)
                 .ToDictionary(file => file.FullName, file => new FileStamp(file.Length, file.LastWriteTimeUtc.Ticks), StringComparer.OrdinalIgnoreCase);
         }
         catch (IOException) { return new Dictionary<string, FileStamp>(StringComparer.OrdinalIgnoreCase); }
@@ -416,7 +471,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return [];
         try
         {
-            return new DirectoryInfo(directory).EnumerateFiles()
+            return new DirectoryInfo(directory).EnumerateFiles("*", SearchOption.AllDirectories)
                 .Where(file => !before.TryGetValue(file.FullName, out var previous) || previous.Length != file.Length || previous.LastWriteTicks != file.LastWriteTimeUtc.Ticks)
                 .OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(file => file.FullName)

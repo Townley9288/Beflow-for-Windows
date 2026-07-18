@@ -46,9 +46,12 @@ public sealed partial class DownloadPage : Page
     private void GoRename_Click(object sender, RoutedEventArgs e)
     {
         var result = ViewModel.LastDownloadResult;
-        if (result is null || string.IsNullOrWhiteSpace(result.OutputDirectory)) return;
-        ((App)Application.Current).MainWindow.Navigate("rename", new RenameNavigationContext(result.OutputDirectory, result.OutputFiles, result.Title));
+        if (result is null || string.IsNullOrWhiteSpace(result.RenameDirectory)) return;
+        ((App)Application.Current).MainWindow.Navigate("rename", new RenameNavigationContext(result.RenameDirectory, result.OutputFiles, result.Title));
     }
+
+    private void ManageNamingRules_Click(object sender, RoutedEventArgs e) =>
+        ((App)Application.Current).MainWindow.Navigate("rename-templates", new DownloadNamingNavigationContext(ViewModel.ActiveNamingProfileKind));
 
     private void DownloadNotification_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
 

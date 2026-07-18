@@ -69,6 +69,15 @@ public interface IBilibiliMetadataService
     Task<BilibiliVideoMetadata?> GetAsync(string url, CancellationToken cancellationToken = default);
 }
 
+public interface IDownloadNamingService
+{
+    IReadOnlyList<DownloadNamingField> Fields { get; }
+    DownloadNamingValidationResult Validate(DownloadNamingProfile profile);
+    DownloadNamingPreview Preview(DownloadNamingProfile profile, DownloadNamingProfileKind kind, string rootDirectory);
+    string ResolveMainDirectory(DownloadNamingContext context);
+    DownloadOutputPlan BuildPlan(DownloadNamingContext context, ISet<string> reservedPaths);
+}
+
 public interface ITmdbService
 {
     Task ValidateApiKeyAsync(CancellationToken cancellationToken = default);

@@ -14,12 +14,33 @@ public enum DownloadEpisodeResultState { Pending, Validating, Downloading, Muxin
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DownloadProgressPhase { Validating, Downloading, Muxing, Completed, Failed, Cancelled }
 
-public sealed record BilibiliVideoMetadata(
-    string Title,
-    string CoverUrl,
-    string OwnerName,
-    string OwnerAvatarUrl,
-    string CanonicalUrl);
+public sealed class BilibiliVideoMetadata
+{
+    public string Title { get; init; } = string.Empty;
+    public string CoverUrl { get; init; } = string.Empty;
+    public string OwnerName { get; init; } = string.Empty;
+    public string OwnerId { get; init; } = string.Empty;
+    public string OwnerAvatarUrl { get; init; } = string.Empty;
+    public string CanonicalUrl { get; init; } = string.Empty;
+    public string ResourceType { get; init; } = string.Empty;
+    public string Aid { get; init; } = string.Empty;
+    public string Bvid { get; init; } = string.Empty;
+    public string SeasonId { get; init; } = string.Empty;
+    public string SourceEpisodeId { get; init; } = string.Empty;
+    public DateTimeOffset? PublishedAt { get; init; }
+    public IReadOnlyDictionary<string, BilibiliEpisodeMetadata> EpisodesByCid { get; init; } =
+        new Dictionary<string, BilibiliEpisodeMetadata>(StringComparer.OrdinalIgnoreCase);
+
+    public BilibiliEpisodeMetadata? FindEpisode(string cid) =>
+        !string.IsNullOrWhiteSpace(cid) && EpisodesByCid.TryGetValue(cid, out var episode) ? episode : null;
+}
+
+public sealed record BilibiliEpisodeMetadata(
+    string Cid,
+    string Aid,
+    string Bvid,
+    string EpisodeId,
+    DateTimeOffset? PublishedAt);
 
 public sealed record DownloadParseRequest(string Url, DownloadParseMode Mode, string ApiMode = "WEB", string Pages = "");
 
@@ -81,6 +102,7 @@ public sealed class EpisodeStreamSelection
     public VideoStreamSelection? Video { get; set; }
     public AudioStreamSelection? Audio { get; set; }
     public string FallbackReason { get; set; } = string.Empty;
+    public string RelativeOutputPath { get; set; } = string.Empty;
 }
 
 public sealed class DownloadBatchRequest
@@ -88,6 +110,11 @@ public sealed class DownloadBatchRequest
     public required DownloadRequest Options { get; init; }
     public string Title { get; init; } = string.Empty;
     public DateTimeOffset ParsedAt { get; init; } = DateTimeOffset.Now;
+    public DateTimeOffset DownloadedAt { get; init; } = DateTimeOffset.Now;
+    public int TotalPages { get; init; } = 1;
+    public DownloadNamingProfileKind NamingProfileKind { get; init; }
+    public DownloadNamingProfile NamingProfile { get; init; } = DownloadNamingProfile.Default();
+    public BilibiliVideoMetadata? Metadata { get; init; }
     public List<EpisodeStreamSelection> Episodes { get; init; } = [];
 }
 
@@ -100,6 +127,8 @@ public sealed class DownloadEpisodeResult
     public AudioStreamSelection? Audio { get; set; }
     public string FallbackReason { get; set; } = string.Empty;
     public string Error { get; set; } = string.Empty;
+    public string RelativeOutputPath { get; set; } = string.Empty;
+    public string OutputDirectory { get; set; } = string.Empty;
     public List<string> OutputFiles { get; set; } = [];
     [JsonIgnore] public string PageText => $"P{PageNumber}";
     [JsonIgnore] public string VideoText => Video?.DisplayName ?? "—";
@@ -122,6 +151,7 @@ public sealed class DownloadBatchResult
     public string OutputDirectory { get; init; } = string.Empty;
     public List<DownloadEpisodeResult> Episodes { get; init; } = [];
     public List<string> OutputFiles { get; init; } = [];
+    public string RenameDirectory { get; init; } = string.Empty;
     [JsonIgnore] public bool HasVideo => OutputFiles.Any(DownloadFileKinds.IsVideoFile);
 }
 
@@ -141,6 +171,10 @@ public sealed class DownloadBatchHistory
 {
     public DownloadRequest Options { get; set; } = new() { Url = string.Empty };
     public DateTimeOffset ParsedAt { get; set; }
+    public DateTimeOffset DownloadedAt { get; set; }
+    public int TotalPages { get; set; } = 1;
+    public DownloadNamingProfileKind NamingProfileKind { get; set; }
+    public DownloadNamingProfile NamingProfile { get; set; } = DownloadNamingProfile.Default();
     public List<DownloadEpisodeResult> Episodes { get; set; } = [];
 }
 

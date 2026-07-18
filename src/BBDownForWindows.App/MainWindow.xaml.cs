@@ -54,9 +54,13 @@ public sealed partial class MainWindow : Window
     public async void Navigate(string tag, object? parameter = null)
     {
         if (_navigationInProgress) return;
+        var navigationParameter = tag == "rename-history" && parameter is null
+            ? new Pages.HistoryNavigationContext(Pages.HistorySection.Renames)
+            : parameter;
         var resolvedTag = tag switch
         {
-            "dual" or "rename" or "rename-templates" or "rename-history" or "history" or "history-detail" or "settings" or "about" or "download" => tag,
+            "rename-history" => "history",
+            "dual" or "rename" or "rename-templates" or "history" or "history-detail" or "settings" or "about" or "download" => tag,
             _ => "download"
         };
         if (parameter is null && string.Equals(resolvedTag, _currentNavigationTag, StringComparison.Ordinal))
@@ -80,14 +84,13 @@ public sealed partial class MainWindow : Window
                 "dual" => typeof(Pages.DualAudioPage),
                 "rename" => typeof(Pages.RenamePage),
                 "rename-templates" => typeof(Pages.RenameTemplatesPage),
-                "rename-history" => typeof(Pages.RenameHistoryPage),
                 "history" => typeof(Pages.HistoryPage),
                 "history-detail" => typeof(Pages.DownloadHistoryDetailPage),
                 "settings" => typeof(Pages.SettingsPage),
                 "about" => typeof(Pages.AboutPage),
                 _ => typeof(Pages.DownloadPage)
             };
-            if (!ContentFrame.Navigate(page, parameter)) return;
+            if (!ContentFrame.Navigate(page, navigationParameter)) return;
             _currentNavigationTag = resolvedTag;
             SelectNavigationItem(resolvedTag == "history-detail" ? "history" : resolvedTag);
         }
@@ -185,7 +188,7 @@ public sealed partial class MainWindow : Window
         if (_forceClosing) return;
         var manager = ((App)Application.Current).Services.TaskManager;
         var templatePage = ContentFrame.Content as Pages.RenameTemplatesPage;
-        var hasUnsavedTemplate = templatePage?.ViewModel.HasUnsavedChanges == true;
+        var hasUnsavedTemplate = templatePage?.HasUnsavedChanges == true;
         var hasRunningTask = manager.ActiveTask?.State == Core.TaskState.Running;
         if (hasUnsavedTemplate || hasRunningTask)
         {

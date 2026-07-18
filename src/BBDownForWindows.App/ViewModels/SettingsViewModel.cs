@@ -208,7 +208,7 @@ public sealed class SettingsViewModel : ObservableObject
         await _services.Settings.UpdateAsync(current =>
         {
             var snapshot = current.Clone();
-            snapshot.SchemaVersion = 3;
+            snapshot.SchemaVersion = 4;
             update(snapshot);
             snapshot.ThemeMode = current.ThemeMode;
             return snapshot;

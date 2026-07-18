@@ -42,7 +42,7 @@ public sealed record AccountStatusSnapshot(AccountChannelStatus Web, AccountChan
 
 public sealed class AppSettings
 {
-    private int _schemaVersion = 3;
+    private int _schemaVersion = 4;
     [JsonIgnore] private bool _schemaVersionSpecified;
     [JsonPropertyName("schemaVersion")]
     public int SchemaVersion
@@ -110,6 +110,7 @@ public sealed class AppSettings
     [JsonPropertyName("aria2MinSplitSize")] public int Aria2MinSplitSize { get; set; } = 5;
     [JsonPropertyName("mkvmergePath")] public string MkvmergePath { get; set; } = string.Empty;
     [JsonPropertyName("checkUpdatesOnStartup")] public bool CheckUpdatesOnStartup { get; set; } = true;
+    [JsonPropertyName("downloadNaming")] public DownloadNamingSettings DownloadNaming { get; set; } = new();
 
     public void EnsureCurrentSchema()
     {
@@ -120,10 +121,17 @@ public sealed class AppSettings
         if (Encoding is not ("AVC" or "HEVC" or "AV1")) Encoding = "AVC";
         var knownAudio = new[] { "auto", "E-AC-3", "M4A", "FLAC", "AC-3", "DTS" };
         if (!knownAudio.Contains(AudioCodec, StringComparer.OrdinalIgnoreCase)) AudioCodec = "auto";
-        SchemaVersion = 3;
+        DownloadNaming ??= new DownloadNamingSettings();
+        DownloadNaming.EnsureDefaults();
+        SchemaVersion = 4;
     }
 
-    public AppSettings Clone() => (AppSettings)MemberwiseClone();
+    public AppSettings Clone()
+    {
+        var clone = (AppSettings)MemberwiseClone();
+        clone.DownloadNaming = (DownloadNaming ?? new DownloadNamingSettings()).Clone();
+        return clone;
+    }
 }
 
 public sealed class UpdateState
@@ -190,7 +198,8 @@ public sealed record DownloadResult(
     string Title,
     string OutputDirectory,
     IReadOnlyList<string> OutputFiles,
-    bool HasVideo);
+    bool HasVideo,
+    string RenameDirectory = "");
 
 public sealed class DualAudioRequest
 {
@@ -244,6 +253,23 @@ public sealed class HistoryRecord
     public string Title { get; set; } = string.Empty;
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.Now;
     [JsonIgnore] public string TimestampText => Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+    [JsonIgnore]
+    public string TaskTypeText => TaskType switch
+    {
+        TaskKind.Info => "信息解析",
+        TaskKind.Download => "普通下载",
+        TaskKind.SeasonDownload => "整季下载",
+        TaskKind.LoginWeb => "WEB 登录",
+        TaskKind.LoginTv => "TV 登录",
+        TaskKind.DualAudioMux => "多音轨封装",
+        TaskKind.DualAudioRemux => "重新封装",
+        TaskKind.RenamePreview => "重命名预览",
+        TaskKind.RenameExecute => "执行重命名",
+        TaskKind.RenameUndo => "撤销重命名",
+        TaskKind.DownloadParse => "下载解析",
+        TaskKind.DownloadBatch => "批量下载",
+        _ => TaskType.ToString()
+    };
     public string LogPath { get; set; } = string.Empty;
     public string OutputDirectory { get; set; } = string.Empty;
     public List<string> OutputFiles { get; set; } = [];
@@ -265,6 +291,10 @@ public sealed class HistoryRecord
                 tags.Add($"{attempted} 集");
                 if (succeeded > 0) tags.Add($"成功 {succeeded}");
                 if (failed > 0) tags.Add($"失败 {failed}");
+                if (DownloadBatch.Options.DownloadMode != DownloadMode.AudioOnly)
+                    AddBatchVideoSpecification(tags, DownloadBatch.Episodes);
+                if (DownloadBatch.Options.DownloadMode != DownloadMode.VideoOnly)
+                    AddBatchAudioSpecification(tags, DownloadBatch.Episodes);
                 tags.Add(DownloadBatch.Options.DownloadMode switch
                 {
                     DownloadMode.VideoOnly => "仅视频",
@@ -309,6 +339,59 @@ public sealed class HistoryRecord
     {
         if (!string.IsNullOrWhiteSpace(value)) tags.Add(value.Trim());
     }
+
+    private static void AddBatchVideoSpecification(List<string> tags, IEnumerable<DownloadEpisodeResult> episodes)
+    {
+        var specifications = episodes
+            .Where(item => item.Video is not null)
+            .Select(item => item.Video!)
+            .GroupBy(video => new
+            {
+                Quality = video.Quality.Trim(),
+                Resolution = video.Resolution.Trim(),
+                Codec = video.Codec.Trim()
+            })
+            .Select(group => group.Key)
+            .ToList();
+        if (specifications.Count == 0) return;
+        if (specifications.Count > 1)
+        {
+            tags.Add("多种视频规格");
+            return;
+        }
+
+        var specification = specifications[0];
+        var quality = JoinSpecificationParts(specification.Quality, NormalizeResolution(specification.Resolution));
+        AddIfPresent(tags, quality);
+        AddIfPresent(tags, specification.Codec);
+    }
+
+    private static void AddBatchAudioSpecification(List<string> tags, IEnumerable<DownloadEpisodeResult> episodes)
+    {
+        var audio = episodes
+            .Where(item => item.Audio is not null)
+            .Select(item => item.Audio!)
+            .ToList();
+        if (audio.Count == 0) return;
+        var codecs = audio.Select(item => item.Codec.Trim())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (codecs.Count > 1)
+        {
+            tags.Add("多种音频规格");
+            return;
+        }
+        if (codecs.Count == 0) return;
+
+        var bitrates = audio.Select(item => item.BitrateKbps).Where(value => value > 0).Distinct().ToList();
+        tags.Add(bitrates.Count == 1 ? $"{codecs[0]} · {bitrates[0]}kbps" : codecs[0]);
+    }
+
+    private static string JoinSpecificationParts(params string[] values) =>
+        string.Join(" · ", values.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private static string NormalizeResolution(string value) => value.Replace('x', '×').Replace('X', '×');
 }
 
 public sealed record PageInfo(int Number, string Cid, string Title, string Duration);

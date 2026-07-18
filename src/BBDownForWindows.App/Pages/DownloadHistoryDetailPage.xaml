@@ -22,16 +22,17 @@
         <ScrollViewer x:Name="EpisodeDetailScroller" Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch"><Border Width="{Binding ViewportWidth, ElementName=EpisodeDetailScroller}" MinWidth="900" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
             <Grid><Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                 <Grid Padding="10,0" ColumnSpacing="10" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="2*"/><ColumnDefinition Width="2.2*"/><ColumnDefinition Width="1.6*"/><ColumnDefinition Width="1.5*"/></Grid.ColumnDefinitions>
-                    <TextBlock Text="分集" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="1" Text="名称" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="2" Text="视频规格" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="3" Text="音频规格" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="4" Text="状态" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="2.1*"/><ColumnDefinition Width="1.4*"/><ColumnDefinition Width="2*"/><ColumnDefinition Width="1.3*"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="分集" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="1" Text="名称" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="2" Text="视频规格" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="3" Text="音频规格" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="4" Text="输出路径" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="5" Text="状态" VerticalAlignment="Center" FontWeight="SemiBold"/>
                 </Grid>
                 <ListView Grid.Row="1" ItemsSource="{Binding Episodes}" SelectionMode="None" HorizontalContentAlignment="Stretch">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="core:DownloadEpisodeResult">
                             <Grid Padding="10,8" ColumnSpacing="10">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="2*"/><ColumnDefinition Width="2.2*"/><ColumnDefinition Width="1.6*"/><ColumnDefinition Width="1.5*"/></Grid.ColumnDefinitions>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="2.1*"/><ColumnDefinition Width="1.4*"/><ColumnDefinition Width="2*"/><ColumnDefinition Width="1.3*"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{x:Bind PageText}" VerticalAlignment="Center"/><TextBlock Grid.Column="1" Text="{x:Bind PageTitle}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/><TextBlock Grid.Column="2" Text="{x:Bind VideoText}" TextWrapping="Wrap" VerticalAlignment="Center"/><TextBlock Grid.Column="3" Text="{x:Bind AudioText}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="4" VerticalAlignment="Center"><TextBlock Text="{x:Bind StatusText}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind FallbackReason}" TextWrapping="Wrap" FontSize="11" Foreground="#FFF59E0B"/></StackPanel>
+                                <TextBlock Grid.Column="4" Text="{x:Bind RelativeOutputPath}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind RelativeOutputPath}"/>
+                                <StackPanel Grid.Column="5" VerticalAlignment="Center"><TextBlock Text="{x:Bind StatusText}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind FallbackReason}" TextWrapping="Wrap" FontSize="11" Foreground="#FFF59E0B"/></StackPanel>
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>

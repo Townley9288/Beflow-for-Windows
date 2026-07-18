@@ -121,7 +121,7 @@ public sealed partial class RenamePage : Page
         ((App)Application.Current).MainWindow.Navigate("rename-templates", new RenameTemplatesNavigationContext(ViewModel.MediaType, ViewModel.SelectedTemplate?.Id));
 
     private void RenameHistory_Click(object sender, RoutedEventArgs e) =>
-        ((App)Application.Current).MainWindow.Navigate("rename-history");
+        ((App)Application.Current).MainWindow.Navigate("history", new HistoryNavigationContext(HistorySection.Renames));
 
     private async void UndoLatest_Click(object sender, RoutedEventArgs e)
     {

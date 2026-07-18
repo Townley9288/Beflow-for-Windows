@@ -238,6 +238,18 @@
                             </StackPanel>
                         </Button>
                     </Grid>
+                    <Border Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="3">
+                                <TextBlock FontWeight="SemiBold">
+                                    <Run Text="自动命名："/><Run Text="{Binding ActiveNamingProfileText}"/>
+                                </TextBlock>
+                                <TextBlock Text="{Binding NamingRuleSummary}" Opacity="0.65" FontFamily="Consolas" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="管理命名规则" Click="ManageNamingRules_Click" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
                     <StackPanel Spacing="8">
                         <TextBlock Text="附加内容" FontWeight="SemiBold"/>
                         <StackPanel Orientation="Horizontal" Spacing="18">

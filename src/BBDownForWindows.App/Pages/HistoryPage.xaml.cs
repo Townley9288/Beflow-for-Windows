@@ -5,38 +5,158 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace BBDownForWindows.App.Pages;
 
+public enum HistorySection { Downloads, Renames }
+
+public sealed record HistoryNavigationContext(HistorySection Section);
+
 public sealed partial class HistoryPage : Page
 {
-    public HistoryPage() { ViewModel = new HistoryViewModel(((App)Application.Current).Services); InitializeComponent(); }
+    public HistoryPage()
+    {
+        var services = ((App)Application.Current).Services;
+        ViewModel = new HistoryViewModel(services);
+        RenameViewModel = new RenameViewModel(services);
+        InitializeComponent();
+    }
+
     public HistoryViewModel ViewModel { get; }
+    public RenameViewModel RenameViewModel { get; }
+
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         ViewModel.Activate();
-        await ViewModel.LoadAsync();
+        RenameViewModel.Activate();
+        if (e.Parameter is HistoryNavigationContext context)
+            HistoryTabs.SelectedIndex = context.Section == HistorySection.Renames ? 1 : 0;
+        await Task.WhenAll(ViewModel.LoadAsync(), RenameViewModel.LoadHistoryAsync());
         base.OnNavigatedTo(e);
     }
+
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         ViewModel.Deactivate();
+        RenameViewModel.Deactivate();
         base.OnNavigatedFrom(e);
     }
-    private void Restore_Click(object sender, RoutedEventArgs e) { if (ViewModel.SelectedRecord is not null) ((App)Application.Current).MainWindow.RestoreHistory(ViewModel.SelectedRecord); }
+
+    private void Restore_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedRecord is not null) ((App)Application.Current).MainWindow.RestoreHistory(ViewModel.SelectedRecord);
+    }
+
     private void ViewDetails_Click(object sender, RoutedEventArgs e)
     {
-        if (ViewModel.SelectedRecord?.DownloadBatch is not null) ((App)Application.Current).MainWindow.Navigate("history-detail", ViewModel.SelectedRecord);
+        if (ViewModel.SelectedRecord?.DownloadBatch is not null)
+            ((App)Application.Current).MainWindow.Navigate("history-detail", ViewModel.SelectedRecord);
     }
+
     private async void ViewLog_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel.SelectedRecord is null) return;
         string content;
         try { content = ((App)Application.Current).Services.TaskManager.ReadSavedLog(ViewModel.SelectedRecord.LogPath); }
         catch (Exception exception) { content = exception.Message; }
-        var dialog = new ContentDialog { Title = "任务日志", Content = new ScrollViewer { Content = new TextBlock { Text = content, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"), TextWrapping = TextWrapping.Wrap } }, CloseButtonText = "关闭", XamlRoot = XamlRoot };
-        await dialog.ShowAsync();
+        await new ContentDialog
+        {
+            Title = "任务日志",
+            Content = new ScrollViewer
+            {
+                Content = new TextBlock
+                {
+                    Text = content,
+                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+                    TextWrapping = TextWrapping.Wrap
+                }
+            },
+            CloseButtonText = "关闭",
+            XamlRoot = XamlRoot
+        }.ShowAsync();
     }
+
     private async void Clear_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new ContentDialog { Title = "清空历史", Content = "确定清空全部历史记录吗？日志文件不会立即删除。", PrimaryButtonText = "清空", CloseButtonText = "取消", DefaultButton = ContentDialogButton.Close, XamlRoot = XamlRoot };
+        var dialog = new ContentDialog
+        {
+            Title = "清空下载历史",
+            Content = "确定清空全部下载历史记录吗？日志文件不会立即删除。",
+            PrimaryButtonText = "清空",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot
+        };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await ViewModel.ClearCommand.ExecuteAsync(null);
+    }
+
+    private void BackToRename_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("rename");
+    private async void RenameRefresh_Click(object sender, RoutedEventArgs e) => await RenameViewModel.LoadHistoryAsync();
+    private void RenameHistoryPrevious_Click(object sender, RoutedEventArgs e) => RenameViewModel.PreviousHistoryPage();
+    private void RenameHistoryNext_Click(object sender, RoutedEventArgs e) => RenameViewModel.NextHistoryPage();
+
+    private async void RenameHistoryDetail_Click(object sender, RoutedEventArgs e)
+    {
+        var record = RenameViewModel.SelectedHistory;
+        if (record is null) return;
+        var details = string.Join(Environment.NewLine, record.Operations.Select(operation =>
+            $"{Path.GetFileName(operation.SourcePath)}  →  {Path.GetFileName(operation.TargetPath)}"));
+        await new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = record.DisplayTitle,
+            Content = new ScrollViewer
+            {
+                MaxHeight = 520,
+                Content = new TextBlock
+                {
+                    Text = details,
+                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+                    TextWrapping = TextWrapping.Wrap
+                }
+            },
+            CloseButtonText = "关闭"
+        }.ShowAsync();
+    }
+
+    private async void RenameUndoHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (RenameViewModel.SelectedHistory is null) return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "撤销重命名",
+            Content = "Beflow 会先确认当前文件仍存在且原文件名未被占用，然后恢复这条记录中的全部文件名。",
+            PrimaryButtonText = "撤销",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary) await RenameViewModel.UndoSelectedHistoryAsync();
+    }
+
+    private async void RenameDeleteHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (RenameViewModel.SelectedHistory is null) return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "删除重命名记录",
+            Content = "只会删除这条历史记录，不会修改任何媒体文件。",
+            PrimaryButtonText = "删除",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary) await RenameViewModel.DeleteSelectedHistoryAsync();
+    }
+
+    private async void RenameClearHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "清空重命名历史",
+            Content = "只会删除历史记录，不会再次修改任何媒体文件。",
+            PrimaryButtonText = "清空",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary) await RenameViewModel.ClearHistoryAsync();
     }
 }

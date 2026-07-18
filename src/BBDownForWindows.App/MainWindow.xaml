@@ -16,14 +16,11 @@
             <NavigationViewItem Content="重命名" Tag="rename">
                 <NavigationViewItem.Icon><FontIcon Glyph="&#xE8AC;" /></NavigationViewItem.Icon>
             </NavigationViewItem>
-            <NavigationViewItem Content="命名模板" Tag="rename-templates">
+            <NavigationViewItem Content="命名规则" Tag="rename-templates">
                 <NavigationViewItem.Icon><FontIcon Glyph="&#xE70F;" /></NavigationViewItem.Icon>
             </NavigationViewItem>
-            <NavigationViewItemHeader Content="历史记录" />
-            <NavigationViewItem Content="下载历史" Tag="history" Icon="Clock" />
-            <NavigationViewItem Content="重命名历史" Tag="rename-history">
-                <NavigationViewItem.Icon><FontIcon Glyph="&#xE81C;" /></NavigationViewItem.Icon>
-            </NavigationViewItem>
+            <NavigationViewItemHeader Content="记录与日志" />
+            <NavigationViewItem Content="历史记录" Tag="history" Icon="Clock" />
         </NavigationView.MenuItems>
         <NavigationView.FooterMenuItems>
             <NavigationViewItem x:Name="ThemeNavigationItem" Content="主题" Tag="theme" SelectsOnInvoked="False" AutomationProperties.Name="选择界面主题">

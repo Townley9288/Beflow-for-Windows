@@ -23,6 +23,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
     private bool _audioManual;
     private bool _updating;
     private DownloadMode _downloadMode = DownloadMode.VideoAndAudio;
+    private string _relativeOutputPath = string.Empty;
 
     public DownloadEpisodeViewModel(DownloadEpisodeInfo episode)
     {
@@ -183,6 +184,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
                 }
             }
             FallbackText = selection.FallbackReason;
+            _relativeOutputPath = selection.RelativeOutputPath;
             IsSelected = true;
         }
         finally { _updating = false; }
@@ -199,7 +201,8 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
             PageTitle = Title,
             Video = _downloadMode == DownloadMode.AudioOnly || video is null ? null : new VideoStreamSelection(video.Quality, video.Resolution, video.Codec, video.BitrateKbps, _videoManual),
             Audio = _downloadMode == DownloadMode.VideoOnly || audio is null ? null : new AudioStreamSelection(audio.Codec, audio.BitrateKbps, _audioManual),
-            FallbackReason = FallbackText
+            FallbackReason = FallbackText,
+            RelativeOutputPath = _relativeOutputPath
         };
     }
 

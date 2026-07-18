@@ -42,6 +42,10 @@ public sealed class DownloadViewModel : ObservableObject
     private string _progressDetail = string.Empty;
     private bool _showProgress;
     private bool _continueAvailable;
+    private DownloadNamingSettings _downloadNaming = new();
+    private DownloadNamingProfile? _restoredNamingProfile;
+    private DownloadNamingProfileKind _restoredNamingProfileKind;
+    private bool _loadingRestore;
 
     public DownloadViewModel(AppServices services)
     {
@@ -96,6 +100,12 @@ public sealed class DownloadViewModel : ObservableObject
         set
         {
             if (!SetProperty(ref _url, value)) return;
+            if (!_loadingRestore)
+            {
+                _restoredNamingProfile = null;
+                OnPropertyChanged(nameof(ActiveNamingProfileText));
+                OnPropertyChanged(nameof(NamingRuleSummary));
+            }
             DismissMessage();
             NotifyCommands();
         }
@@ -121,7 +131,11 @@ public sealed class DownloadViewModel : ObservableObject
         get => _workDirectory;
         set
         {
-            if (SetProperty(ref _workDirectory, value)) OnPropertyChanged(nameof(DownloadDirectorySummary));
+            if (SetProperty(ref _workDirectory, value))
+            {
+                OnPropertyChanged(nameof(DownloadDirectorySummary));
+                OnPropertyChanged(nameof(NamingRuleSummary));
+            }
         }
     }
     public string DownloadDirectorySummary => string.IsNullOrWhiteSpace(WorkDirectory) ? "保存位置：尚未设置下载目录" : $"保存到：{WorkDirectory}";
@@ -146,6 +160,8 @@ public sealed class DownloadViewModel : ObservableObject
             OnPropertyChanged(nameof(OwnerName));
             OnPropertyChanged(nameof(OwnerAvatarUrl));
             OnPropertyChanged(nameof(EpisodeCountText));
+            OnPropertyChanged(nameof(ActiveNamingProfileText));
+            OnPropertyChanged(nameof(NamingRuleSummary));
         }
     }
     public bool HasCatalog => Catalog is not null;
@@ -201,10 +217,27 @@ public sealed class DownloadViewModel : ObservableObject
     }
     public bool HasDownloadResult => LastDownloadResult is not null;
     public Visibility DownloadResultVisibility => HasDownloadResult ? Visibility.Visible : Visibility.Collapsed;
-    public bool CanRenameDownload => LastDownloadResult?.HasVideo == true || (LastDownloadResult is { OutputDirectory.Length: > 0 } && CurrentDownloadMode != DownloadMode.AudioOnly);
-    public string DownloadResultMessage => LastDownloadResult is null ? string.Empty : LastDownloadResult.HasVideo
-        ? $"已保存到 {LastDownloadResult.OutputDirectory}，可以直接进入重命名。"
-        : $"已保存到 {LastDownloadResult.OutputDirectory}，暂未识别到本次生成的视频。";
+    public bool CanRenameDownload => LastDownloadResult?.HasVideo == true && !string.IsNullOrWhiteSpace(LastDownloadResult.RenameDirectory);
+    public string DownloadResultMessage => LastDownloadResult switch
+    {
+        null => string.Empty,
+        { HasVideo: false } result => $"已保存到 {result.OutputDirectory}，暂未识别到本次生成的视频。",
+        { RenameDirectory.Length: > 0 } result => $"已保存到 {result.OutputDirectory}，可以直接进入重命名。",
+        var result => $"已保存到 {result.OutputDirectory}；视频分布在多个子文件夹，请打开主文件夹查看。"
+    };
+    public DownloadNamingProfileKind ActiveNamingProfileKind => _restoredNamingProfile is not null
+        ? _restoredNamingProfileKind
+        : Catalog?.AllPages.Count > 1 ? DownloadNamingProfileKind.MultiEpisode : DownloadNamingProfileKind.SingleVideo;
+    public string ActiveNamingProfileText => ActiveNamingProfileKind == DownloadNamingProfileKind.MultiEpisode ? "多集内容" : "单集视频";
+    public string NamingRuleSummary
+    {
+        get
+        {
+            var profile = GetActiveNamingProfile();
+            var preview = _services.DownloadNaming.Preview(profile, ActiveNamingProfileKind, WorkDirectory);
+            return preview.IsValid ? preview.RelativePath : preview.Error;
+        }
+    }
 
     public IAsyncRelayCommand ParseCurrentCommand { get; }
     public IAsyncRelayCommand ParseAllCommand { get; }
@@ -231,38 +264,57 @@ public sealed class DownloadViewModel : ObservableObject
 
     public async Task InitializeAsync(HistoryRecord? restore = null)
     {
+        var latestSettings = await _services.Settings.LoadAsync();
+        _downloadNaming = latestSettings.DownloadNaming.Clone();
         if (!_initialized)
         {
-            Apply(await _services.Settings.LoadAsync());
+            Apply(latestSettings);
             _initialized = true;
         }
+        OnPropertyChanged(nameof(ActiveNamingProfileText));
+        OnPropertyChanged(nameof(NamingRuleSummary));
         if (restore is null) return;
         ResetWorkspaceForRestore();
         if (restore.DownloadBatch is { } batch)
         {
-            Apply(batch.Options);
-            Url = restore.Url;
+            _restoredNamingProfile = (batch.NamingProfile ?? DownloadNamingProfile.Default()).Clone();
+            _restoredNamingProfileKind = batch.NamingProfileKind;
+            _loadingRestore = true;
+            try
+            {
+                Apply(batch.Options);
+                Url = restore.Url;
+            }
+            finally { _loadingRestore = false; }
             _pendingRestore = batch.Episodes.Select(item => new EpisodeStreamSelection
             {
                 PageNumber = item.PageNumber,
                 PageTitle = item.PageTitle,
                 Video = item.Video,
                 Audio = item.Audio,
-                FallbackReason = item.FallbackReason
+                FallbackReason = item.FallbackReason,
+                RelativeOutputPath = item.RelativeOutputPath
             }).ToList();
             SetMessage("批量下载配置已加载，请重新解析后确认实际可用规格。", InfoBarSeverity.Informational);
         }
         else if (restore.Download is { } legacy)
         {
-            Apply(legacy);
+            _loadingRestore = true;
+            try { Apply(legacy); }
+            finally { _loadingRestore = false; }
             SetMessage("旧版下载配置已加载，请先解析视频。", InfoBarSeverity.Informational);
         }
         if (!string.IsNullOrWhiteSpace(restore.OutputDirectory))
-            LastDownloadResult = new DownloadResult(restore.Title, restore.OutputDirectory, restore.OutputFiles, restore.OutputFiles.Any(DownloadFileKinds.IsVideoFile));
+            LastDownloadResult = new DownloadResult(restore.Title, restore.OutputDirectory, restore.OutputFiles,
+                restore.OutputFiles.Any(DownloadFileKinds.IsVideoFile), FindCommonVideoDirectory(restore.OutputFiles));
+        OnPropertyChanged(nameof(ActiveNamingProfileText));
+        OnPropertyChanged(nameof(NamingRuleSummary));
     }
 
     private void ResetWorkspaceForRestore()
     {
+        _restoredNamingProfile = null;
+        _restoredNamingProfileKind = DownloadNamingProfileKind.SingleVideo;
         foreach (var row in Rows) row.SelectionChanged -= Row_SelectionChanged;
         Rows.Clear();
         VisibleRows.Clear();
@@ -446,11 +498,19 @@ public sealed class DownloadViewModel : ObservableObject
         LastDownloadResult = null;
         _failedPages.Clear();
         var options = await BuildRequestAsync();
+        var namingProfile = GetActiveNamingProfile().Clone();
+        var namingKind = ActiveNamingProfileKind;
+        var downloadedAt = DateTimeOffset.Now;
         var batchRequest = new DownloadBatchRequest
         {
             Options = options,
             Title = Catalog?.Title ?? string.Empty,
             ParsedAt = Catalog?.ParsedAt ?? DateTimeOffset.Now,
+            DownloadedAt = downloadedAt,
+            TotalPages = Math.Max(Catalog?.AllPages.Count ?? selectedRows.Count, selectedRows.Count),
+            NamingProfileKind = namingKind,
+            NamingProfile = namingProfile,
+            Metadata = Catalog?.Metadata,
             Episodes = selectedRows.Select(row => row.BuildSelection()).ToList()
         };
         DownloadBatchResult? result = null;
@@ -477,7 +537,7 @@ public sealed class DownloadViewModel : ObservableObject
             Rows.FirstOrDefault(row => row.PageNumber == episode.PageNumber)?.ApplyResult(episode);
             if (episode.State == DownloadEpisodeResultState.Failed) _failedPages.Add(episode.PageNumber);
         }
-        LastDownloadResult = new DownloadResult(result.Title, result.OutputDirectory, result.OutputFiles, result.HasVideo);
+        LastDownloadResult = new DownloadResult(result.Title, result.OutputDirectory, result.OutputFiles, result.HasVideo, result.RenameDirectory);
         await _services.History.AddAsync(new HistoryRecord
         {
             TaskType = TaskKind.DownloadBatch,
@@ -487,7 +547,16 @@ public sealed class DownloadViewModel : ObservableObject
             LogPath = snapshot.LogPath,
             OutputDirectory = result.OutputDirectory,
             OutputFiles = result.OutputFiles,
-            DownloadBatch = new DownloadBatchHistory { Options = options, ParsedAt = batchRequest.ParsedAt, Episodes = result.Episodes }
+            DownloadBatch = new DownloadBatchHistory
+            {
+                Options = options,
+                ParsedAt = batchRequest.ParsedAt,
+                DownloadedAt = downloadedAt,
+                TotalPages = batchRequest.TotalPages,
+                NamingProfileKind = namingKind,
+                NamingProfile = namingProfile.Clone(),
+                Episodes = result.Episodes
+            }
         });
         var succeeded = result.Episodes.Count(item => item.State == DownloadEpisodeResultState.Completed);
         var failed = result.Episodes.Count(item => item.State == DownloadEpisodeResultState.Failed);
@@ -528,7 +597,7 @@ public sealed class DownloadViewModel : ObservableObject
             Aria2AutoTune = settings.Aria2AutoTune,
             Aria2MaxConnection = settings.Aria2MaxConnection, Aria2Split = settings.Aria2Split,
             Aria2MaxConcurrentDownloads = settings.Aria2MaxConcurrentDownloads, Aria2MinSplitSize = settings.Aria2MinSplitSize,
-            SaveTaskLogs = SaveTaskLogs, ApiMode = settings.ApiMode, OrganizeInTitleDirectory = true,
+            SaveTaskLogs = SaveTaskLogs, ApiMode = settings.ApiMode, OrganizeInTitleDirectory = false,
             TitleHint = Catalog?.Title ?? string.Empty
         };
     }
@@ -570,6 +639,19 @@ public sealed class DownloadViewModel : ObservableObject
         UposHost = request.UposHost;
         UseAria2c = request.UseAria2c;
         SaveTaskLogs = request.SaveTaskLogs;
+    }
+
+    private DownloadNamingProfile GetActiveNamingProfile() =>
+        (_restoredNamingProfile ?? _downloadNaming.GetProfile(ActiveNamingProfileKind) ?? DownloadNamingProfile.Default()).Clone();
+
+    private static string FindCommonVideoDirectory(IEnumerable<string> files)
+    {
+        var directories = files.Where(DownloadFileKinds.IsVideoFile)
+            .Select(Path.GetDirectoryName)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return directories.Count == 1 ? directories[0]! : string.Empty;
     }
 
     private bool CanParse() => !Console.IsBusy && !string.IsNullOrWhiteSpace(Url);
