@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace BBDownForWindows.Core;
 
@@ -325,8 +326,8 @@ public sealed partial class DownloadNamingService : IDownloadNamingService
             "UP主UID" => context.Metadata?.OwnerId ?? string.Empty,
             "发布时间" => FormatDate(published),
             "分集发布时间" => FormatDate(episode?.PublishedAt),
-            "下载日期" => context.DownloadedAt.ToLocalTime().ToString("yyyy-MM-dd"),
-            "下载时间" => context.DownloadedAt.ToLocalTime().ToString("HH-mm-ss"),
+            "下载日期" => context.DownloadedAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            "下载时间" => context.DownloadedAt.ToString("HH-mm-ss", CultureInfo.InvariantCulture),
             "画质" => context.Video?.Quality ?? string.Empty,
             "分辨率" => context.Video?.Resolution ?? string.Empty,
             "帧率" => FormatFps(context.Video?.Fps),
@@ -490,7 +491,7 @@ public sealed partial class DownloadNamingService : IDownloadNamingService
         return number.ToString(new string('0', width));
     }
 
-    private static string FormatDate(DateTimeOffset? value) => value?.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd") ?? string.Empty;
+    private static string FormatDate(DateTimeOffset? value) => value?.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
     private static string FormatBitrate(int value) => value > 0 ? $"{value}kbps" : string.Empty;
     private static string FormatFps(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Contains("fps", StringComparison.OrdinalIgnoreCase) ? value : $"{value}fps";
 
