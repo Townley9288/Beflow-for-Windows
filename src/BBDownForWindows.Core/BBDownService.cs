@@ -13,7 +13,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
     {
         var request = new DownloadRequest { Url = url, Pages = pages };
         var tools = await ResolveToolsAsync(cancellationToken);
-        var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request), context, cancellationToken);
+        var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request, tools), context, cancellationToken);
         if (result.ExitCode != 0) throw new InvalidOperationException(BuildProcessFailureMessage("BBDown 信息解析失败", result));
         return BBDownParser.ParseInfo(result.Output);
     }
@@ -32,7 +32,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         };
         var expectedTotal = string.IsNullOrWhiteSpace(request.Pages) ? 0 : BBDownParser.ExpandPageExpression(request.Pages).Distinct().Count();
         var parser = new StreamingDownloadParser(request.Mode, progress, expectedTotal);
-        var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(infoRequest), context, cancellationToken, observer: parser.Consume);
+        var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(infoRequest, tools), context, cancellationToken, observer: parser.Consume);
         parser.Complete();
         if ((result.Cancelled || cancellationToken.IsCancellationRequested) && parser.Episodes.Count == 0) throw new OperationCanceledException(cancellationToken);
         if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException(BuildProcessFailureMessage("BBDown 信息解析失败", result));
@@ -246,7 +246,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             {
                 context.AppendLog("正在解析标题并准备独立下载文件夹…\n");
                 var tools = await ResolveToolsAsync(cancellationToken);
-                var info = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request), context, cancellationToken);
+                var info = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request, tools), context, cancellationToken);
                 if (info.ExitCode != 0) throw new InvalidOperationException($"下载前标题解析失败，退出码 {info.ExitCode}");
                 title = BBDownParser.ParseInfo(info.Output).Title;
             }
@@ -352,7 +352,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
     {
         var tools = await ResolveToolsAsync(cancellationToken);
         context.AppendLog($"正在分析音频流，目标格式: {request.AudioCodec}...\n");
-        var info = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request), context, cancellationToken);
+        var info = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request, tools), context, cancellationToken);
         if (info.ExitCode != 0) throw new InvalidOperationException($"音频格式分析失败，退出码 {info.ExitCode}");
         var pages = BBDownParser.ParseSelectedPages(info.Output);
         if (pages.Count == 0) throw new InvalidOperationException("无法确认实际选择的分P");
@@ -373,7 +373,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var tools = await ResolveToolsAsync(cancellationToken);
         context.AppendLog("正在分析整季每一集的实际分辨率和编码...\n");
         var infoRequest = Clone(request); infoRequest.Season = true;
-        var info = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(infoRequest), context, cancellationToken);
+        var info = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(infoRequest, tools), context, cancellationToken);
         if (info.ExitCode != 0) throw new InvalidOperationException($"整季规格分析失败，退出码 {info.ExitCode}");
         var pageStreams = BBDownParser.ParsePageVideoStreams(info.Output);
         var expected = BBDownParser.ParseExpectedSeasonPages(info.Output);
@@ -430,7 +430,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var tools = await ResolveToolsAsync(cancellationToken);
         var request = new DownloadRequest { Url = url, Pages = page.ToString(), ApiMode = apiMode };
         var parser = new StreamingDownloadParser(DownloadParseMode.Current, null);
-        var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request), context, cancellationToken, observer: parser.Consume);
+        var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request, tools), context, cancellationToken, observer: parser.Consume);
         parser.Complete();
         if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException(BuildProcessFailureMessage($"P{page} 规格确认失败", result));
         return parser.Episodes.FirstOrDefault(item => item.Page.Number == page)

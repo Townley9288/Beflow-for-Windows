@@ -112,6 +112,37 @@ public sealed class DownloadSelectionTests
     }
 
     [Fact]
+    public void InfoCommandIncludesConfiguredFfmpegPath()
+    {
+        const string ffmpegPath = @"D:\Beflow\tools\ffmpeg\ffmpeg.exe";
+        var arguments = BBDownCommandBuilder.BuildInfoArguments(new DownloadRequest
+        {
+            Url = "ss4232", Season = true, ApiMode = "TV", AudioBitratePriority = AudioBitratePriority.Lowest
+        }, new ToolPaths { Ffmpeg = ffmpegPath });
+
+        Assert.Equal("ss4232", arguments[0]);
+        Assert.Contains("-info", arguments);
+        Assert.Contains("--show-all", arguments);
+        Assert.Contains("ALL", arguments);
+        Assert.Contains("-tv", arguments);
+        Assert.Contains("--audio-ascending", arguments);
+        var ffmpegArgument = arguments.IndexOf("--ffmpeg-path");
+        Assert.True(ffmpegArgument >= 0);
+        Assert.Equal(ffmpegPath, arguments[ffmpegArgument + 1]);
+    }
+
+    [Fact]
+    public void InfoCommandOmitsFfmpegArgumentWhenPathIsUnavailable()
+    {
+        var arguments = BBDownCommandBuilder.BuildInfoArguments(
+            new DownloadRequest { Url = "BV1", Pages = "1", ApiMode = "APP" },
+            new ToolPaths());
+
+        Assert.Contains("-app", arguments);
+        Assert.DoesNotContain("--ffmpeg-path", arguments);
+    }
+
+    [Fact]
     public void AriaProgressAcrossMultipleTransfersDoesNotReset()
     {
         var parser = new Aria2ProgressParser();

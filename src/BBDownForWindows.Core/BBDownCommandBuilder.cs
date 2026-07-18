@@ -32,7 +32,7 @@ public static class BBDownCommandBuilder
         return arguments;
     }
 
-    public static List<string> BuildInfoArguments(DownloadRequest request)
+    public static List<string> BuildInfoArguments(DownloadRequest request, ToolPaths tools)
     {
         var arguments = new List<string> { request.Url, "-info", "--show-all" };
         if (request.Season) arguments.AddRange(["-p", "ALL"]);
@@ -40,6 +40,7 @@ public static class BBDownCommandBuilder
         if (request.ApiMode.Equals("TV", StringComparison.OrdinalIgnoreCase)) arguments.Add("-tv");
         else if (request.ApiMode.Equals("APP", StringComparison.OrdinalIgnoreCase)) arguments.Add("-app");
         if (request.AudioBitratePriority == AudioBitratePriority.Lowest) arguments.Add("--audio-ascending");
+        if (!string.IsNullOrWhiteSpace(tools.Ffmpeg)) arguments.AddRange(["--ffmpeg-path", tools.Ffmpeg]);
         return arguments;
     }
 
