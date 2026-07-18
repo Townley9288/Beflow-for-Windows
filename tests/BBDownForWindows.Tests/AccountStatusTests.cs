@@ -11,6 +11,8 @@ public sealed class AccountStatusTests
     [InlineData("登录成功: SESSDATA=secret-value", "登录成功: SESSDATA=[已隐藏]")]
     [InlineData("登录成功: AccessToken=secret-value", "登录成功: AccessToken=[已隐藏]")]
     [InlineData("access_token=secret-value", "access_token=[已隐藏]")]
+    [InlineData("Cookie: SESSDATA=secret-value;bili_jct=csrf-secret", "Cookie: [已隐藏]")]
+    [InlineData("refresh_token=refresh-secret", "refresh_token=[已隐藏]")]
     public void LoginOutputIsSanitized(string source, string expected)
     {
         Assert.Equal(expected, BBDownService.SanitizeLoginOutput(source));

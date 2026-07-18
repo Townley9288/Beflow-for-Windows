@@ -271,6 +271,10 @@
         </ContentDialog>
 
         <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" Severity="{Binding MessageSeverity}" Message="{Binding Message}" IsClosable="True"
-                 HorizontalAlignment="Center" VerticalAlignment="Top" MaxWidth="760" MinWidth="360" Margin="24,20,24,0" Canvas.ZIndex="20" Closed="DownloadNotification_Closed"/>
+                 HorizontalAlignment="Center" VerticalAlignment="Top" MaxWidth="900" MinWidth="360" Margin="24,20,24,0" Canvas.ZIndex="20" Closed="DownloadNotification_Closed">
+            <InfoBar.ActionButton>
+                <Button Content="打开日志" Visibility="{Binding MessageLogVisibility}" Click="OpenMessageLog_Click"/>
+            </InfoBar.ActionButton>
+        </InfoBar>
     </Grid>
 </Page>

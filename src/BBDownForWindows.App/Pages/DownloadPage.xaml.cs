@@ -55,6 +55,15 @@ public sealed partial class DownloadPage : Page
 
     private void DownloadNotification_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
 
+    private void OpenMessageLog_Click(object sender, RoutedEventArgs e)
+    {
+        var path = ViewModel.MessageLogPath;
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        var startInfo = new ProcessStartInfo("notepad.exe") { UseShellExecute = true };
+        startInfo.ArgumentList.Add(path);
+        Process.Start(startInfo);
+    }
+
     private async void ShowDownloadSettings_Click(object sender, RoutedEventArgs e)
     {
         DownloadSettingsDialog.XamlRoot = XamlRoot;

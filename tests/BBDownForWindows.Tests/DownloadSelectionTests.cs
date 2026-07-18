@@ -159,6 +159,41 @@ public sealed class DownloadSelectionTests
     }
 
     [Fact]
+    public async Task ParseFailurePersistsUsefulSanitizedDiagnostics()
+    {
+        var runner = new ScriptedRunner
+        {
+            ParseExitCode = 1,
+            ParseFailureOutput = """
+                BBDown version 1.6.3, Bilibili Downloader.
+                SESSDATA=real-secret-value
+                https://upos-test.bilivideo.com/video.m4s?access_token=media-secret
+                [2026-07-18 21:00:00.000] - 请求被拒绝：账号无权访问此内容
+                """
+        };
+        using var fixture = new ServiceFixture(runner);
+        var manager = new TaskManager(fixture.Paths, runner);
+
+        var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadParse, true, "download_parse", async (context, token) =>
+        {
+            await fixture.Service.ParseDownloadAsync(new DownloadParseRequest("ss1", DownloadParseMode.Current), null, context, token);
+        });
+
+        Assert.Equal(TaskState.Failed, snapshot.State);
+        Assert.Contains("退出码 1", snapshot.Error);
+        Assert.Contains("请求被拒绝", snapshot.Error);
+        Assert.DoesNotContain("real-secret-value", snapshot.Error);
+        Assert.DoesNotContain("SESSDATA", snapshot.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("bilivideo.com", snapshot.Error);
+        Assert.False(string.IsNullOrWhiteSpace(snapshot.LogPath));
+        var log = File.ReadAllText(snapshot.LogPath);
+        Assert.Contains("请求被拒绝", log);
+        Assert.DoesNotContain("real-secret-value", log);
+        Assert.DoesNotContain("media-secret", log);
+        Assert.DoesNotContain("bilivideo.com", log);
+    }
+
+    [Fact]
     public async Task BatchDownloadUsesExactIndicesAndContinuesAfterFailure()
     {
         var runner = new ScriptedRunner { FailDownloadPage = 2 };
@@ -285,6 +320,8 @@ public sealed class DownloadSelectionTests
     {
         public List<ProcessRunRequest> Requests { get; } = [];
         public int FailDownloadPage { get; set; }
+        public int ParseExitCode { get; set; }
+        public string ParseFailureOutput { get; set; } = string.Empty;
 
         public Task<ProcessResult> RunAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
         {
@@ -304,6 +341,12 @@ public sealed class DownloadSelectionTests
                     onOutput?.Invoke("[#aaaa11 100MiB/100MiB(100%) CN:8 DL:10MiB ETA:0s]\n");
                 }
                 return Task.FromResult(new ProcessResult(page == FailDownloadPage ? 1 : 0, string.Empty, false));
+            }
+
+            if (ParseExitCode != 0)
+            {
+                foreach (var line in ParseFailureOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries)) onOutput?.Invoke(line + "\n");
+                return Task.FromResult(new ProcessResult(ParseExitCode, ParseFailureOutput, false));
             }
 
             var output = request.Arguments.Contains("ALL") ? InfoOutput(1) + InfoOutput(2, includeHeader: false) + "任务完成\n" : InfoOutput(page) + "任务完成\n";

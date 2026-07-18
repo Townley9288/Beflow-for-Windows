@@ -14,7 +14,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var request = new DownloadRequest { Url = url, Pages = pages };
         var tools = await ResolveToolsAsync(cancellationToken);
         var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request), context, cancellationToken);
-        if (result.ExitCode != 0) throw new InvalidOperationException($"BBDown 信息解析失败，退出码 {result.ExitCode}");
+        if (result.ExitCode != 0) throw new InvalidOperationException(BuildProcessFailureMessage("BBDown 信息解析失败", result));
         return BBDownParser.ParseInfo(result.Output);
     }
 
@@ -35,7 +35,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(infoRequest), context, cancellationToken, observer: parser.Consume);
         parser.Complete();
         if ((result.Cancelled || cancellationToken.IsCancellationRequested) && parser.Episodes.Count == 0) throw new OperationCanceledException(cancellationToken);
-        if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"BBDown 信息解析失败，退出码 {result.ExitCode}");
+        if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException(BuildProcessFailureMessage("BBDown 信息解析失败", result));
         if (parser.Episodes.Count == 0) throw new InvalidOperationException("没有解析到可下载的分集");
         var metadata = await metadataTask;
         if (metadataService is not null && metadata is null)
@@ -289,10 +289,48 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"登录流程失败，退出码 {result.ExitCode}");
     }
 
-    internal static string SanitizeLoginOutput(string line) => Regex.Replace(
-        line,
-        "(?i)(SESSDATA|AccessToken|access_token)\\s*=\\s*[^\\s;&]+",
-        "$1=[已隐藏]");
+    internal static string SanitizeLoginOutput(string line) => SanitizeDiagnosticOutput(line);
+
+    internal static string SanitizeDiagnosticOutput(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var sanitized = Regex.Replace(text, "(?i)(cookie\\s*[:=]\\s*)[^\\r\\n]+", "$1[已隐藏]");
+        sanitized = Regex.Replace(
+            sanitized,
+            "(?i)(SESSDATA|bili_jct|DedeUserID(?:__ckMd5)?|AccessToken|access_token|refresh_token)\\s*=\\s*[^\\s;&]+",
+            "$1=[已隐藏]");
+        sanitized = Regex.Replace(
+            sanitized,
+            "(?i)([?&](?:SESSDATA|bili_jct|access_token|refresh_token|token)=)[^&#\\s]+",
+            "$1[已隐藏]");
+        return Regex.Replace(
+            sanitized,
+            "(?i)https?://[^\\s]*bilivideo\\.com[^\\s]*",
+            "[临时媒体地址已隐藏]");
+    }
+
+    internal static string BuildProcessFailureMessage(string operation, ProcessResult result)
+    {
+        var details = SanitizeDiagnosticOutput(result.Output)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => Regex.Replace(line, "\\x1B\\[[0-?]*[ -/]*[@-~]", string.Empty).Trim())
+            .Select(line => Regex.Replace(line, "^\\[[^]]+\\]\\s*-\\s*", string.Empty).Trim())
+            .Where(line => !string.IsNullOrWhiteSpace(line)
+                           && !line.Contains("[已隐藏]", StringComparison.Ordinal)
+                           && !line.Equals("[临时媒体地址已隐藏]", StringComparison.Ordinal)
+                           && !line.StartsWith("BBDown version ", StringComparison.OrdinalIgnoreCase)
+                           && !line.StartsWith("遇到问题请首先", StringComparison.Ordinal)
+                           && !line.Equals("https://github.com/nilaoda/BBDown/issues", StringComparison.OrdinalIgnoreCase)
+                           && !line.Equals("任务完成", StringComparison.Ordinal))
+            .TakeLast(4)
+            .ToList();
+        var detail = string.Join("；", details);
+        if (detail.Length > 600) detail = detail[..600] + "…";
+        return string.IsNullOrWhiteSpace(detail)
+            ? $"{operation}，退出码 {result.ExitCode}"
+            : $"{operation}，退出码 {result.ExitCode}：{detail}";
+    }
 
     public async Task<string> GetTitleAsync(string url, CancellationToken cancellationToken)
     {
@@ -394,7 +432,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var parser = new StreamingDownloadParser(DownloadParseMode.Current, null);
         var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(request), context, cancellationToken, observer: parser.Consume);
         parser.Complete();
-        if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"P{page} 规格确认失败，退出码 {result.ExitCode}");
+        if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException(BuildProcessFailureMessage($"P{page} 规格确认失败", result));
         return parser.Episodes.FirstOrDefault(item => item.Page.Number == page)
                ?? throw new InvalidOperationException($"P{page} 没有解析到可用规格");
     }
@@ -418,12 +456,15 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         CancellationToken cancellationToken, string? input = null, Action<string>? observer = null,
         bool usePseudoConsole = false, Func<string, bool>? shouldLog = null)
     {
-        context.AppendLog($"\n$ {Path.GetFileName(executable)} {string.Join(' ', arguments.Select(Quote))}\n");
+        context.AppendLog(SanitizeDiagnosticOutput($"\n$ {Path.GetFileName(executable)} {string.Join(' ', arguments.Select(Quote))}\n"));
         return processRunner.RunAsync(new ProcessRunRequest(executable, arguments, paths.RuntimeDirectory, input, usePseudoConsole), line =>
         {
             observer?.Invoke(line);
-            if ((shouldLog?.Invoke(line) ?? true) &&
-                !Regex.IsMatch(line.Trim(), "^https?://.*bilivideo\\.com", RegexOptions.IgnoreCase)) context.AppendLog(line);
+            if (shouldLog?.Invoke(line) ?? true)
+            {
+                var diagnostic = SanitizeDiagnosticOutput(line);
+                if (!diagnostic.Trim().Equals("[临时媒体地址已隐藏]", StringComparison.Ordinal)) context.AppendLog(diagnostic);
+            }
         }, cancellationToken);
     }
 

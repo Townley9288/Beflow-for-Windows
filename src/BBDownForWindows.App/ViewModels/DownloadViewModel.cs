@@ -34,6 +34,7 @@ public sealed class DownloadViewModel : ObservableObject
     private DownloadResult? _lastDownloadResult;
     private List<EpisodeStreamSelection>? _pendingRestore;
     private string _message = string.Empty;
+    private string _messageLogPath = string.Empty;
     private InfoBarSeverity _messageSeverity = InfoBarSeverity.Informational;
     private double _overallProgress;
     private double _currentProgress;
@@ -193,6 +194,18 @@ public sealed class DownloadViewModel : ObservableObject
     }
     public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
     public Visibility MessageVisibility => HasMessage ? Visibility.Visible : Visibility.Collapsed;
+    public string MessageLogPath
+    {
+        get => _messageLogPath;
+        private set
+        {
+            if (!SetProperty(ref _messageLogPath, value)) return;
+            OnPropertyChanged(nameof(HasMessageLog));
+            OnPropertyChanged(nameof(MessageLogVisibility));
+        }
+    }
+    public bool HasMessageLog => !string.IsNullOrWhiteSpace(MessageLogPath);
+    public Visibility MessageLogVisibility => HasMessageLog ? Visibility.Visible : Visibility.Collapsed;
     public InfoBarSeverity MessageSeverity { get => _messageSeverity; private set => SetProperty(ref _messageSeverity, value); }
 
     public double OverallProgress { get => _overallProgress; private set => SetProperty(ref _overallProgress, value); }
@@ -328,7 +341,11 @@ public sealed class DownloadViewModel : ObservableObject
         NotifyCommands();
     }
 
-    public void DismissMessage() => Message = string.Empty;
+    public void DismissMessage()
+    {
+        Message = string.Empty;
+        MessageLogPath = string.Empty;
+    }
 
     private async Task ParseAsync(DownloadParseMode mode, string pages = "", bool reset = true)
     {
@@ -349,7 +366,7 @@ public sealed class DownloadViewModel : ObservableObject
         ProgressDetail = "正在启动 BBDown…";
         DownloadCatalog? catalog = null;
         var parseProgress = new Progress<DownloadParseProgress>(OnParseProgress);
-        var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DownloadParse, false, "download_parse", async (context, token) =>
+        var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DownloadParse, SaveTaskLogs, "download_parse", async (context, token) =>
         {
             var settings = await _services.Settings.LoadAsync(token);
             catalog = await _services.BBDown.ParseDownloadAsync(new DownloadParseRequest(Url.Trim(), mode, settings.ApiMode, pages), parseProgress, context, token);
@@ -359,7 +376,7 @@ public sealed class DownloadViewModel : ObservableObject
         CurrentProgressIndeterminate = false;
         if (snapshot.State == TaskState.Failed)
         {
-            SetMessage(string.IsNullOrWhiteSpace(snapshot.Error) ? "解析失败" : snapshot.Error, InfoBarSeverity.Error);
+            SetMessage(string.IsNullOrWhiteSpace(snapshot.Error) ? "解析失败" : snapshot.Error, InfoBarSeverity.Error, snapshot.LogPath);
             ProgressTitle = "解析失败";
         }
         else if (snapshot.State == TaskState.Cancelled)
@@ -706,8 +723,9 @@ public sealed class DownloadViewModel : ObservableObject
         RetryFailedCommand.NotifyCanExecuteChanged();
     }
 
-    private void SetMessage(string value, InfoBarSeverity severity)
+    private void SetMessage(string value, InfoBarSeverity severity, string logPath = "")
     {
+        MessageLogPath = logPath;
         MessageSeverity = severity;
         Message = value;
     }
