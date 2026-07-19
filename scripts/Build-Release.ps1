@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.1.0.5',
+    [string]$Version = '1.1.0.6',
     [string]$FfmpegArchiveUrl = $env:FFMPEG_ARCHIVE_URL,
     [switch]$RequireNativeUpdater
 )
@@ -61,6 +61,7 @@ $RequiredPublishFiles = @(
     'Beflow.pri',
     'App.xbf',
     'MainWindow.xbf',
+    'Controls\RenameHistoryDetailContent.xbf',
     'Pages\DownloadPage.xbf',
     'Pages\DualAudioPage.xbf',
     'Pages\RenamePage.xbf',

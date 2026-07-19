@@ -8,7 +8,7 @@
     <AssemblyTitle>Beflow for Windows</AssemblyTitle>
     <Product>Beflow for Windows</Product>
     <Description>A Simple Desktop Video Downloader / 基于 BBDown 构建的桌面视频下载器图形界面</Description>
-    <Version>1.1.0.5</Version>
+    <Version>1.1.0.6</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
@@ -32,10 +32,12 @@
     <ItemGroup>
       <_WinUiRootResource Include="$(TargetDir)App.xbf;$(TargetDir)MainWindow.xbf;$(TargetDir)Beflow.pri" />
       <_WinUiPageResource Include="$(TargetDir)Pages\**\*" />
+      <_WinUiControlResource Include="$(TargetDir)Controls\**\*" />
       <_WinUiAppAsset Include="$(TargetDir)Assets\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(_WinUiRootResource)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(_WinUiPageResource)" DestinationFolder="$(PublishDir)Pages\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_WinUiControlResource)" DestinationFolder="$(PublishDir)Controls\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(_WinUiAppAsset)" DestinationFolder="$(PublishDir)Assets\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>

@@ -21,6 +21,15 @@ public sealed partial class RenamePage : Page
 
     public RenameViewModel ViewModel { get; }
 
+    private void LayoutRoot_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        const double minimumConfigurationHeight = 220;
+        const double reservedWorkspaceAndFooterHeight = 360;
+        ConfigurationScrollViewer.MaxHeight = Math.Max(
+            minimumConfigurationHeight,
+            e.NewSize.Height - reservedWorkspaceAndFooterHeight);
+    }
+
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);

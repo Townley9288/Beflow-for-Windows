@@ -1,4 +1,5 @@
 using BBDownForWindows.App.ViewModels;
+using BBDownForWindows.App.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -96,24 +97,21 @@ public sealed partial class HistoryPage : Page
     {
         var record = RenameViewModel.SelectedHistory;
         if (record is null) return;
-        var details = string.Join(Environment.NewLine, record.Operations.Select(operation =>
-            $"{Path.GetFileName(operation.SourcePath)}  →  {Path.GetFileName(operation.TargetPath)}"));
-        await new ContentDialog
+        var content = new RenameHistoryDetailContent(record)
+        {
+            Width = Math.Min(840, Math.Max(560, ActualWidth - 160)),
+            Height = Math.Min(650, Math.Max(480, ActualHeight - 160))
+        };
+        var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = record.DisplayTitle,
-            Content = new ScrollViewer
-            {
-                MaxHeight = 520,
-                Content = new TextBlock
-                {
-                    Text = details,
-                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
-                    TextWrapping = TextWrapping.Wrap
-                }
-            },
-            CloseButtonText = "关闭"
-        }.ShowAsync();
+            Title = "重命名详情",
+            Content = content,
+            CloseButtonText = "关闭",
+            MaxWidth = 960
+        };
+        dialog.Resources["ContentDialogMaxWidth"] = 960d;
+        await dialog.ShowAsync();
     }
 
     private async void RenameUndoHistory_Click(object sender, RoutedEventArgs e)
