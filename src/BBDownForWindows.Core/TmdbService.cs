@@ -22,6 +22,15 @@ public sealed class TmdbService : ITmdbService
     public async Task ValidateApiKeyAsync(CancellationToken cancellationToken = default)
     {
         var settings = await LoadConfiguredSettingsAsync(cancellationToken);
+        await ValidateApiKeyAsync(settings, cancellationToken);
+    }
+
+    public async Task ValidateApiKeyAsync(RenameSettings settings, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings = settings.Clone();
+        settings.EnsureDefaults();
+        if (string.IsNullOrWhiteSpace(settings.TmdbApiKey)) throw new InvalidOperationException("请先在设置页配置 TMDB API Key");
         using var document = await GetJsonAsync(settings, "/3/authentication/token/new", new Dictionary<string, string>(), cancellationToken);
         if (!document.RootElement.TryGetProperty("success", out var success) || !success.GetBoolean())
             throw new InvalidOperationException("TMDB API Key 验证失败");

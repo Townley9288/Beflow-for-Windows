@@ -9,7 +9,7 @@ public sealed class TaskConsoleViewModel : ObservableObject
 {
     private const int MaximumCharacters = 240_000;
     private readonly ITaskManager _taskManager;
-    private readonly DispatcherQueue _dispatcher;
+    private readonly DispatcherQueue? _dispatcher;
     private string _logs = string.Empty;
     private bool _isBusy;
     private string _status = "等待操作";
@@ -17,7 +17,11 @@ public sealed class TaskConsoleViewModel : ObservableObject
     public TaskConsoleViewModel(ITaskManager taskManager)
     {
         _taskManager = taskManager;
-        _dispatcher = DispatcherQueue.GetForCurrentThread();
+        try { _dispatcher = DispatcherQueue.GetForCurrentThread(); }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // Headless unit tests do not bootstrap the Windows App SDK dispatcher.
+        }
         CancelCommand = new AsyncRelayCommand(_taskManager.CancelActiveAsync, () => IsBusy);
         ClearCommand = new RelayCommand(() => Logs = string.Empty);
         taskManager.LogAppended += (_, text) => Dispatch(() => Append(text));
@@ -56,6 +60,6 @@ public sealed class TaskConsoleViewModel : ObservableObject
 
     private void Dispatch(Action action)
     {
-        if (_dispatcher.HasThreadAccess) action(); else _dispatcher.TryEnqueue(() => action());
+        if (_dispatcher is null || _dispatcher.HasThreadAccess) action(); else _dispatcher.TryEnqueue(() => action());
     }
 }

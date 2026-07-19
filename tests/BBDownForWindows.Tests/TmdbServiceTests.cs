@@ -8,6 +8,18 @@ namespace BBDownForWindows.Tests;
 public sealed class TmdbServiceTests
 {
     [Fact]
+    public async Task ValidationCanUseUnsavedDraftWithoutChangingTheSettingsStore()
+    {
+        var persisted = new RenameSettings { TmdbApiKey = "stored-key", RequestTimeoutSeconds = 3 };
+        var store = new FixedRenameSettingsStore(persisted);
+        var service = new TmdbService(store, _ => new StubHandler(_ => Json("{\"success\":true}")));
+
+        await service.ValidateApiKeyAsync(new RenameSettings { TmdbApiKey = "draft-key", RequestTimeoutSeconds = 3 });
+
+        Assert.Equal("stored-key", (await store.LoadAsync()).TmdbApiKey);
+    }
+
+    [Fact]
     public async Task SearchDetailEpisodesAndValidationUseExpectedLanguagesAndCache()
     {
         var requests = new List<Uri>();

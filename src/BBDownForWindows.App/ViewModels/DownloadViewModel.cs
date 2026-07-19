@@ -47,6 +47,7 @@ public sealed class DownloadViewModel : ObservableObject
     private DownloadNamingProfile? _restoredNamingProfile;
     private DownloadNamingProfileKind _restoredNamingProfileKind;
     private bool _loadingRestore;
+    private int _parseGeneration;
 
     public DownloadViewModel(AppServices services)
     {
@@ -106,6 +107,7 @@ public sealed class DownloadViewModel : ObservableObject
                 _restoredNamingProfile = null;
                 OnPropertyChanged(nameof(ActiveNamingProfileText));
                 OnPropertyChanged(nameof(NamingRuleSummary));
+                InvalidateParsedState();
             }
             DismissMessage();
             NotifyCommands();
@@ -349,14 +351,11 @@ public sealed class DownloadViewModel : ObservableObject
 
     private async Task ParseAsync(DownloadParseMode mode, string pages = "", bool reset = true)
     {
+        var parseGeneration = ++_parseGeneration;
+        var parsedUrl = Url.Trim();
         if (reset)
         {
-            Rows.Clear();
-            VisibleRows.Clear();
-            Catalog = null;
-            LastDownloadResult = null;
-            _failedPages.Clear();
-            _continueAvailable = false;
+            ClearParsedState();
         }
         ShowProgress = true;
         OverallProgress = 0;
@@ -365,13 +364,22 @@ public sealed class DownloadViewModel : ObservableObject
         ProgressTitle = mode == DownloadParseMode.All ? "正在解析全部集" : "正在解析当前集";
         ProgressDetail = "正在启动 BBDown…";
         DownloadCatalog? catalog = null;
-        var parseProgress = new Progress<DownloadParseProgress>(OnParseProgress);
+        var parseProgress = new Progress<DownloadParseProgress>(update =>
+        {
+            if (parseGeneration == _parseGeneration) OnParseProgress(update);
+        });
         var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DownloadParse, SaveTaskLogs, "download_parse", async (context, token) =>
         {
             var settings = await _services.Settings.LoadAsync(token);
-            catalog = await _services.BBDown.ParseDownloadAsync(new DownloadParseRequest(Url.Trim(), mode, settings.ApiMode, pages), parseProgress, context, token);
+            catalog = await _services.BBDown.ParseDownloadAsync(new DownloadParseRequest(parsedUrl, mode, settings.ApiMode, pages), parseProgress, context, token);
         });
 
+        if (parseGeneration != _parseGeneration || !UrlsMatch(parsedUrl, Url))
+        {
+            ShowProgress = false;
+            NotifyCommands();
+            return;
+        }
         if (catalog is not null) ApplyCatalog(catalog, !reset);
         CurrentProgressIndeterminate = false;
         if (snapshot.State == TaskState.Failed)
@@ -672,10 +680,10 @@ public sealed class DownloadViewModel : ObservableObject
     }
 
     private bool CanParse() => !Console.IsBusy && !string.IsNullOrWhiteSpace(Url);
-    private bool CanContinueParse() => !Console.IsBusy && _continueAvailable && Catalog is not null && Catalog.AllPages.Any(page => Rows.All(row => row.PageNumber != page.Number || !row.IsReady));
+    private bool CanContinueParse() => !Console.IsBusy && _continueAvailable && CatalogMatchesCurrentUrl() && Catalog!.AllPages.Any(page => Rows.All(row => row.PageNumber != page.Number || !row.IsReady));
     private bool CanDownload()
     {
-        if (Console.IsBusy) return false;
+        if (Console.IsBusy || !CatalogMatchesCurrentUrl()) return false;
         return Rows.Any(row =>
         {
             if (!row.IsSelected || !row.IsReady) return false;
@@ -722,6 +730,32 @@ public sealed class DownloadViewModel : ObservableObject
         DownloadSelectedCommand.NotifyCanExecuteChanged();
         RetryFailedCommand.NotifyCanExecuteChanged();
     }
+
+    private void InvalidateParsedState()
+    {
+        _parseGeneration++;
+        ClearParsedState();
+        NotifyCommands();
+    }
+
+    private void ClearParsedState()
+    {
+        foreach (var row in Rows) row.SelectionChanged -= Row_SelectionChanged;
+        Rows.Clear();
+        VisibleRows.Clear();
+        Catalog = null;
+        LastDownloadResult = null;
+        _failedPages.Clear();
+        _continueAvailable = false;
+        _pendingRestore = null;
+        ShowProgress = false;
+        OverallProgress = 0;
+        CurrentProgress = 0;
+    }
+
+    private bool CatalogMatchesCurrentUrl() => Catalog is not null && UrlsMatch(Catalog.SourceUrl, Url);
+    private static bool UrlsMatch(string? left, string? right) =>
+        string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private void SetMessage(string value, InfoBarSeverity severity, string logPath = "")
     {

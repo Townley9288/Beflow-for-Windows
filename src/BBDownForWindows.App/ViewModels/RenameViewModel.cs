@@ -27,7 +27,7 @@ public sealed class RenameFileItemViewModel : ObservableObject
 public sealed class RenameViewModel : ObservableObject
 {
     private readonly AppServices _services;
-    private readonly DispatcherQueue _dispatcher;
+    private readonly DispatcherQueue? _dispatcher;
     private readonly List<RenameTemplate> _allTemplates = [];
     private CancellationTokenSource? _tmdbCancellation;
     private string _directoryPath = string.Empty;
@@ -56,11 +56,20 @@ public sealed class RenameViewModel : ObservableObject
     private readonly List<RenameHistoryRecord> _filteredHistory = [];
     private int _historyPageNumber = 1;
     private const int HistoryPageSize = 8;
+    private bool _isPreviewing;
+    private CancellationTokenSource? _historyLoadCancellation;
+    private int _historyLoadGeneration;
+    private CancellationTokenSource? _templatePersistenceCancellation;
+    private int _templatePersistenceGeneration;
 
     public RenameViewModel(AppServices services)
     {
         _services = services;
-        _dispatcher = DispatcherQueue.GetForCurrentThread();
+        try { _dispatcher = DispatcherQueue.GetForCurrentThread(); }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // Headless App-layer tests do not initialize the WinUI dispatcher.
+        }
         Console = services.TaskConsole;
         Files.CollectionChanged += (_, _) =>
         {
@@ -174,7 +183,7 @@ public sealed class RenameViewModel : ObservableObject
             ClearPreview();
             if (_suppressTemplatePersistence) return;
             SetActiveTemplateId(value.MediaType, value.Id);
-            _ = PersistActiveTemplateAsync(value);
+            QueueActiveTemplatePersistence(value);
         }
     }
     public string TemplatePattern
@@ -234,7 +243,15 @@ public sealed class RenameViewModel : ObservableObject
     public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
     public Visibility MessageVisibility => HasMessage ? Visibility.Visible : Visibility.Collapsed;
     public InfoBarSeverity MessageSeverity { get => _messageSeverity; private set => SetProperty(ref _messageSeverity, value); }
-    public bool CanPreview => HasTmdbMatch && Files.Any(file => file.IsSelected) && !Console.IsBusy;
+    public bool IsPreviewing
+    {
+        get => _isPreviewing;
+        private set
+        {
+            if (SetProperty(ref _isPreviewing, value)) OnPropertyChanged(nameof(CanPreview));
+        }
+    }
+    public bool CanPreview => HasTmdbMatch && Files.Any(file => file.IsSelected) && !Console.IsBusy && !IsPreviewing;
     public bool CanReloadDirectory => !string.IsNullOrWhiteSpace(DirectoryPath) && !Console.IsBusy;
     public bool CanExecutePreview => _preview?.CanExecute == true && !Console.IsBusy;
     public string PreviewSummary => _preview is null
@@ -256,6 +273,7 @@ public sealed class RenameViewModel : ObservableObject
         Console.PropertyChanged -= Console_PropertyChanged;
         _services.RenameHistory.Changed -= RenameHistory_Changed;
         _tmdbCancellation?.Cancel();
+        _historyLoadCancellation?.Cancel();
     }
 
     public async Task InitializeAsync(RenameNavigationContext? context)
@@ -342,52 +360,68 @@ public sealed class RenameViewModel : ObservableObject
 
     public async Task PreviewAsync()
     {
+        if (!CanPreview || IsPreviewing) return;
         if (!HasTmdbMatch)
         {
             MessageSeverity = InfoBarSeverity.Warning;
             Message = "请先搜索并应用正确的 TMDB 条目";
             return;
         }
-        RenamePreview? generated = null;
-        IReadOnlyDictionary<int, string> episodeNames = new Dictionary<int, string>();
-        if (MediaType == RenameMediaType.Series && _tmdbId is int tmdbId)
+        IsPreviewing = true;
+        try
         {
-            try { episodeNames = await _services.Tmdb.GetEpisodeNamesAsync(tmdbId, Season); }
-            catch (InvalidOperationException) { }
+            RenamePreview? generated = null;
+            TaskSnapshot snapshot;
+            try
+            {
+                snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.RenamePreview, false, "rename_preview", async (taskContext, token) =>
+                {
+                    IReadOnlyDictionary<int, string> episodeNames = new Dictionary<int, string>();
+                    if (MediaType == RenameMediaType.Series && _tmdbId is int tmdbId)
+                    {
+                        try { episodeNames = await _services.Tmdb.GetEpisodeNamesAsync(tmdbId, Season, token); }
+                        catch (InvalidOperationException) { }
+                    }
+                    var request = new RenamePreviewRequest
+                    {
+                        DirectoryPath = DirectoryPath,
+                        MediaType = MediaType,
+                        ChineseTitle = ChineseTitle,
+                        EnglishTitle = EnglishTitle,
+                        Year = Year,
+                        Season = Season,
+                        TemplateName = SelectedTemplate?.Name ?? "自定义模板",
+                        TemplatePattern = TemplatePattern,
+                        FilenameSuffix = FilenameSuffix,
+                        UseCustomEpisodes = UseCustomEpisodes,
+                        StartEpisode = StartEpisode,
+                        Files = Files.Select(file => file.ToModel()).ToList(),
+                        EpisodeNames = episodeNames
+                    };
+                    generated = await _services.Rename.BuildPreviewAsync(request, taskContext, token);
+                });
+            }
+            catch (InvalidOperationException exception)
+            {
+                MessageSeverity = InfoBarSeverity.Warning;
+                Message = exception.Message;
+                return;
+            }
+            if (snapshot.State != TaskState.Completed || generated is null)
+            {
+                MessageSeverity = snapshot.State == TaskState.Cancelled ? InfoBarSeverity.Informational : InfoBarSeverity.Error;
+                Message = snapshot.State == TaskState.Cancelled ? "预览已取消" : $"预览失败：{snapshot.Error}";
+                return;
+            }
+            _preview = generated;
+            PreviewItems.Clear();
+            foreach (var item in generated.Items) PreviewItems.Add(item);
+            OnPropertyChanged(nameof(CanExecutePreview));
+            OnPropertyChanged(nameof(PreviewSummary));
+            MessageSeverity = generated.CanExecute ? InfoBarSeverity.Success : InfoBarSeverity.Error;
+            Message = generated.CanExecute ? "预览已生成，请确认后执行" : string.Join("；", generated.Errors.Take(4));
         }
-        var request = new RenamePreviewRequest
-        {
-            DirectoryPath = DirectoryPath,
-            MediaType = MediaType,
-            ChineseTitle = ChineseTitle,
-            EnglishTitle = EnglishTitle,
-            Year = Year,
-            Season = Season,
-            TemplateName = SelectedTemplate?.Name ?? "自定义模板",
-            TemplatePattern = TemplatePattern,
-            FilenameSuffix = FilenameSuffix,
-            UseCustomEpisodes = UseCustomEpisodes,
-            StartEpisode = StartEpisode,
-            Files = Files.Select(file => file.ToModel()).ToList(),
-            EpisodeNames = episodeNames
-        };
-        var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.RenamePreview, false, "rename_preview", async (taskContext, token) =>
-        {
-            generated = await _services.Rename.BuildPreviewAsync(request, taskContext, token);
-        });
-        if (snapshot.State != TaskState.Completed || generated is null)
-        {
-            MessageSeverity = snapshot.State == TaskState.Cancelled ? InfoBarSeverity.Informational : InfoBarSeverity.Error;
-            Message = snapshot.State == TaskState.Cancelled ? "预览已取消" : $"预览失败：{snapshot.Error}";
-            return;
-        }
-        _preview = generated;
-        PreviewItems.Clear();
-        foreach (var item in generated.Items) PreviewItems.Add(item);
-        OnPropertyChanged(nameof(CanExecutePreview));
-        OnPropertyChanged(nameof(PreviewSummary));
-        MessageSeverity = generated.CanExecute ? InfoBarSeverity.Success : InfoBarSeverity.Error;
-        Message = generated.CanExecute ? "预览已生成，请确认后执行" : string.Join("；", generated.Errors.Take(4));
+        finally { IsPreviewing = false; }
     }
 
     public async Task ExecuteAsync()
@@ -432,16 +466,36 @@ public sealed class RenameViewModel : ObservableObject
 
     public async Task LoadHistoryAsync()
     {
+        var generation = Interlocked.Increment(ref _historyLoadGeneration);
+        var cancellation = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _historyLoadCancellation, cancellation);
+        previous?.Cancel();
         var query = HistorySearch.Trim();
-        var records = await _services.RenameHistory.LoadAsync();
-        var filtered = string.IsNullOrWhiteSpace(query) ? records : records.Where(record =>
-            record.DisplayTitle.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            record.DirectoryPath.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            record.TemplateName.Contains(query, StringComparison.OrdinalIgnoreCase));
-        _filteredHistory.Clear();
-        _filteredHistory.AddRange(filtered);
-        HistoryPageNumber = Math.Min(HistoryPageNumber, HistoryTotalPages);
-        ApplyHistoryPage();
+        try
+        {
+            var records = await _services.RenameHistory.LoadAsync(cancellation.Token);
+            if (generation != Volatile.Read(ref _historyLoadGeneration) || cancellation.IsCancellationRequested) return;
+            var filtered = string.IsNullOrWhiteSpace(query) ? records : records.Where(record =>
+                record.DisplayTitle.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                record.DirectoryPath.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                record.TemplateName.Contains(query, StringComparison.OrdinalIgnoreCase));
+            _filteredHistory.Clear();
+            _filteredHistory.AddRange(filtered);
+            HistoryPageNumber = Math.Min(HistoryPageNumber, HistoryTotalPages);
+            ApplyHistoryPage();
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            if (generation != Volatile.Read(ref _historyLoadGeneration)) return;
+            MessageSeverity = InfoBarSeverity.Warning;
+            Message = $"重命名历史加载失败：{exception.Message}";
+        }
+        finally
+        {
+            _ = Interlocked.CompareExchange(ref _historyLoadCancellation, null, cancellation);
+            cancellation.Dispose();
+        }
     }
 
     public void PreviousHistoryPage()
@@ -508,7 +562,16 @@ public sealed class RenameViewModel : ObservableObject
         OnPropertyChanged(nameof(CanNextHistoryPage));
     }
 
-    private async Task PersistActiveTemplateAsync(RenameTemplate template)
+    private void QueueActiveTemplatePersistence(RenameTemplate template)
+    {
+        var generation = Interlocked.Increment(ref _templatePersistenceGeneration);
+        var cancellation = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _templatePersistenceCancellation, cancellation);
+        previous?.Cancel();
+        _ = PersistActiveTemplateAsync(template, generation, cancellation);
+    }
+
+    private async Task PersistActiveTemplateAsync(RenameTemplate template, int generation, CancellationTokenSource cancellation)
     {
         try
         {
@@ -517,12 +580,21 @@ public sealed class RenameViewModel : ObservableObject
                 if (template.MediaType == RenameMediaType.Series) current.ActiveSeriesTemplateId = template.Id;
                 else current.ActiveMovieTemplateId = template.Id;
                 return current;
-            });
+            }, cancellation.Token);
         }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            MessageSeverity = InfoBarSeverity.Warning;
-            Message = $"模板选择暂时无法保存：{exception.Message}";
+            if (generation == Volatile.Read(ref _templatePersistenceGeneration))
+            {
+                MessageSeverity = InfoBarSeverity.Warning;
+                Message = $"模板选择暂时无法保存：{exception.Message}";
+            }
+        }
+        finally
+        {
+            _ = Interlocked.CompareExchange(ref _templatePersistenceCancellation, null, cancellation);
+            cancellation.Dispose();
         }
     }
 
@@ -599,7 +671,8 @@ public sealed class RenameViewModel : ObservableObject
     private void RenameHistory_Changed(object? sender, EventArgs e)
     {
         if (!_active) return;
-        _dispatcher.TryEnqueue(async () => await LoadHistoryAsync());
+        if (_dispatcher is null) _ = LoadHistoryAsync();
+        else _dispatcher.TryEnqueue(async () => await LoadHistoryAsync());
     }
 
     private static bool ContainsChinese(string value) => value.Any(character => character is >= '\u4e00' and <= '\u9fff');

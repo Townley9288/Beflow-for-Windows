@@ -1,68 +1,181 @@
-<Page x:Class="BBDownForWindows.App.Pages.DualAudioPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" DataContext="{x:Bind ViewModel, Mode=OneWay}">
-    <Grid x:Name="LayoutGrid" Padding="24" ColumnSpacing="20" RowSpacing="20">
-        <Grid.RowDefinitions>
-            <RowDefinition x:Name="MainRow" Height="*" />
-            <RowDefinition x:Name="NarrowLogRow" Height="0" />
-        </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="ControlColumn" Width="5*" />
-            <ColumnDefinition x:Name="LogColumn" Width="7*" />
-        </Grid.ColumnDefinitions>
-        <VisualStateManager.VisualStateGroups>
-            <VisualStateGroup>
-                <VisualState x:Name="Wide">
-                    <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="1250" /></VisualState.StateTriggers>
-                </VisualState>
-                <VisualState x:Name="Narrow">
-                    <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="0" /></VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="ControlColumn.Width" Value="*" />
-                        <Setter Target="LogColumn.Width" Value="0" />
-                        <Setter Target="MainRow.Height" Value="Auto" />
-                        <Setter Target="NarrowLogRow.Height" Value="520" />
-                        <Setter Target="LogPanel.(Grid.Column)" Value="0" />
-                        <Setter Target="LogPanel.(Grid.Row)" Value="1" />
-                    </VisualState.Setters>
-                </VisualState>
-            </VisualStateGroup>
-        </VisualStateManager.VisualStateGroups>
-        <ScrollViewer Grid.Row="0" Grid.Column="0" VerticalScrollBarVisibility="Auto"><StackPanel Spacing="12">
-            <StackPanel><TextBlock Text="多音轨封装" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock Text="下载两套音轨并批量封装 MKV，或重新封装已有任务" Opacity="0.65"/></StackPanel>
-            <StackPanel Spacing="8">
-            <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="12">
-                <ComboBox Header="来源模式" ItemsSource="{Binding SourceModes}" SelectedItem="{Binding SourceModeText, Mode=TwoWay}" />
-                <TextBox Header="主版本 URL" Text="{Binding PrimaryUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBox Header="副音轨 URL（奇偶分P模式会忽略）" Text="{Binding SecondaryUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <TextBox Header="分P / 集数（可选）" PlaceholderText="默认 ALL，例如 1,2、3-5" HorizontalAlignment="Stretch" Text="{Binding Pages, Mode=TwoWay}" />
-                    <ComboBox Grid.Column="1" Header="质量" HorizontalAlignment="Stretch" ItemsSource="{Binding QualityOptions}" SelectedItem="{Binding Quality, Mode=TwoWay}" />
-                    <ComboBox Grid.Column="2" Header="编码" HorizontalAlignment="Stretch" ItemsSource="{Binding EncodingOptions}" SelectedItem="{Binding Encoding, Mode=TwoWay}" />
-                </Grid>
-                <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <ComboBox Header="主音轨格式" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioCodecOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding PrimaryAudioCodec, Mode=TwoWay}" />
-                    <ComboBox Grid.Column="1" Header="副音轨格式" HorizontalAlignment="Stretch" ItemsSource="{Binding AudioCodecOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SecondaryAudioCodec, Mode=TwoWay}" />
-                </Grid>
-            </StackPanel></Border>
-            <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="12">
-                <TextBlock Text="音轨元数据" Style="{StaticResource SubtitleTextBlockStyle}"/>
-                <Grid ColumnSpacing="12" RowSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <TextBox Header="主音轨名称" Text="{Binding PrimaryLabel, Mode=TwoWay}"/><TextBox Grid.Column="1" Header="副音轨名称" Text="{Binding SecondaryLabel, Mode=TwoWay}"/>
-                    <TextBox Grid.Row="1" Header="主音轨语言" Text="{Binding PrimaryLanguage, Mode=TwoWay}"/><TextBox Grid.Row="1" Grid.Column="1" Header="副音轨语言" Text="{Binding SecondaryLanguage, Mode=TwoWay}"/>
-                    <ComboBox Grid.Row="2" Header="默认音轨" ItemsSource="{Binding DefaultAudioOptions}" SelectedItem="{Binding DefaultAudio, Mode=TwoWay}"/>
-                    <NumberBox Grid.Row="2" Grid.Column="1" Header="副音轨延迟（ms）" Minimum="-10000" Maximum="10000" SmallChange="10" SpinButtonPlacementMode="Inline" Value="{Binding SecondaryAudioDelay, Mode=TwoWay}"/>
-                </Grid>
-            </StackPanel></Border>
-            <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="12">
-                <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="输出目录" Text="{Binding WorkDirectory, Mode=TwoWay}"/><Button Grid.Column="1" Content="浏览…" VerticalAlignment="Bottom" Click="BrowseWorkDir_Click"/></Grid>
-                <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="已有任务目录" Text="{Binding ExistingTaskDirectory, Mode=TwoWay}"/><Button Grid.Column="1" Content="浏览…" VerticalAlignment="Bottom" Click="BrowseExisting_Click"/></Grid>
-                <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="mkvmerge.exe 路径" Text="{Binding MkvmergePath, Mode=TwoWay}"/><Button Grid.Column="1" Content="选择…" VerticalAlignment="Bottom" Click="BrowseMkvmerge_Click"/></Grid>
-                <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="获取规格" Command="{Binding InfoCommand}"/><Button Content="下载并封装" Command="{Binding StartCommand}" Style="{StaticResource AccentButtonStyle}"/><Button Content="仅重新封装" Command="{Binding RemuxCommand}"/><Button Content="取消" Command="{Binding Console.CancelCommand}"/></StackPanel>
-            </StackPanel></Border>
+<Page x:Class="BBDownForWindows.App.Pages.DualAudioPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:vm="using:BBDownForWindows.App.ViewModels"
+      NavigationCacheMode="Required"
+      DataContext="{x:Bind ViewModel, Mode=OneWay}">
+    <Grid>
+        <Grid x:Name="LayoutGrid" Padding="24,16" RowSpacing="12" SizeChanged="LayoutGrid_SizeChanged">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel>
+                <TextBlock Text="多音轨封装" Style="{StaticResource TitleTextBlockStyle}"/>
+                <TextBlock Text="同时解析两个版本，逐集选择画面与两条音轨后精确下载并封装 MKV" Opacity="0.65"/>
             </StackPanel>
-        </StackPanel></ScrollViewer>
-        <Border x:Name="LogPanel" Grid.Row="0" Grid.Column="1" Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><Grid RowSpacing="10"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="多音轨任务日志" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Text="{Binding Console.Status}" Opacity="0.65"/></StackPanel><Button Grid.Column="1" Content="复制" Margin="0,0,8,0" Click="CopyLogs_Click"/><Button Grid.Column="2" Content="清空" Command="{Binding Console.ClearCommand}"/></Grid>
-            <TextBox x:Name="LogTextBox" Grid.Row="1" Text="{Binding Console.Logs, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
-        </Grid></Border>
+
+            <StackPanel Grid.Row="1" Spacing="8">
+                <InfoBar IsOpen="{Binding HasMessage}" Severity="{Binding MessageSeverity}" Message="{Binding Message}" IsClosable="True" Closed="MessageInfoBar_Closed"/>
+                <InfoBar IsOpen="{Binding HasResult}" IsClosable="False" Severity="Success" HorizontalContentAlignment="Stretch">
+                    <InfoBar.Content>
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="多音轨任务已结束" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ResultMessage}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            <Button Grid.Column="2" Content="打开输出文件夹" Click="OpenOutputFolder_Click"/>
+                        </Grid>
+                    </InfoBar.Content>
+                </InfoBar>
+            </StackPanel>
+
+            <Border Grid.Row="2" Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <ComboBox ItemsSource="{Binding SourceModes}" SelectedItem="{Binding SourceModeText, Mode=TwoWay}" HorizontalAlignment="Stretch"/>
+                    <TextBox Grid.Column="1" Text="{Binding SourceAUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="来源 A：输入 B站链接、BV、AV、EP 或 SS 号"/>
+                    <TextBox Grid.Column="2" Text="{Binding SourceBUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="来源 B：输入对应版本链接" Visibility="{Binding SourceBUrlVisibility}"/>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <Button Content="解析当前集" Command="{Binding ParseCurrentCommand}"/>
+                        <Button Content="解析全部集" Command="{Binding ParseAllCommand}" Style="{StaticResource AccentButtonStyle}"/>
+                        <Button Content="取消" Command="{Binding Console.CancelCommand}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="3" Visibility="{Binding SourceCardsVisibility}">
+                <Grid x:Name="SourceCardsWide" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Border Padding="12" CornerRadius="8" Background="#142563EB" BorderBrush="#402563EB" BorderThickness="1">
+                        <Grid ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="3"><TextBlock Text="来源 A" Foreground="#FF60A5FA" FontWeight="SemiBold"/><TextBlock Text="{Binding SourceAInfoText}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding SourceAParseStatus}" Opacity="0.65"/></StackPanel>
+                            <Button Grid.Column="1" Content="重试来源 A" Command="{Binding RetrySourceACommand}" Visibility="{Binding SourceARetryVisibility}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                    <Border Grid.Column="1" Padding="12" CornerRadius="8" Background="#1410B981" BorderBrush="#4010B981" BorderThickness="1">
+                        <Grid ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="3"><TextBlock Text="来源 B" Foreground="#FF34D399" FontWeight="SemiBold"/><TextBlock Text="{Binding SourceBInfoText}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding SourceBParseStatus}" Opacity="0.65"/></StackPanel>
+                            <Button Grid.Column="1" Content="重试来源 B" Command="{Binding RetrySourceBCommand}" Visibility="{Binding SourceBRetryVisibility}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+                <Border x:Name="SourceCardsCompact" Visibility="Collapsed" Padding="10,8" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Grid ColumnSpacing="6" ToolTipService.ToolTip="{Binding SourceAInfoText}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="A：" FontWeight="SemiBold"/><TextBlock Text="{Binding SourceAParseStatus}" TextTrimming="CharacterEllipsis"/></StackPanel>
+                            <Button Grid.Column="1" Content="重试" Padding="8,3" MinWidth="0" Command="{Binding RetrySourceACommand}" Visibility="{Binding SourceARetryVisibility}" ToolTipService.ToolTip="重试来源 A"/>
+                        </Grid>
+                        <Grid Grid.Column="1" ColumnSpacing="6" ToolTipService.ToolTip="{Binding SourceBInfoText}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="B：" FontWeight="SemiBold"/><TextBlock Text="{Binding SourceBParseStatus}" TextTrimming="CharacterEllipsis"/></StackPanel>
+                            <Button Grid.Column="1" Content="重试" Padding="8,3" MinWidth="0" Command="{Binding RetrySourceBCommand}" Visibility="{Binding SourceBRetryVisibility}" ToolTipService.ToolTip="重试来源 B"/>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <ScrollViewer x:Name="BatchRulesScroller" Grid.Row="4" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch" Visibility="{Binding CatalogVisibility}">
+            <Border Width="{Binding ViewportWidth, ElementName=BatchRulesScroller}" MinWidth="1080" Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <Grid ColumnSpacing="10" RowSpacing="8">
+                    <Grid.RowDefinitions><RowDefinition Height="18"/><RowDefinition Height="36"/><RowDefinition Height="36"/></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/><ColumnDefinition Width="150"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="1" Text="画质" FontSize="12" Opacity="0.65" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Text="编码" FontSize="12" Opacity="0.65" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="3" Text="音频" FontSize="12" Opacity="0.65" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="4" Text="主视频" FontSize="12" Opacity="0.65" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="5" Text="音频码率" FontSize="12" Opacity="0.65" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Row="1" Text="来源 A 规则" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceAQuality, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="1" Grid.Column="2" ItemsSource="{Binding EncodingOptions}" SelectedItem="{Binding SourceAEncoding, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="1" Grid.Column="3" ItemsSource="{Binding AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceAAudio, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="MainVideoBatch" Grid.Row="1" Grid.Column="4" Grid.RowSpan="2" ItemsSource="{Binding MainVideoModeOptions}" SelectedItem="{Binding MainVideoMode, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                    <ComboBox x:Name="AudioBitrateBatch" Grid.Row="1" Grid.Column="5" Grid.RowSpan="2" ItemsSource="{Binding AudioBitrateOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding AudioBitrate, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                    <Button x:Name="ApplyAllBatch" Grid.Row="1" Grid.Column="6" Grid.RowSpan="2" Content="应用到全部" Command="{Binding ApplyAllCommand}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Row="2" Text="来源 B 规则" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                    <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceBQuality, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="2" Grid.Column="2" ItemsSource="{Binding EncodingOptions}" SelectedItem="{Binding SourceBEncoding, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="2" Grid.Column="3" ItemsSource="{Binding AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceBAudio, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+            </ScrollViewer>
+
+            <ScrollViewer x:Name="PairTableScroller" Grid.Row="5" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch" Visibility="{Binding CatalogVisibility}">
+                <Border Width="{Binding ViewportWidth, ElementName=PairTableScroller}" MinWidth="1120" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <Grid Padding="10,0" ColumnSpacing="10" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="36"/><ColumnDefinition Width="55"/><ColumnDefinition Width="305"/><ColumnDefinition Width="305"/><ColumnDefinition Width="95"/><ColumnDefinition Width="75"/><ColumnDefinition Width="90"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="1" Text="配对" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="2" Text="来源 A 规格" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="3" Text="来源 B 分集与规格" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="4" Text="主视频" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="5" Text="大小" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="6" Text="延迟（B-A）" VerticalAlignment="Center" FontWeight="SemiBold"/><TextBlock Grid.Column="7" Text="状态" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        </Grid>
+                        <ListView Grid.Row="1" ItemsSource="{Binding Pairs}" SelectionMode="None" HorizontalContentAlignment="Stretch">
+                            <ListView.ItemContainerStyle><Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="0"/><Setter Property="MinHeight" Value="96"/></Style></ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:DualAudioPairViewModel">
+                                    <Grid Padding="10,7" ColumnSpacing="10">
+                                        <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="40"/></Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="36"/><ColumnDefinition Width="55"/><ColumnDefinition Width="305"/><ColumnDefinition Width="305"/><ColumnDefinition Width="95"/><ColumnDefinition Width="75"/><ColumnDefinition Width="90"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <CheckBox Grid.RowSpan="2" IsChecked="{x:Bind IsSelected, Mode=TwoWay}" IsEnabled="{x:Bind IsDownloadable}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.RowSpan="2" Grid.Column="1" Text="{x:Bind PairText}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="{x:Bind SourceATitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind SourceATitle}"/>
+                                        <Grid Grid.Row="1" Grid.Column="2" ColumnSpacing="6" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding SourceA.SelectedSpecificationText}"><Grid.ColumnDefinitions><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
+                                            <ComboBox ItemsSource="{Binding SourceA.QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedQuality, Mode=TwoWay}" IsEnabled="{Binding SourceA.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding SourceA.EncodingOptions}" SelectedItem="{Binding SourceA.SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding SourceA.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                            <ComboBox Grid.Column="2" ItemsSource="{Binding SourceA.AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedAudio, Mode=TwoWay}" IsEnabled="{Binding SourceA.AudioSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <ComboBox Grid.Column="3" ItemsSource="{x:Bind SourceBChoices}" DisplayMemberPath="Label" SelectedValuePath="PageNumber" SelectedValue="{x:Bind SelectedSourceBPageNumber, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                        <Grid Grid.Row="1" Grid.Column="3" ColumnSpacing="6" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding SourceB.SelectedSpecificationText}"><Grid.ColumnDefinitions><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
+                                            <ComboBox ItemsSource="{Binding SourceB.QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedQuality, Mode=TwoWay}" IsEnabled="{Binding SourceB.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding SourceB.EncodingOptions}" SelectedItem="{Binding SourceB.SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding SourceB.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                            <ComboBox Grid.Column="2" ItemsSource="{Binding SourceB.AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedAudio, Mode=TwoWay}" IsEnabled="{Binding SourceB.AudioSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <ComboBox Grid.Column="4" ItemsSource="{x:Bind MainVideoModes}" SelectedItem="{x:Bind MainVideoModeText, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Row="1" Grid.Column="4" Spacing="1" VerticalAlignment="Center"><TextBlock Text="{x:Bind MainVideoSourceText, Mode=OneWay}" FontWeight="SemiBold"/><TextBlock Text="{x:Bind RecommendationReason, Mode=OneWay}" FontSize="10" Opacity="0.65" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind RecommendationReason, Mode=OneWay}"/></StackPanel>
+                                        <TextBlock Grid.RowSpan="2" Grid.Column="5" Text="{x:Bind EstimatedSizeText, Mode=OneWay}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="6" Content="单独设置" IsChecked="{x:Bind UseCustomDelay, Mode=TwoWay}" VerticalAlignment="Center"/>
+                                        <NumberBox Grid.Row="1" Grid.Column="6" Value="{x:Bind DelayValue, Mode=TwoWay}" Minimum="-10000" Maximum="10000" SmallChange="10" SpinButtonPlacementMode="Compact" IsEnabled="{x:Bind UseCustomDelay}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.RowSpan="2" Grid.Column="7" Text="{x:Bind StatusText, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                </Border>
+            </ScrollViewer>
+
+            <StackPanel Grid.Row="6" Spacing="8">
+                <Border Visibility="{Binding ProgressVisibility}" Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4"><TextBlock Text="总体进度" FontWeight="SemiBold"/><ProgressBar Value="{Binding OverallProgress}" Maximum="100"/><TextBlock Text="{Binding ProgressDetail}" Opacity="0.65" FontSize="12" TextTrimming="CharacterEllipsis"/></StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="{Binding ProgressTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><ProgressBar Value="{Binding CurrentProgress}" Maximum="100" IsIndeterminate="{Binding CurrentProgressIndeterminate}"/><TextBlock Text="当前来源下载或 MKV 封装阶段" Opacity="0.65" FontSize="12"/></StackPanel>
+                    </Grid>
+                </Border>
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Button Content="全选" Command="{Binding SelectAllCommand}"/><Button Grid.Column="1" Content="反选" Command="{Binding InvertSelectionCommand}"/>
+                    <TextBlock Grid.Column="2" Text="{Binding SelectionSummary}" VerticalAlignment="Center" Margin="4,0"/>
+                    <Button Grid.Column="3" Content="任务设置" Click="ShowTaskSettings_Click"/>
+                    <Button Grid.Column="4" Content="取消" Command="{Binding Console.CancelCommand}"/>
+                    <Button Grid.Column="5" Content="下载并封装选中项" Command="{Binding StartCommand}" Style="{StaticResource AccentButtonStyle}"/>
+                </Grid>
+            </StackPanel>
+        </Grid>
+
+        <ContentDialog x:Name="TaskSettingsDialog" Title="多音轨任务设置" CloseButtonText="完成" DefaultButton="Close">
+            <ScrollViewer MaxHeight="620" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch">
+                <StackPanel MinWidth="460" Spacing="14" HorizontalAlignment="Stretch">
+                    <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="输出目录" Text="{Binding WorkDirectory, Mode=TwoWay}"/><Button Grid.Column="1" MinWidth="96" Content="选择文件夹" VerticalAlignment="Bottom" Click="BrowseWorkDir_Click"/></Grid>
+                    <CheckBox Content="封装成功后保留来源 A/B 文件，便于重新封装" IsChecked="{Binding KeepSourceFiles, Mode=TwoWay}"/>
+                    <Grid ColumnSpacing="10" RowSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                        <TextBox Header="来源 A 音轨名称" Text="{Binding SourceALabel, Mode=TwoWay}"/><TextBox Grid.Column="1" Header="来源 B 音轨名称" Text="{Binding SourceBLabel, Mode=TwoWay}"/>
+                        <TextBox Grid.Row="1" Header="来源 A 语言" Text="{Binding SourceALanguage, Mode=TwoWay}"/><TextBox Grid.Row="1" Grid.Column="1" Header="来源 B 语言" Text="{Binding SourceBLanguage, Mode=TwoWay}"/>
+                        <ComboBox Grid.Row="2" Header="默认音轨" ItemsSource="{Binding DefaultAudioOptions}" SelectedItem="{Binding DefaultAudio, Mode=TwoWay}"/><NumberBox Grid.Row="2" Grid.Column="1" Header="来源 B 相对 A 延迟（ms）" Value="{Binding SourceBDelay, Mode=TwoWay}" Minimum="-10000" Maximum="10000" SmallChange="10" SpinButtonPlacementMode="Compact"/>
+                    </Grid>
+                    <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="mkvmerge.exe 路径" Text="{Binding MkvmergePath, Mode=TwoWay}"/><Button Grid.Column="1" MinWidth="88" Content="选择…" VerticalAlignment="Bottom" Click="BrowseMkvmerge_Click"/></Grid>
+                    <Border Height="1" Background="{ThemeResource CardStrokeColorDefaultBrush}"/>
+                    <TextBlock Text="仅重新封装已有任务" FontWeight="SemiBold"/>
+                    <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="已有任务目录" Text="{Binding ExistingTaskDirectory, Mode=TwoWay}"/><Button Grid.Column="1" MinWidth="88" Content="浏览…" VerticalAlignment="Bottom" Click="BrowseExisting_Click"/><Button Grid.Column="2" MinWidth="96" Content="重新封装" VerticalAlignment="Bottom" Command="{Binding RemuxCommand}" Style="{StaticResource AccentButtonStyle}"/></Grid>
+                </StackPanel>
+            </ScrollViewer>
+        </ContentDialog>
     </Grid>
 </Page>

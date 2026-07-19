@@ -92,6 +92,38 @@ public sealed class DownloadSelectionTests
     }
 
     [Fact]
+    public void ManualVideoBitrateChangeDoesNotSilentlyMatchSameCodec()
+    {
+        var episode = Episode(
+            [new VideoStreamInfo(0, "1080P 高清", "1920x1080", 1920, 1080, "HEVC", "25", "1100 kbps", 1100, "100 MB")],
+            [new AudioStreamInfo(1, "M4A", "192 kbps", 192, "20 MB")]);
+        var desired = new EpisodeStreamSelection
+        {
+            PageNumber = 1,
+            Video = new VideoStreamSelection("1080P 高清", "1920x1080", "HEVC", 1000, true),
+            Audio = new AudioStreamSelection("M4A", 192)
+        };
+
+        Assert.Throws<InvalidOperationException>(() => StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1" }));
+    }
+
+    [Fact]
+    public void ManualAudioBitrateChangeDoesNotSilentlyMatchSameCodec()
+    {
+        var episode = Episode(
+            [new VideoStreamInfo(0, "1080P 高清", "1920x1080", 1920, 1080, "HEVC", "25", "1000 kbps", 1000, "100 MB")],
+            [new AudioStreamInfo(1, "M4A", "128 kbps", 128, "20 MB")]);
+        var desired = new EpisodeStreamSelection
+        {
+            PageNumber = 1,
+            Video = new VideoStreamSelection("1080P 高清", "1920x1080", "HEVC", 1000),
+            Audio = new AudioStreamSelection("M4A", 192, true)
+        };
+
+        Assert.Throws<InvalidOperationException>(() => StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1" }));
+    }
+
+    [Fact]
     public void SelectedSizeUsesReadableBinaryUnits()
     {
         Assert.Equal("1.25 GB", MediaEstimateFormatter.FormatBytes(1342177280));
@@ -307,6 +339,33 @@ public sealed class DownloadSelectionTests
             Assert.Contains("1 集", restored.SpecificationTags);
         }
         finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task ExactDownloadUsesSharedInteractiveSelectionPipeline()
+    {
+        using var fixture = new ServiceFixture(new ScriptedRunner());
+        var output = Directory.CreateDirectory(Path.Combine(fixture.Root.FullName, "exact"));
+        var manager = new TaskManager(fixture.Paths, fixture.Runner);
+        ExactDownloadResult? result = null;
+
+        var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadBatch, false, "exact", async (context, token) =>
+        {
+            var episode = await fixture.Service.ParseEpisodeAsync("BV1", 1, "WEB", context, token);
+            result = await fixture.Service.DownloadExactAsync(new ExactDownloadRequest
+            {
+                Options = new DownloadRequest { Url = "BV1", WorkDirectory = output.FullName, UseAria2c = true },
+                Episode = episode,
+                Selection = Selection(1),
+                OutputDirectory = output.FullName,
+                RelativeOutputPath = "[P01]精准下载"
+            }, null, context, token);
+        });
+
+        Assert.Equal(TaskState.Completed, snapshot.State);
+        Assert.NotNull(result);
+        Assert.Single(result!.OutputFiles);
+        Assert.Contains(fixture.Runner.Requests, request => request.Arguments.Contains("--interactive"));
     }
 
     private static DownloadEpisodeInfo Episode(List<VideoStreamInfo> video, List<AudioStreamInfo> audio) => new()

@@ -393,7 +393,7 @@ public sealed class RenameTemplatesViewModel : ObservableObject
 
     private void ValidatePattern()
     {
-        if (string.IsNullOrWhiteSpace(TemplatePattern)) throw new InvalidOperationException("模板规则不能为空");
+        RenameService.ValidateTemplatePattern(TemplatePattern);
     }
 
     private static void EnsureUniqueName(RenameSettings settings, string name, RenameMediaType mediaType, string? excludedId = null)

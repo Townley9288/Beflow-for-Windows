@@ -54,6 +54,17 @@ public sealed class RenameService(
         return Task.FromResult<IReadOnlyList<RenameFileEntry>>(files);
     }
 
+    public static void ValidateTemplatePattern(string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) throw new InvalidOperationException("命名模板不能为空");
+        var unknown = Regex.Matches(pattern, @"\{([^}]+)\}")
+            .Select(match => match.Groups[1].Value)
+            .Where(field => !KnownTemplateFields.Contains(field))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (unknown.Count > 0) throw new InvalidOperationException($"命名模板包含未知字段：{string.Join('、', unknown)}");
+    }
+
     public async Task<RenamePreview> BuildPreviewAsync(RenamePreviewRequest request, TaskExecutionContext context, CancellationToken cancellationToken = default)
     {
         ValidatePreviewRequest(request);
@@ -292,13 +303,7 @@ public sealed class RenameService(
     private static void ValidatePreviewRequest(RenamePreviewRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.DirectoryPath) || !Directory.Exists(request.DirectoryPath)) throw new DirectoryNotFoundException("视频文件夹不存在");
-        if (string.IsNullOrWhiteSpace(request.TemplatePattern)) throw new InvalidOperationException("命名模板不能为空");
-        var unknown = Regex.Matches(request.TemplatePattern, @"\{([^}]+)\}")
-            .Select(match => match.Groups[1].Value)
-            .Where(field => !KnownTemplateFields.Contains(field))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-        if (unknown.Count > 0) throw new InvalidOperationException($"命名模板包含未知字段：{string.Join('、', unknown)}");
+        ValidateTemplatePattern(request.TemplatePattern);
         if (request.Season < 0) throw new InvalidOperationException("季数不能小于 0");
         if (request.StartEpisode < 1) throw new InvalidOperationException("起始集数必须大于 0");
     }

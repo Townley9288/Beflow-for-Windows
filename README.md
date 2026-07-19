@@ -20,7 +20,7 @@
 - E-AC-3、M4A、FLAC、AC-3、DTS 音频选择与自动回退
 - WEB/TV 扫码登录及独立账号状态
 - CDN、多线程、aria2c 自动调优、字幕、弹幕和封面
-- 双链接或奇偶分P双音轨下载、延迟与 MKV 批量封装
+- 双链接或奇偶分P双音轨解析，支持双方独立选流、智能推荐主视频、逐集调整与 MKV 批量封装
 - 下载后直接进入原生影视重命名，支持 TMDB、独立命名模板管理、媒体规格识别、字幕/弹幕/封面联动及安全撤销
 - 批量下载进度、规格历史详情、失败集重试、持久日志和任务取消
 - 跟随系统、浅色与深色主题切换，并记忆上次选择
@@ -65,7 +65,7 @@ dotnet build src\BBDownForWindows.App\BBDownForWindows.App.csproj -c Release -p:
 生成发行包：
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 1.1.0.3
+.\scripts\Build-Release.ps1 -Version 1.1.0.4
 ```
 
 正式 CI 使用 Native AOT 构建便携更新助手。本地 Native AOT 构建需要 Visual Studio 的 Desktop development with C++ 与 Windows 10/11 SDK；缺少时脚本会为本地测试回退到自包含单文件助手。

@@ -75,13 +75,16 @@ public sealed partial class RenamePage : Page
         await ViewModel.SearchTmdbAsync();
         if (ViewModel.TmdbResults.Count == 0) return;
 
+        var availableWidth = Math.Max(280, ActualWidth - 120);
         var resultList = new ListView
         {
             ItemsSource = ViewModel.TmdbResults,
             ItemTemplate = (DataTemplate)Resources["TmdbResultTemplate"],
             SelectionMode = ListViewSelectionMode.Single,
             MaxHeight = 430,
-            MinWidth = 620
+            MinWidth = 0,
+            Width = Math.Min(620, availableWidth),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch
         };
         var dialog = new ContentDialog
         {

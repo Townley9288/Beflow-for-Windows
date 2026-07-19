@@ -11,21 +11,26 @@ public sealed partial class DownloadHistoryDetailPage : Page
 {
     public DownloadHistoryDetailPage()
     {
-        ViewModel = new DownloadHistoryDetailViewModel();
+        ViewModel = new DownloadHistoryDetailViewModel(((App)Application.Current).Services);
         InitializeComponent();
     }
 
     public DownloadHistoryDetailViewModel ViewModel { get; }
 
-    protected override void OnNavigatedTo(NavigationEventArgs e)
+    protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
-        if (e.Parameter is HistoryRecord record) ViewModel.Load(record);
+        if (e.Parameter is HistoryRecord record) await ViewModel.LoadAsync(record);
         base.OnNavigatedTo(e);
     }
 
     private void Back_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("history");
     private void Load_Click(object sender, RoutedEventArgs e) { if (ViewModel.Record is not null) ((App)Application.Current).MainWindow.RestoreHistory(ViewModel.Record); }
     private void Retry_Click(object sender, RoutedEventArgs e) { var record = ViewModel.BuildFailedRetryRecord(); if (record is not null) ((App)Application.Current).MainWindow.RestoreHistory(record); }
+    private void Remux_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ViewModel.CanRemux) return;
+        ((App)Application.Current).MainWindow.Navigate("dual", new DualAudioNavigationContext(ViewModel.RemuxDirectory));
+    }
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e)
     {

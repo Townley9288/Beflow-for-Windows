@@ -46,7 +46,7 @@ public sealed partial class HistoryPage : Page
 
     private void ViewDetails_Click(object sender, RoutedEventArgs e)
     {
-        if (ViewModel.SelectedRecord?.DownloadBatch is not null)
+        if (ViewModel.SelectedRecord is { } record && (record.DownloadBatch is not null || record.DualAudioBatch is not null))
             ((App)Application.Current).MainWindow.Navigate("history-detail", ViewModel.SelectedRecord);
     }
 

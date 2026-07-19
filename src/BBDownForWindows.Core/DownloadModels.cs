@@ -167,6 +167,33 @@ public sealed record DownloadProgressSnapshot(
     string Eta,
     string Message);
 
+public sealed class ExactDownloadRequest
+{
+    public required DownloadRequest Options { get; init; }
+    public required DownloadEpisodeInfo Episode { get; init; }
+    public required EpisodeStreamSelection Selection { get; init; }
+    public required string OutputDirectory { get; init; }
+    public required string RelativeOutputPath { get; init; }
+}
+
+public sealed record ExactDownloadProgress(
+    DownloadProgressPhase Phase,
+    double? Percent,
+    string Speed,
+    string Eta,
+    string Message);
+
+public sealed class ExactDownloadResult
+{
+    public int PageNumber { get; init; }
+    public VideoStreamSelection? Video { get; init; }
+    public AudioStreamSelection? Audio { get; init; }
+    public string FallbackReason { get; init; } = string.Empty;
+    public string OutputDirectory { get; init; } = string.Empty;
+    public string RelativeOutputPath { get; init; } = string.Empty;
+    public List<string> OutputFiles { get; init; } = [];
+}
+
 public sealed class DownloadBatchHistory
 {
     public DownloadRequest Options { get; set; } = new() { Url = string.Empty };

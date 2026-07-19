@@ -81,6 +81,7 @@ public interface IDownloadNamingService
 public interface ITmdbService
 {
     Task ValidateApiKeyAsync(CancellationToken cancellationToken = default);
+    Task ValidateApiKeyAsync(RenameSettings settings, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TmdbSearchResult>> SearchAsync(string query, CancellationToken cancellationToken = default);
     Task<TmdbTitleDetail> GetDetailAsync(TmdbSearchResult result, CancellationToken cancellationToken = default);
     Task<IReadOnlyDictionary<int, string>> GetEpisodeNamesAsync(int tmdbId, int season, CancellationToken cancellationToken = default);
@@ -110,6 +111,8 @@ public interface IBBDownService
     Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken);
     Task<DownloadCatalog> ParseDownloadAsync(DownloadParseRequest request, IProgress<DownloadParseProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken);
     Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<DownloadEpisodeInfo> ParseEpisodeAsync(string url, int page, string apiMode, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<ExactDownloadResult> DownloadExactAsync(ExactDownloadRequest request, IProgress<ExactDownloadProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken);
     Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
     Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken);
     Task<string> GetTitleAsync(string url, CancellationToken cancellationToken);
@@ -117,6 +120,8 @@ public interface IBBDownService
 
 public interface IDualAudioService
 {
-    Task<string> DownloadAndMuxAsync(DualAudioRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<DualAudioCatalog> ParseAsync(DualAudioParseRequest request, IProgress<DownloadParseProgress>? sourceAProgress, IProgress<DownloadParseProgress>? sourceBProgress, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<DualAudioBatchResult> DownloadAndMuxAsync(DualAudioBatchRequest request, IProgress<DualAudioProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<DualAudioRemuxPreparation> InspectExistingAsync(string taskDirectory, CancellationToken cancellationToken = default);
     Task RemuxExistingAsync(DualAudioRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
 }

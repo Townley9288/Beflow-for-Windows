@@ -1,48 +1,82 @@
+using System.Diagnostics;
 using BBDownForWindows.App.ViewModels;
 using BBDownForWindows.Core;
-using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
-using Windows.ApplicationModel.DataTransfer;
 
 namespace BBDownForWindows.App.Pages;
 
+public sealed record DualAudioNavigationContext(string ExistingTaskDirectory, bool OpenTaskSettings = true);
+
 public sealed partial class DualAudioPage : Page
 {
-    private readonly LogAutoScroller _logAutoScroller;
-
     public DualAudioPage()
     {
         ViewModel = new DualAudioViewModel(((App)Application.Current).Services);
         ViewModel.ConfirmMkvmergeAvailableAsync = ConfirmMkvmergeAvailableAsync;
         InitializeComponent();
-        _logAutoScroller = new LogAutoScroller(LogTextBox);
     }
+
     public DualAudioViewModel ViewModel { get; }
+
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         ViewModel.Activate();
-        ViewModel.Console.PropertyChanged += Console_PropertyChanged;
         await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
-        _logAutoScroller.FollowLatest();
+        if (e.Parameter is DualAudioNavigationContext context)
+        {
+            await ViewModel.PrepareExistingRemuxAsync(context.ExistingTaskDirectory);
+            if (context.OpenTaskSettings) await TaskSettingsDialog.ShowAsync();
+        }
         base.OnNavigatedTo(e);
     }
+
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
-        ViewModel.Console.PropertyChanged -= Console_PropertyChanged;
         ViewModel.Deactivate();
         base.OnNavigatedFrom(e);
     }
-    private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow); if (value is not null) ViewModel.WorkDirectory = value; }
-    private async void BrowseExisting_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow); if (value is not null) ViewModel.ExistingTaskDirectory = value; }
-    private async void BrowseMkvmerge_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (value is not null) ViewModel.MkvmergePath = value; }
+
+    private async void ShowTaskSettings_Click(object sender, RoutedEventArgs e) => await TaskSettingsDialog.ShowAsync();
+    private void LayoutGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var compact = e.NewSize.Width < 1150;
+        SourceCardsWide.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        SourceCardsCompact.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+    }
+    private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e)
+    {
+        var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow);
+        if (value is not null) ViewModel.WorkDirectory = value;
+    }
+    private async void BrowseExisting_Click(object sender, RoutedEventArgs e)
+    {
+        var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow);
+        if (value is not null) await ViewModel.PrepareExistingRemuxAsync(value);
+    }
+    private async void BrowseMkvmerge_Click(object sender, RoutedEventArgs e)
+    {
+        var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow);
+        if (value is not null) ViewModel.MkvmergePath = value;
+    }
+
+    private void OpenOutputFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var directory = ViewModel.LastResult?.OutputDirectory;
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return;
+        var info = new ProcessStartInfo("explorer.exe") { UseShellExecute = true };
+        info.ArgumentList.Add(directory);
+        Process.Start(info);
+    }
+
+    private void MessageInfoBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
+
     private async Task<bool> ConfirmMkvmergeAvailableAsync()
     {
         var app = (App)Application.Current;
         var tools = app.Services.ToolLocator.Locate(new AppSettings { MkvmergePath = ViewModel.MkvmergePath });
         if (!string.IsNullOrWhiteSpace(tools.Mkvmerge)) return true;
-
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
@@ -54,10 +88,5 @@ public sealed partial class DualAudioPage : Page
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) app.MainWindow.Navigate("settings");
         return false;
-    }
-    private void CopyLogs_Click(object sender, RoutedEventArgs e) { var package = new DataPackage(); package.SetText(ViewModel.Console.Logs); Clipboard.SetContent(package); }
-    private void Console_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(ViewModel.Console.IsBusy) && ViewModel.Console.IsBusy) _logAutoScroller.FollowLatest();
     }
 }

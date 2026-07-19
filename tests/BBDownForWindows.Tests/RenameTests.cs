@@ -5,6 +5,13 @@ namespace BBDownForWindows.Tests;
 
 public sealed class RenameTests
 {
+    [Fact]
+    public void TemplateValidationRejectsUnknownFieldsBeforePreview()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => RenameService.ValidateTemplatePattern("{中文名}.{未知字段}{扩展名}"));
+        Assert.Contains("未知字段", error.Message);
+    }
+
     [Theory]
     [InlineData("Show.S02E03.2160p.mkv", 3)]
     [InlineData("第12话.mp4", 12)]

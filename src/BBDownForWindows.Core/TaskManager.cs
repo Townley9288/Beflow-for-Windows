@@ -8,6 +8,18 @@ public sealed class TaskExecutionContext
     {
         if (!string.IsNullOrEmpty(text)) _append(text);
     }
+
+    public TaskExecutionContext WithPrefix(string prefix) => new(text =>
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var lines = normalized.Split('\n');
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (index == lines.Length - 1 && lines[index].Length == 0) continue;
+            _append($"[{prefix}] {lines[index]}{(index < lines.Length - 1 ? "\n" : string.Empty)}");
+        }
+    });
 }
 
 public sealed class TaskManager : ITaskManager

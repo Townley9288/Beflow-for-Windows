@@ -42,7 +42,7 @@ public static partial class StreamSelectionPolicy
         if (options.DownloadMode != DownloadMode.AudioOnly)
         {
             if (desired.Video is null) throw new InvalidOperationException($"P{desired.PageNumber} 没有选择视频流");
-            video = FindVideo(episode.VideoStreams, desired.Video);
+            video = FindVideo(episode.VideoStreams, desired.Video, desired.Video.IsManual);
             if (video is null)
             {
                 if (desired.Video.IsManual) throw new InvalidOperationException($"P{desired.PageNumber} 手动选择的视频流已不可用");
@@ -54,7 +54,7 @@ public static partial class StreamSelectionPolicy
         if (options.DownloadMode != DownloadMode.VideoOnly)
         {
             if (desired.Audio is null) throw new InvalidOperationException($"P{desired.PageNumber} 没有选择音频流");
-            audio = FindAudio(episode.AudioStreams, desired.Audio);
+            audio = FindAudio(episode.AudioStreams, desired.Audio, desired.Audio.IsManual);
             if (audio is null)
             {
                 if (desired.Audio.IsManual) throw new InvalidOperationException($"P{desired.PageNumber} 手动选择的音频流已不可用");
@@ -152,15 +152,17 @@ public static partial class StreamSelectionPolicy
             : candidates.OrderByDescending(item => item.BitrateKbps).ThenBy(item => item.Index).First();
     }
 
-    private static VideoStreamInfo? FindVideo(IEnumerable<VideoStreamInfo> streams, VideoStreamSelection desired) =>
+    private static VideoStreamInfo? FindVideo(IEnumerable<VideoStreamInfo> streams, VideoStreamSelection desired, bool requireExactBitrate) =>
         streams.Where(item => item.Quality.Equals(desired.Quality, StringComparison.OrdinalIgnoreCase)
                               && item.Resolution.Equals(desired.Resolution, StringComparison.OrdinalIgnoreCase)
-                              && item.Codec.Equals(desired.Codec, StringComparison.OrdinalIgnoreCase))
+                              && item.Codec.Equals(desired.Codec, StringComparison.OrdinalIgnoreCase)
+                              && (!requireExactBitrate || item.BitrateKbps == desired.BitrateKbps))
             .OrderBy(item => Math.Abs(item.BitrateKbps - desired.BitrateKbps))
             .FirstOrDefault();
 
-    private static AudioStreamInfo? FindAudio(IEnumerable<AudioStreamInfo> streams, AudioStreamSelection desired) =>
-        streams.Where(item => item.Codec.Equals(desired.Codec, StringComparison.OrdinalIgnoreCase))
+    private static AudioStreamInfo? FindAudio(IEnumerable<AudioStreamInfo> streams, AudioStreamSelection desired, bool requireExactBitrate) =>
+        streams.Where(item => item.Codec.Equals(desired.Codec, StringComparison.OrdinalIgnoreCase)
+                              && (!requireExactBitrate || item.BitrateKbps == desired.BitrateKbps))
             .OrderBy(item => Math.Abs(item.BitrateKbps - desired.BitrateKbps))
             .FirstOrDefault();
 

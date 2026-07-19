@@ -24,6 +24,9 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
     private bool _updating;
     private DownloadMode _downloadMode = DownloadMode.VideoAndAudio;
     private string _relativeOutputPath = string.Empty;
+    private VideoStreamSelection? _unavailableRestoredVideo;
+    private AudioStreamSelection? _unavailableRestoredAudio;
+    private string _restoredBaseFallback = string.Empty;
 
     public DownloadEpisodeViewModel(DownloadEpisodeInfo episode)
     {
@@ -62,7 +65,12 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
             if (IsReady && string.IsNullOrWhiteSpace(value) && QualityOptions.Count > 0) return;
             if (!SetProperty(ref _selectedQuality, value)) return;
             RebuildEncodingOptions();
-            if (!_updating) _videoManual = true;
+            if (!_updating)
+            {
+                _videoManual = true;
+                _unavailableRestoredVideo = null;
+                RefreshRestoredStreamStatus();
+            }
             NotifyEstimatedSizeChanged();
             RaiseSelectionChanged();
         }
@@ -75,7 +83,12 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         {
             if (IsReady && string.IsNullOrWhiteSpace(value) && EncodingOptions.Count > 0) return;
             if (!SetProperty(ref _selectedEncoding, value)) return;
-            if (!_updating) _videoManual = true;
+            if (!_updating)
+            {
+                _videoManual = true;
+                _unavailableRestoredVideo = null;
+                RefreshRestoredStreamStatus();
+            }
             UpdateQualityOptionLabels();
             NotifyEstimatedSizeChanged();
             RaiseSelectionChanged();
@@ -89,7 +102,12 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         {
             if (IsReady && string.IsNullOrWhiteSpace(value) && AudioOptions.Count > 0) return;
             if (!SetProperty(ref _selectedAudio, value)) return;
-            if (!_updating) _audioManual = true;
+            if (!_updating)
+            {
+                _audioManual = true;
+                _unavailableRestoredAudio = null;
+                RefreshRestoredStreamStatus();
+            }
             NotifyEstimatedSizeChanged();
             RaiseSelectionChanged();
         }
@@ -112,6 +130,11 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         }
     }
     public string EstimatedSizeText => MediaEstimateFormatter.FormatBytes(EstimatedSizeBytes);
+    public long SelectedVideoEstimatedSizeBytes => FindSelectedVideo()?.EstimatedSizeBytes ?? 0;
+    public long SelectedAudioEstimatedSizeBytes => FindSelectedAudio()?.EstimatedSizeBytes ?? 0;
+    public string SelectedQualityLabel => QualityOptions.FirstOrDefault(item => item.Value.Equals(SelectedQuality, StringComparison.OrdinalIgnoreCase))?.Label ?? string.Empty;
+    public string SelectedAudioLabel => AudioOptions.FirstOrDefault(item => item.Value.Equals(SelectedAudio, StringComparison.OrdinalIgnoreCase))?.Label ?? string.Empty;
+    public string SelectedSpecificationText => string.Join(" / ", new[] { SelectedQualityLabel, SelectedEncoding, SelectedAudioLabel }.Where(value => !string.IsNullOrWhiteSpace(value)));
 
     public void SetDownloadMode(DownloadMode mode)
     {
@@ -136,6 +159,8 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         _updating = true;
         try
         {
+            _unavailableRestoredVideo = null;
+            _unavailableRestoredAudio = null;
             if (decision.Video is not null)
             {
                 SelectedQuality = QualityKey(decision.Video);
@@ -144,6 +169,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
             if (decision.Audio is not null) SelectedAudio = AudioKey(decision.Audio);
             _videoManual = false;
             _audioManual = false;
+            _restoredBaseFallback = decision.FallbackReason;
             FallbackText = decision.FallbackReason;
         }
         finally { _updating = false; }
@@ -156,12 +182,15 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         _updating = true;
         try
         {
+            _unavailableRestoredVideo = null;
+            _unavailableRestoredAudio = null;
             if (selection.Video is not null)
             {
                 var match = Episode.VideoStreams
                     .Where(item => item.Quality.Equals(selection.Video.Quality, StringComparison.OrdinalIgnoreCase)
                                    && item.Resolution.Equals(selection.Video.Resolution, StringComparison.OrdinalIgnoreCase)
-                                   && item.Codec.Equals(selection.Video.Codec, StringComparison.OrdinalIgnoreCase))
+                                   && item.Codec.Equals(selection.Video.Codec, StringComparison.OrdinalIgnoreCase)
+                                   && (!selection.Video.IsManual || item.BitrateKbps == selection.Video.BitrateKbps))
                     .OrderBy(item => Math.Abs(item.BitrateKbps - selection.Video.BitrateKbps))
                     .FirstOrDefault();
                 if (match is not null)
@@ -170,11 +199,17 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
                     SelectedEncoding = match.Codec;
                     _videoManual = selection.Video.IsManual;
                 }
+                else if (selection.Video.IsManual)
+                {
+                    _unavailableRestoredVideo = selection.Video;
+                    _videoManual = true;
+                }
             }
             if (selection.Audio is not null)
             {
                 var audio = Episode.AudioStreams
-                    .Where(item => item.Codec.Equals(selection.Audio.Codec, StringComparison.OrdinalIgnoreCase))
+                    .Where(item => item.Codec.Equals(selection.Audio.Codec, StringComparison.OrdinalIgnoreCase)
+                                   && (!selection.Audio.IsManual || item.BitrateKbps == selection.Audio.BitrateKbps))
                     .OrderBy(item => Math.Abs(item.BitrateKbps - selection.Audio.BitrateKbps))
                     .FirstOrDefault();
                 if (audio is not null)
@@ -182,10 +217,17 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
                     SelectedAudio = AudioKey(audio);
                     _audioManual = selection.Audio.IsManual;
                 }
+                else if (selection.Audio.IsManual)
+                {
+                    _unavailableRestoredAudio = selection.Audio;
+                    _audioManual = true;
+                }
             }
             FallbackText = selection.FallbackReason;
+            _restoredBaseFallback = selection.FallbackReason;
             _relativeOutputPath = selection.RelativeOutputPath;
             IsSelected = true;
+            RefreshRestoredStreamStatus();
         }
         finally { _updating = false; }
         NotifyEstimatedSizeChanged();
@@ -199,8 +241,12 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         {
             PageNumber = PageNumber,
             PageTitle = Title,
-            Video = _downloadMode == DownloadMode.AudioOnly || video is null ? null : new VideoStreamSelection(video.Quality, video.Resolution, video.Codec, video.BitrateKbps, _videoManual),
-            Audio = _downloadMode == DownloadMode.VideoOnly || audio is null ? null : new AudioStreamSelection(audio.Codec, audio.BitrateKbps, _audioManual),
+            Video = _downloadMode == DownloadMode.AudioOnly
+                ? null
+                : _unavailableRestoredVideo ?? (video is null ? null : new VideoStreamSelection(video.Quality, video.Resolution, video.Codec, video.BitrateKbps, _videoManual)),
+            Audio = _downloadMode == DownloadMode.VideoOnly
+                ? null
+                : _unavailableRestoredAudio ?? (audio is null ? null : new AudioStreamSelection(audio.Codec, audio.BitrateKbps, _audioManual)),
             FallbackReason = FallbackText,
             RelativeOutputPath = _relativeOutputPath
         };
@@ -219,6 +265,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
             DownloadEpisodeResultState.Cancelled => "已取消",
             _ => result.State.ToString()
         };
+        _restoredBaseFallback = result.FallbackReason;
         FallbackText = result.FallbackReason;
     }
 
@@ -277,10 +324,30 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
     private static string QualityKey(VideoStreamInfo stream) => $"{stream.Quality}\u001f{stream.Resolution}";
     private static string AudioKey(AudioStreamInfo stream) => $"{stream.Index}\u001f{stream.Codec}\u001f{stream.BitrateKbps}";
     private static string FormatResolution(string resolution) => resolution.Replace("x", "×", StringComparison.OrdinalIgnoreCase);
+    private void RefreshRestoredStreamStatus()
+    {
+        var missing = new List<string>();
+        if (_unavailableRestoredVideo is not null) missing.Add("历史中的手动视频规格已不可用");
+        if (_unavailableRestoredAudio is not null) missing.Add("历史中的手动音频规格已不可用");
+        if (missing.Count == 0)
+        {
+            if (StatusText == "历史手动规格已失效") StatusText = "就绪";
+            FallbackText = _restoredBaseFallback;
+            return;
+        }
+        StatusText = "历史手动规格已失效";
+        var issue = string.Join("；", missing);
+        FallbackText = string.IsNullOrWhiteSpace(_restoredBaseFallback) ? issue : $"{_restoredBaseFallback}；{issue}";
+    }
     private void NotifyEstimatedSizeChanged()
     {
         OnPropertyChanged(nameof(EstimatedSizeBytes));
         OnPropertyChanged(nameof(EstimatedSizeText));
+        OnPropertyChanged(nameof(SelectedVideoEstimatedSizeBytes));
+        OnPropertyChanged(nameof(SelectedAudioEstimatedSizeBytes));
+        OnPropertyChanged(nameof(SelectedQualityLabel));
+        OnPropertyChanged(nameof(SelectedAudioLabel));
+        OnPropertyChanged(nameof(SelectedSpecificationText));
     }
     private void RaiseSelectionChanged() => SelectionChanged?.Invoke(this, EventArgs.Empty);
 }

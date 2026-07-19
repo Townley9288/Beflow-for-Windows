@@ -178,7 +178,13 @@ public sealed class SettingsViewModel : ObservableObject
 
     private async Task SaveRenameSettingsAsync()
     {
-        await _services.RenameSettings.UpdateAsync(_ => RenameSettings.Clone());
+        var edited = RenameSettings.Clone();
+        RenameSettings = await _services.RenameSettings.UpdateAsync(current =>
+        {
+            var snapshot = current.Clone();
+            CopyTmdbSettings(edited, snapshot);
+            return snapshot;
+        });
         SetMessage("影视重命名设置已保存", InfoBarSeverity.Success);
     }
 
@@ -309,8 +315,14 @@ public sealed class SettingsViewModel : ObservableObject
     {
         try
         {
-            await _services.RenameSettings.SaveAsync(RenameSettings);
-            await _services.Tmdb.ValidateApiKeyAsync();
+            var edited = RenameSettings.Clone();
+            await _services.Tmdb.ValidateApiKeyAsync(edited);
+            RenameSettings = await _services.RenameSettings.UpdateAsync(current =>
+            {
+                var snapshot = current.Clone();
+                CopyTmdbSettings(edited, snapshot);
+                return snapshot;
+            });
             SetMessage("TMDB API Key 验证成功", InfoBarSeverity.Success);
         }
         catch (Exception exception) when (exception is InvalidOperationException or HttpRequestException)
@@ -320,6 +332,13 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     public void DismissMessage() => Message = string.Empty;
+
+    private static void CopyTmdbSettings(RenameSettings source, RenameSettings target)
+    {
+        target.TmdbApiKey = source.TmdbApiKey;
+        target.ProxyUrl = source.ProxyUrl;
+        target.RequestTimeoutSeconds = source.RequestTimeoutSeconds;
+    }
 
     private void SetMessage(string message, InfoBarSeverity severity)
     {

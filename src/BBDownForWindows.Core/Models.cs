@@ -9,7 +9,7 @@ public enum DownloadMode { VideoAndAudio, VideoOnly, AudioOnly }
 public enum AudioBitratePriority { Highest, Lowest }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum TaskKind { Info, Download, SeasonDownload, LoginWeb, LoginTv, DualAudioMux, DualAudioRemux, RenamePreview, RenameExecute, RenameUndo, DownloadParse, DownloadBatch }
+public enum TaskKind { Info, Download, SeasonDownload, LoginWeb, LoginTv, DualAudioParse, DualAudioMux, DualAudioRemux, RenamePreview, RenameExecute, RenameUndo, DownloadParse, DownloadBatch }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TaskState { Pending, Running, Completed, Failed, Cancelled }
@@ -231,6 +231,8 @@ public sealed class DualAudioRequest
     public int Aria2MaxConcurrentDownloads { get; set; } = 16;
     public int Aria2MinSplitSize { get; set; } = 5;
     public bool SaveTaskLogs { get; set; } = true;
+    public bool OverrideManifestAudioMetadata { get; set; }
+    public bool OverrideManifestDelay { get; set; }
 }
 
 public sealed class TaskSnapshot
@@ -261,6 +263,7 @@ public sealed class HistoryRecord
         TaskKind.SeasonDownload => "整季下载",
         TaskKind.LoginWeb => "WEB 登录",
         TaskKind.LoginTv => "TV 登录",
+        TaskKind.DualAudioParse => "多音轨解析",
         TaskKind.DualAudioMux => "多音轨封装",
         TaskKind.DualAudioRemux => "重新封装",
         TaskKind.RenamePreview => "重命名预览",
@@ -276,6 +279,7 @@ public sealed class HistoryRecord
     public DownloadRequest? Download { get; set; }
     public DownloadBatchHistory? DownloadBatch { get; set; }
     public DualAudioRequest? DualAudio { get; set; }
+    public DualAudioBatchHistory? DualAudioBatch { get; set; }
 
     [JsonIgnore]
     public IReadOnlyList<string> SpecificationTags
@@ -324,6 +328,16 @@ public sealed class HistoryRecord
                 return tags;
             }
 
+            if (DualAudioBatch is not null)
+            {
+                var succeeded = DualAudioBatch.Pairs.Count(item => item.State == DualAudioPairState.Completed);
+                var failed = DualAudioBatch.Pairs.Count(item => item.State == DualAudioPairState.Failed);
+                tags.Add($"{DualAudioBatch.Pairs.Count} 对");
+                if (succeeded > 0) tags.Add($"成功 {succeeded}");
+                if (failed > 0) tags.Add($"失败 {failed}");
+                tags.Add("双音轨封装");
+                return tags;
+            }
             if (DualAudio is not null)
             {
                 if (TaskType == TaskKind.DualAudioRemux) return ["仅重新封装"];
