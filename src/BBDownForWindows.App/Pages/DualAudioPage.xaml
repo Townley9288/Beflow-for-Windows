@@ -33,11 +33,12 @@
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <ComboBox ItemsSource="{Binding SourceModes}" SelectedItem="{Binding SourceModeText, Mode=TwoWay}" HorizontalAlignment="Stretch"/>
-                    <TextBox Grid.Column="1" Text="{Binding SourceAUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="来源 A：输入 B站链接、BV、AV、EP 或 SS 号"/>
-                    <TextBox Grid.Column="2" Text="{Binding SourceBUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="来源 B：输入对应版本链接" Visibility="{Binding SourceBUrlVisibility}"/>
+                    <TextBox Grid.Column="1" Tag="A" Text="{Binding SourceAUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="来源 A：输入 B站链接、BV、AV、EP 或 SS 号"
+                             AllowDrop="True" DragOver="BilibiliInput_DragOver" Drop="BilibiliInput_Drop"/>
+                    <TextBox Grid.Column="2" Tag="B" Text="{Binding SourceBUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="来源 B：输入对应版本链接" Visibility="{Binding SourceBUrlVisibility}"
+                             AllowDrop="True" DragOver="BilibiliInput_DragOver" Drop="BilibiliInput_Drop"/>
                     <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                        <Button Content="解析当前集" Command="{Binding ParseCurrentCommand}"/>
-                        <Button Content="解析全部集" Command="{Binding ParseAllCommand}" Style="{StaticResource AccentButtonStyle}"/>
+                        <Button Content="开始解析" Command="{Binding ParseAllCommand}" Style="{StaticResource AccentButtonStyle}"/>
                         <Button Content="取消" Command="{Binding Console.CancelCommand}"/>
                     </StackPanel>
                 </Grid>
@@ -118,20 +119,20 @@
                                         <TextBlock Grid.Column="2" Text="{x:Bind SourceATitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind SourceATitle}"/>
                                         <Grid Grid.Row="1" Grid.Column="2" ColumnSpacing="6" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding SourceA.SelectedSpecificationText}"><Grid.ColumnDefinitions><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
                                             <ComboBox ItemsSource="{Binding SourceA.QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedQuality, Mode=TwoWay}" IsEnabled="{Binding SourceA.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
-                                            <ComboBox Grid.Column="1" ItemsSource="{Binding SourceA.EncodingOptions}" SelectedItem="{Binding SourceA.SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding SourceA.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding SourceA.EncodingOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding SourceA.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                             <ComboBox Grid.Column="2" ItemsSource="{Binding SourceA.AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedAudio, Mode=TwoWay}" IsEnabled="{Binding SourceA.AudioSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         </Grid>
                                         <ComboBox Grid.Column="3" ItemsSource="{x:Bind SourceBChoices}" DisplayMemberPath="Label" SelectedValuePath="PageNumber" SelectedValue="{x:Bind SelectedSourceBPageNumber, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         <Grid Grid.Row="1" Grid.Column="3" ColumnSpacing="6" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding SourceB.SelectedSpecificationText}"><Grid.ColumnDefinitions><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
                                             <ComboBox ItemsSource="{Binding SourceB.QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedQuality, Mode=TwoWay}" IsEnabled="{Binding SourceB.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
-                                            <ComboBox Grid.Column="1" ItemsSource="{Binding SourceB.EncodingOptions}" SelectedItem="{Binding SourceB.SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding SourceB.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding SourceB.EncodingOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding SourceB.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                             <ComboBox Grid.Column="2" ItemsSource="{Binding SourceB.AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedAudio, Mode=TwoWay}" IsEnabled="{Binding SourceB.AudioSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         </Grid>
                                         <ComboBox Grid.Column="4" ItemsSource="{x:Bind MainVideoModes}" SelectedItem="{x:Bind MainVideoModeText, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         <StackPanel Grid.Row="1" Grid.Column="4" Spacing="1" VerticalAlignment="Center"><TextBlock Text="{x:Bind MainVideoSourceText, Mode=OneWay}" FontWeight="SemiBold"/><TextBlock Text="{x:Bind RecommendationReason, Mode=OneWay}" FontSize="10" Opacity="0.65" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind RecommendationReason, Mode=OneWay}"/></StackPanel>
                                         <TextBlock Grid.RowSpan="2" Grid.Column="5" Text="{x:Bind EstimatedSizeText, Mode=OneWay}" VerticalAlignment="Center"/>
                                         <CheckBox Grid.Column="6" Content="单独设置" IsChecked="{x:Bind UseCustomDelay, Mode=TwoWay}" VerticalAlignment="Center"/>
-                                        <NumberBox Grid.Row="1" Grid.Column="6" Value="{x:Bind DelayValue, Mode=TwoWay}" Minimum="-10000" Maximum="10000" SmallChange="10" SpinButtonPlacementMode="Compact" IsEnabled="{x:Bind UseCustomDelay}" VerticalAlignment="Center"/>
+                                        <NumberBox Grid.Row="1" Grid.Column="6" Value="{x:Bind DelayValue, Mode=TwoWay}" Minimum="-10000" Maximum="10000" SmallChange="10" SpinButtonPlacementMode="Compact" IsEnabled="{x:Bind UseCustomDelay, Mode=OneWay}" VerticalAlignment="Center"/>
                                         <TextBlock Grid.RowSpan="2" Grid.Column="7" Text="{x:Bind StatusText, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                                     </Grid>
                                 </DataTemplate>

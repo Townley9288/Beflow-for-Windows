@@ -22,6 +22,8 @@ public sealed class StoreTests
             Assert.Equal(AudioBitratePriority.Highest, settings.AudioBitratePriority);
             Assert.Equal(AppThemeMode.System, settings.ThemeMode);
             Assert.True(settings.SaveTaskLogs);
+            Assert.True(settings.MonitorClipboard);
+            Assert.True(settings.MonitorDragLinks);
             Assert.True(settings.CheckUpdatesOnStartup);
             Assert.True(settings.Aria2AutoTune);
         }
@@ -29,6 +31,24 @@ public sealed class StoreTests
         {
             root.Delete(true);
         }
+    }
+
+    [Fact]
+    public async Task ClipboardMonitoringPreferenceRoundTrips()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var store = new SettingsStore(paths);
+            await store.SaveAsync(new AppSettings { MonitorClipboard = false, MonitorDragLinks = false });
+
+            var restored = await store.LoadAsync();
+
+            Assert.False(restored.MonitorClipboard);
+            Assert.False(restored.MonitorDragLinks);
+        }
+        finally { root.Delete(true); }
     }
 
     [Fact]

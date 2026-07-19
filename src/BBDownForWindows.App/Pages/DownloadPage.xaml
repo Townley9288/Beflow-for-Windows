@@ -44,14 +44,15 @@
                 <TextBlock Text="解析实际可用的视频与音频流，再逐集精确下载" Opacity="0.65"/>
             </StackPanel>
 
-            <Border Grid.Row="1" Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <Border Grid.Row="1" Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    AllowDrop="True" DragOver="BilibiliInput_DragOver" Drop="BilibiliInput_Drop">
                 <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <TextBox Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="输入 B站链接、BV、AV、EP 或 SS 号" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Content="解析当前集" Command="{Binding ParseCurrentCommand}"/>
-                    <Button Grid.Column="2" Content="解析全部集" Command="{Binding ParseAllCommand}" Style="{StaticResource AccentButtonStyle}"/>
-                    <Button Grid.Column="3" Content="继续解析" Command="{Binding ContinueParseCommand}"/>
-                    <Button Grid.Column="4" Content="取消" Command="{Binding Console.CancelCommand}"/>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBox Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="输入 B站链接、BV、AV、EP 或 SS 号" VerticalAlignment="Center"
+                             AllowDrop="True" DragOver="BilibiliInput_DragOver" Drop="BilibiliInput_Drop"/>
+                    <Button Grid.Column="1" Content="开始解析" Command="{Binding ParseAllCommand}" Style="{StaticResource AccentButtonStyle}"/>
+                    <Button Grid.Column="2" Content="继续解析" Command="{Binding ContinueParseCommand}"/>
+                    <Button Grid.Column="3" Content="取消" Command="{Binding Console.CancelCommand}"/>
                 </Grid>
             </Border>
 
@@ -132,7 +133,7 @@
                                     <TextBlock Grid.Column="2" Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Title}"/>
                                     <TextBlock Grid.Column="3" Text="{x:Bind EstimatedSizeText, Mode=OneWay}" VerticalAlignment="Center" Opacity="0.7"/>
                                     <ComboBox Grid.Column="4" ItemsSource="{x:Bind QualityOptions, Mode=OneWay}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{x:Bind SelectedQuality, Mode=TwoWay}" IsEnabled="{x:Bind VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
-                                    <ComboBox Grid.Column="5" ItemsSource="{x:Bind EncodingOptions, Mode=OneWay}" SelectedItem="{x:Bind SelectedEncoding, Mode=TwoWay}" IsEnabled="{x:Bind VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="5" ItemsSource="{x:Bind EncodingOptions, Mode=OneWay}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{x:Bind SelectedEncoding, Mode=TwoWay}" IsEnabled="{x:Bind VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                     <ComboBox Grid.Column="6" ItemsSource="{x:Bind AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{x:Bind SelectedAudio, Mode=TwoWay}" IsEnabled="{x:Bind AudioSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                     <StackPanel Grid.Column="7" VerticalAlignment="Center" Spacing="1">
                                         <TextBlock Text="{x:Bind StatusText, Mode=OneWay}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="12"/>

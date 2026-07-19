@@ -40,6 +40,60 @@ public sealed class AppViewModelTests
     }
 
     [Fact]
+    public void ApplyingBatchEncodingUsesValueBackedEpisodeChoice()
+    {
+        var episode = new DownloadEpisodeInfo
+        {
+            Page = new PageInfo(4, "4", "第四集", "24m"),
+            State = DownloadEpisodeParseState.Ready,
+            VideoStreams =
+            [
+                new VideoStreamInfo(0, "HDR 真彩", "3840x2160", 3840, 2160, "HEVC", "25", "7768 kbps", 7768, "1.41 GB"),
+                new VideoStreamInfo(1, "HDR 真彩", "3840x2160", 3840, 2160, "AVC", "25", "5000 kbps", 5000, "900 MB")
+            ],
+            AudioStreams = [new AudioStreamInfo(2, "M4A", "321 kbps", 321, "60 MB")]
+        };
+        var viewModel = new DownloadEpisodeViewModel(episode);
+        viewModel.ApplyRule(new StreamSelectionRule("HDR 真彩", "AVC", "auto", AudioBitratePriority.Highest), DownloadMode.VideoAndAudio);
+
+        viewModel.ApplyRule(new StreamSelectionRule("HDR 真彩", "HEVC", "auto", AudioBitratePriority.Highest), DownloadMode.VideoAndAudio);
+
+        Assert.Equal("HEVC", viewModel.SelectedEncoding);
+        Assert.Equal("HEVC", viewModel.BuildSelection().Video!.Codec);
+        Assert.Contains(viewModel.EncodingOptions, item => item.Value == "HEVC" && item.Label == "HEVC");
+    }
+
+    [Fact]
+    public void ExternalDownloadInputDoesNotReplaceCurrentValueWithUnsupportedText()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DownloadViewModel(fixture.Services) { Url = "BV1xx411c7mD" };
+
+        var applied = viewModel.ApplyExternalInput("https://example.com/not-bilibili");
+
+        Assert.False(applied);
+        Assert.Equal("BV1xx411c7mD", viewModel.Url);
+    }
+
+    [Fact]
+    public void TwoDroppedInputsPopulateBothDualAudioSources()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DualAudioViewModel(fixture.Services);
+
+        var applied = viewModel.ApplyExternalInputs(
+        [
+            "分享 A：https://b23.tv/source-a",
+            "https://www.bilibili.com/video/BV1xx411c7mD"
+        ]);
+
+        Assert.True(applied);
+        Assert.Equal("两个独立链接", viewModel.SourceModeText);
+        Assert.Equal("https://b23.tv/source-a", viewModel.SourceAUrl);
+        Assert.Equal("https://www.bilibili.com/video/BV1xx411c7mD", viewModel.SourceBUrl);
+    }
+
+    [Fact]
     public async Task TemplateEditorRejectsUnknownFieldsBeforeWritingSettings()
     {
         using var fixture = new AppFixture();

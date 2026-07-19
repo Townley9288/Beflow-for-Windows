@@ -4,8 +4,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using System.Diagnostics;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace BBDownForWindows.App.Pages;
+
+public sealed record DownloadInputNavigationContext(string Input, bool ParseAutomatically = false);
 
 public sealed partial class DownloadPage : Page
 {
@@ -21,6 +24,11 @@ public sealed partial class DownloadPage : Page
     {
         ViewModel.Activate();
         await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
+        if (e.Parameter is DownloadInputNavigationContext input
+            && ViewModel.ApplyExternalInput(input.Input)
+            && input.ParseAutomatically
+            && ViewModel.ParseAllCommand.CanExecute(null))
+            await ViewModel.ParseAllCommand.ExecuteAsync(null);
         base.OnNavigatedTo(e);
     }
 
@@ -68,6 +76,36 @@ public sealed partial class DownloadPage : Page
     {
         DownloadSettingsDialog.XamlRoot = XamlRoot;
         await DownloadSettingsDialog.ShowAsync();
+    }
+
+    private void BilibiliInput_DragOver(object sender, DragEventArgs e)
+    {
+        if (!((App)Application.Current).MainWindow.DragLinkMonitoringEnabled)
+        {
+            e.AcceptedOperation = DataPackageOperation.None;
+            e.Handled = true;
+            return;
+        }
+        if (!BilibiliDataTransfer.MayContainInput(e.DataView)) return;
+        e.AcceptedOperation = DataPackageOperation.Copy;
+        e.DragUIOverride.Caption = "填入 B 站链接或编号";
+        e.DragUIOverride.IsCaptionVisible = true;
+        e.Handled = true;
+    }
+
+    private async void BilibiliInput_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (!((App)Application.Current).MainWindow.DragLinkMonitoringEnabled) return;
+        try
+        {
+            var inputs = await BilibiliDataTransfer.ExtractInputsAsync(e.DataView);
+            if (inputs.Count > 0) ViewModel.ApplyExternalInput(inputs[0]);
+        }
+        catch (Exception)
+        {
+            // The drag source can disappear before asynchronous data retrieval completes.
+        }
     }
 
 }

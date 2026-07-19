@@ -109,6 +109,8 @@ public sealed class AppSettings
     [JsonPropertyName("aria2MaxConcurrentDownloads")] public int Aria2MaxConcurrentDownloads { get; set; } = 16;
     [JsonPropertyName("aria2MinSplitSize")] public int Aria2MinSplitSize { get; set; } = 5;
     [JsonPropertyName("mkvmergePath")] public string MkvmergePath { get; set; } = string.Empty;
+    [JsonPropertyName("monitorClipboard")] public bool MonitorClipboard { get; set; } = true;
+    [JsonPropertyName("monitorDragLinks")] public bool MonitorDragLinks { get; set; } = true;
     [JsonPropertyName("checkUpdatesOnStartup")] public bool CheckUpdatesOnStartup { get; set; } = true;
     [JsonPropertyName("downloadNaming")] public DownloadNamingSettings DownloadNaming { get; set; } = new();
 

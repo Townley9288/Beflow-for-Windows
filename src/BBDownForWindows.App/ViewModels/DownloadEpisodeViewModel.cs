@@ -46,7 +46,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
     public bool IsReady => Episode.State == DownloadEpisodeParseState.Ready;
     public ObservableCollection<Choice> QualityOptions { get; } = [];
     public IReadOnlyList<Choice> AudioOptions { get; }
-    public List<string> EncodingOptions { get; } = [];
+    public ObservableCollection<Choice> EncodingOptions { get; } = [];
 
     public bool IsSelected
     {
@@ -288,9 +288,10 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         var previous = _selectedEncoding;
         EncodingOptions.Clear();
         foreach (var codec in Episode.VideoStreams.Where(item => QualityKey(item).Equals(SelectedQuality, StringComparison.OrdinalIgnoreCase)).Select(item => item.Codec).Distinct(StringComparer.OrdinalIgnoreCase))
-            EncodingOptions.Add(codec);
-        OnPropertyChanged(nameof(EncodingOptions));
-        var selected = EncodingOptions.FirstOrDefault(item => item.Equals(previous, StringComparison.OrdinalIgnoreCase)) ?? EncodingOptions.FirstOrDefault() ?? string.Empty;
+            EncodingOptions.Add(new Choice(codec, codec));
+        var selected = EncodingOptions.FirstOrDefault(item => item.Value.Equals(previous, StringComparison.OrdinalIgnoreCase))?.Value
+                       ?? EncodingOptions.FirstOrDefault()?.Value
+                       ?? string.Empty;
         SetProperty(ref _selectedEncoding, selected, nameof(SelectedEncoding));
         UpdateQualityOptionLabels();
     }

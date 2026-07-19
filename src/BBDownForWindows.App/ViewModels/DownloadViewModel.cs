@@ -277,6 +277,13 @@ public sealed class DownloadViewModel : ObservableObject
         Console.PropertyChanged -= Console_PropertyChanged;
     }
 
+    public bool ApplyExternalInput(string? value)
+    {
+        if (!BilibiliInputParser.TryExtract(value, out var input)) return false;
+        Url = input;
+        return true;
+    }
+
     public async Task InitializeAsync(HistoryRecord? restore = null)
     {
         var latestSettings = await _services.Settings.LoadAsync();

@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using BBDownForWindows.Core;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace BBDownForWindows.App;
 
@@ -12,6 +13,10 @@ public sealed partial class MainWindow : Window
     private bool _closingDialogOpen;
     private bool _navigationInProgress;
     private string _currentNavigationTag = string.Empty;
+    private bool _clipboardMonitoring;
+    private bool _dragLinkMonitoring = true;
+    private string _lastClipboardInput = string.Empty;
+    private string _pendingClipboardInput = string.Empty;
     public MainWindow()
     {
         InitializeComponent();
@@ -24,6 +29,8 @@ public sealed partial class MainWindow : Window
         if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
         Navigate("download");
         AppWindow.Closing += AppWindow_Closing;
+        Closed += MainWindow_Closed;
+        ((App)Application.Current).Services.TaskConsole.PropertyChanged += TaskConsole_PropertyChanged;
     }
 
     public void ApplyInitialSize()
@@ -111,6 +118,24 @@ public sealed partial class MainWindow : Window
 
     public void RestoreHistory(Core.HistoryRecord record) => Navigate(record.TaskType is Core.TaskKind.DualAudioMux or Core.TaskKind.DualAudioRemux ? "dual" : "download", record);
 
+    public void ConfigureClipboardMonitoring(bool enabled)
+    {
+        if (_clipboardMonitoring == enabled) return;
+        _clipboardMonitoring = enabled;
+        if (enabled)
+        {
+            Clipboard.ContentChanged += Clipboard_ContentChanged;
+            return;
+        }
+
+        Clipboard.ContentChanged -= Clipboard_ContentChanged;
+        _lastClipboardInput = string.Empty;
+        _pendingClipboardInput = string.Empty;
+    }
+
+    public bool DragLinkMonitoringEnabled => _dragLinkMonitoring;
+    public void ConfigureDragLinkMonitoring(bool enabled) => _dragLinkMonitoring = enabled;
+
     public void ShowUpdateAvailable(UpdateRelease release)
     {
         UpdateInfoBar.Message = $"v{UpdateService.FormatVersion(release.Version)} 已发布，可以在关于页查看并安装。";
@@ -126,10 +151,78 @@ public sealed partial class MainWindow : Window
     private async void RootNavigation_Loaded(object sender, RoutedEventArgs e)
     {
         RootNavigation.Loaded -= RootNavigation_Loaded;
+        var settings = await ((App)Application.Current).Services.Settings.LoadAsync();
+        ConfigureClipboardMonitoring(settings.MonitorClipboard);
+        ConfigureDragLinkMonitoring(settings.MonitorDragLinks);
         await ((App)Application.Current).Services.UpdateCoordinator.CheckOnStartupAsync();
     }
 
     private void UpdateInfoBar_Click(object sender, RoutedEventArgs e) => Navigate("about");
+
+    private void Clipboard_ContentChanged(object? sender, object e)
+    {
+        if (!_clipboardMonitoring) return;
+        DispatcherQueue.TryEnqueue(async () => await InspectClipboardAsync());
+    }
+
+    private async Task InspectClipboardAsync()
+    {
+        try
+        {
+            if (!_clipboardMonitoring) return;
+            var data = Clipboard.GetContent();
+            if (!BilibiliDataTransfer.MayContainInput(data))
+            {
+                _lastClipboardInput = string.Empty;
+                _pendingClipboardInput = string.Empty;
+                return;
+            }
+            var inputs = await BilibiliDataTransfer.ExtractInputsAsync(data);
+            var input = inputs.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                _lastClipboardInput = string.Empty;
+                _pendingClipboardInput = string.Empty;
+                return;
+            }
+            if (input.Equals(_lastClipboardInput, StringComparison.OrdinalIgnoreCase)) return;
+
+            _lastClipboardInput = input;
+            if (((App)Application.Current).Services.TaskConsole.IsBusy)
+            {
+                _pendingClipboardInput = input;
+                return;
+            }
+            ShowClipboardInput(input);
+        }
+        catch (Exception)
+        {
+            // Another process may temporarily own the clipboard. A later change will retry.
+        }
+    }
+
+    private void ShowClipboardInput(string input)
+    {
+        _pendingClipboardInput = string.Empty;
+        if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
+            presenter.Restore();
+        Activate();
+        Navigate("download", new Pages.DownloadInputNavigationContext(input, ParseAutomatically: true));
+    }
+
+    private void TaskConsole_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        var console = ((App)Application.Current).Services.TaskConsole;
+        if (e.PropertyName != nameof(console.IsBusy) || console.IsBusy
+            || !_clipboardMonitoring || string.IsNullOrWhiteSpace(_pendingClipboardInput)) return;
+        var input = _pendingClipboardInput;
+        _pendingClipboardInput = string.Empty;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_clipboardMonitoring && input.Equals(_lastClipboardInput, StringComparison.OrdinalIgnoreCase))
+                ShowClipboardInput(input);
+        });
+    }
 
     private async void ThemeMenuItem_Click(object sender, RoutedEventArgs e)
     {
@@ -220,5 +313,11 @@ public sealed partial class MainWindow : Window
                 _closingDialogOpen = false;
             }
         }
+    }
+
+    private void MainWindow_Closed(object sender, WindowEventArgs args)
+    {
+        if (_clipboardMonitoring) Clipboard.ContentChanged -= Clipboard_ContentChanged;
+        ((App)Application.Current).Services.TaskConsole.PropertyChanged -= TaskConsole_PropertyChanged;
     }
 }

@@ -173,6 +173,42 @@ public sealed class DualAudioViewModel : ObservableObject
         Console.PropertyChanged -= Console_PropertyChanged;
     }
 
+    public bool ApplyExternalInputs(IEnumerable<string> values, bool targetSourceB = false)
+    {
+        var inputs = values
+            .SelectMany(BilibiliInputParser.ExtractAll)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(2)
+            .ToList();
+        if (inputs.Count == 0) return false;
+
+        _suppressSourceInvalidation = true;
+        try
+        {
+            if (inputs.Count > 1)
+            {
+                SourceModeText = "两个独立链接";
+                SourceAUrl = inputs[0];
+                SourceBUrl = inputs[1];
+            }
+            else if (targetSourceB && SourceModeText == "两个独立链接")
+            {
+                SourceBUrl = inputs[0];
+            }
+            else
+            {
+                SourceAUrl = inputs[0];
+            }
+        }
+        finally
+        {
+            _suppressSourceInvalidation = false;
+        }
+        InvalidateParsedCatalog();
+        NotifyCommands();
+        return true;
+    }
+
     public async Task InitializeAsync(HistoryRecord? restore = null)
     {
         if (!_initialized)

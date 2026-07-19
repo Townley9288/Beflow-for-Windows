@@ -4,6 +4,7 @@ using BBDownForWindows.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace BBDownForWindows.App.Pages;
 
@@ -71,6 +72,37 @@ public sealed partial class DualAudioPage : Page
     }
 
     private void MessageInfoBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
+
+    private void BilibiliInput_DragOver(object sender, DragEventArgs e)
+    {
+        if (!((App)Application.Current).MainWindow.DragLinkMonitoringEnabled)
+        {
+            e.AcceptedOperation = DataPackageOperation.None;
+            e.Handled = true;
+            return;
+        }
+        if (!BilibiliDataTransfer.MayContainInput(e.DataView)) return;
+        e.AcceptedOperation = DataPackageOperation.Copy;
+        var target = (sender as FrameworkElement)?.Tag as string;
+        e.DragUIOverride.Caption = target == "B" ? "填入来源 B" : "填入来源 A；包含两个链接时同时填入 A/B";
+        e.DragUIOverride.IsCaptionVisible = true;
+        e.Handled = true;
+    }
+
+    private async void BilibiliInput_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (!((App)Application.Current).MainWindow.DragLinkMonitoringEnabled) return;
+        try
+        {
+            var inputs = await BilibiliDataTransfer.ExtractInputsAsync(e.DataView);
+            ViewModel.ApplyExternalInputs(inputs, (sender as FrameworkElement)?.Tag as string == "B");
+        }
+        catch (Exception)
+        {
+            // The drag source can disappear before asynchronous data retrieval completes.
+        }
+    }
 
     private async Task<bool> ConfirmMkvmergeAvailableAsync()
     {

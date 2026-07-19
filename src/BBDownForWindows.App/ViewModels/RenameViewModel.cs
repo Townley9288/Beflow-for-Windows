@@ -61,6 +61,8 @@ public sealed class RenameViewModel : ObservableObject
     private int _historyLoadGeneration;
     private CancellationTokenSource? _templatePersistenceCancellation;
     private int _templatePersistenceGeneration;
+    private bool _showingExecutionResult;
+    private int _executionOperationCount;
 
     public RenameViewModel(AppServices services)
     {
@@ -254,8 +256,11 @@ public sealed class RenameViewModel : ObservableObject
     public bool CanPreview => HasTmdbMatch && Files.Any(file => file.IsSelected) && !Console.IsBusy && !IsPreviewing;
     public bool CanReloadDirectory => !string.IsNullOrWhiteSpace(DirectoryPath) && !Console.IsBusy;
     public bool CanExecutePreview => _preview?.CanExecute == true && !Console.IsBusy;
+    public string PreviewTitle => _showingExecutionResult ? "重命名结果" : "重命名预览";
     public string PreviewSummary => _preview is null
-        ? "尚未生成预览"
+        ? _showingExecutionResult
+            ? $"已完成 {PreviewItems.Count} 个视频 · {_executionOperationCount} 项文件名变更"
+            : "尚未生成预览"
         : _preview.CanExecute ? $"{_preview.Items.Count} 个视频，可执行 {_preview.Operations.Count} 项文件名变更" : $"预览包含 {_preview.Errors.Count} 个冲突";
 
     public void Activate()
@@ -347,8 +352,7 @@ public sealed class RenameViewModel : ObservableObject
             OnPropertyChanged(nameof(TmdbMatchVisibility));
             OnPropertyChanged(nameof(CanPreview));
             TmdbResults.Clear();
-            MessageSeverity = InfoBarSeverity.Success;
-            Message = $"已匹配 TMDB：{detail.ChineseTitle} / {detail.EnglishTitle}";
+            Message = string.Empty;
             ClearPreview();
         }
         catch (Exception exception) when (exception is InvalidOperationException or HttpRequestException)
@@ -427,6 +431,7 @@ public sealed class RenameViewModel : ObservableObject
     public async Task ExecuteAsync()
     {
         if (_preview is null) return;
+        var completedItems = _preview.Items.ToList();
         RenameExecutionResult? result = null;
         var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.RenameExecute, true, "rename", async (context, token) =>
         {
@@ -438,9 +443,10 @@ public sealed class RenameViewModel : ObservableObject
             Message = snapshot.State == TaskState.Cancelled ? "重命名已取消并回滚" : $"重命名失败：{snapshot.Error}";
             return;
         }
+        await LoadDirectoryAsync(result.DirectoryPath);
+        ShowExecutionResult(completedItems, result.OperationCount);
         MessageSeverity = InfoBarSeverity.Success;
         Message = $"已完成 {result.OperationCount} 项文件名变更";
-        await LoadDirectoryAsync(result.DirectoryPath);
         await LoadHistoryAsync();
     }
 
@@ -630,8 +636,23 @@ public sealed class RenameViewModel : ObservableObject
     private void ClearPreview()
     {
         _preview = null;
+        _showingExecutionResult = false;
+        _executionOperationCount = 0;
         PreviewItems.Clear();
         OnPropertyChanged(nameof(CanExecutePreview));
+        OnPropertyChanged(nameof(PreviewTitle));
+        OnPropertyChanged(nameof(PreviewSummary));
+    }
+
+    private void ShowExecutionResult(IEnumerable<RenamePreviewItem> items, int operationCount)
+    {
+        _preview = null;
+        PreviewItems.Clear();
+        foreach (var item in items) PreviewItems.Add(item);
+        _showingExecutionResult = true;
+        _executionOperationCount = operationCount;
+        OnPropertyChanged(nameof(CanExecutePreview));
+        OnPropertyChanged(nameof(PreviewTitle));
         OnPropertyChanged(nameof(PreviewSummary));
     }
 

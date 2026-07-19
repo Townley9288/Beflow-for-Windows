@@ -206,6 +206,27 @@
             </StackPanel></Border>
         </Grid>
         <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="14">
+                <TextBlock Text="便捷输入" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                <Grid ColumnSpacing="12" RowSpacing="3">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <FontIcon Grid.RowSpan="2" Glyph="&#xE77F;" FontSize="20" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="监听剪贴板" FontWeight="SemiBold" FontSize="16"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="检测到 B 站链接、BV、AV、EP 或 SS 号后，自动激活下载页并解析全部集。" Opacity="0.6" TextWrapping="Wrap"/>
+                    <ToggleSwitch Grid.RowSpan="2" Grid.Column="2" IsOn="{Binding Settings.MonitorClipboard, Mode=TwoWay}" Toggled="ClipboardMonitoring_Toggled" VerticalAlignment="Center" AutomationProperties.Name="监听剪贴板"/>
+                </Grid>
+                <Grid ColumnSpacing="12" RowSpacing="3">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <FontIcon Grid.RowSpan="2" Glyph="&#xE7C9;" FontSize="20" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="监听拖拽链接" FontWeight="SemiBold" FontSize="16"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="允许把 B 站链接拖入下载页或多音轨来源输入框；关闭后不再接受链接拖放。" Opacity="0.6" TextWrapping="Wrap"/>
+                    <ToggleSwitch Grid.RowSpan="2" Grid.Column="2" IsOn="{Binding Settings.MonitorDragLinks, Mode=TwoWay}" Toggled="DragLinkMonitoring_Toggled" VerticalAlignment="Center" AutomationProperties.Name="监听拖拽链接"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+        <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel><TextBlock Text="软件更新" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Text="每天启动时最多检查一次 GitHub 稳定版，不会自动下载安装。" Opacity="0.65" TextWrapping="Wrap"/></StackPanel>

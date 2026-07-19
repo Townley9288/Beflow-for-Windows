@@ -140,16 +140,33 @@
                 <Border Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <Grid RowSpacing="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                         <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="源文件" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Grid.Column="1" Text="可拖动调整顺序" Opacity="0.55"/></Grid>
-                        <ListView Grid.Row="1" ItemsSource="{Binding Files}" CanReorderItems="True" AllowDrop="True" ReorderMode="Enabled" SelectionMode="None">
-                            <ListView.ItemTemplate><DataTemplate x:DataType="vm:RenameFileItemViewModel"><Grid Padding="6" ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="80"/></Grid.ColumnDefinitions><CheckBox IsChecked="{x:Bind IsSelected, Mode=TwoWay}"/><TextBlock Grid.Column="1" Text="{x:Bind Name}" FontFamily="Consolas" TextTrimming="CharacterEllipsis"/><TextBlock Grid.Column="2" Text="{x:Bind EpisodeText}" HorizontalAlignment="Right" Opacity="0.6"/></Grid></DataTemplate></ListView.ItemTemplate>
+                        <ListView Grid.Row="1" ItemsSource="{Binding Files}" CanReorderItems="True" AllowDrop="True" ReorderMode="Enabled" SelectionMode="None" HorizontalContentAlignment="Stretch">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RenameFileItemViewModel">
+                                    <Grid Padding="6" ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="80"/></Grid.ColumnDefinitions>
+                                        <CheckBox IsChecked="{x:Bind IsSelected, Mode=TwoWay}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Name}" FontFamily="Consolas" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Name}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="{x:Bind EpisodeText}" HorizontalAlignment="Right" Opacity="0.6" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
                         </ListView>
                     </Grid>
                 </Border>
                 <Border x:Name="PreviewCard" Grid.Column="1" Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <Grid RowSpacing="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="重命名预览" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Grid.Column="1" Text="{Binding PreviewSummary}" Opacity="0.6"/></Grid>
-                        <ListView Grid.Row="1" ItemsSource="{Binding PreviewItems}" SelectionMode="None">
-                            <ListView.ItemTemplate><DataTemplate x:DataType="core:RenamePreviewItem"><StackPanel Padding="6" Spacing="2"><TextBlock Text="{x:Bind SourceName}" FontFamily="Consolas" Opacity="0.6" TextTrimming="CharacterEllipsis"/><TextBlock Text="{x:Bind TargetName}" FontFamily="Consolas" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{x:Bind DetailText}" Opacity="0.55" FontSize="12"/></StackPanel></DataTemplate></ListView.ItemTemplate>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding PreviewTitle}" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Grid.Column="1" Text="{Binding PreviewSummary}" Opacity="0.6"/></Grid>
+                        <ListView Grid.Row="1" ItemsSource="{Binding PreviewItems}" SelectionMode="None" HorizontalContentAlignment="Stretch">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="core:RenamePreviewItem">
+                                    <StackPanel Padding="6" Spacing="2">
+                                        <TextBlock Text="{x:Bind SourceName}" FontFamily="Consolas" Opacity="0.6" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind SourceName}"/>
+                                        <TextBlock Text="{x:Bind TargetName}" FontFamily="Consolas" FontWeight="SemiBold" TextWrapping="Wrap" ToolTipService.ToolTip="{x:Bind TargetName}"/>
+                                        <TextBlock Text="{x:Bind DetailText}" Opacity="0.55" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
                         </ListView>
                     </Grid>
                 </Border>

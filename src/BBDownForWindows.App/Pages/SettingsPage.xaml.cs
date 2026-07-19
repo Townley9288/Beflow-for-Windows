@@ -11,6 +11,7 @@ public sealed partial class SettingsPage : Page
 {
     private readonly DispatcherTimer _qrTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private DateTime _qrTimestamp;
+    private bool _inputSettingsReady;
 
     public SettingsPage()
     {
@@ -19,12 +20,31 @@ public sealed partial class SettingsPage : Page
         _qrTimer.Tick += QrTimer_Tick;
     }
     public SettingsViewModel ViewModel { get; }
-    protected override async void OnNavigatedTo(NavigationEventArgs e) { base.OnNavigatedTo(e); ViewModel.Activate(); _qrTimer.Start(); await ViewModel.InitializeAsync(); }
-    protected override void OnNavigatedFrom(NavigationEventArgs e) { _qrTimer.Stop(); ViewModel.Deactivate(); base.OnNavigatedFrom(e); }
+    protected override async void OnNavigatedTo(NavigationEventArgs e) { base.OnNavigatedTo(e); _inputSettingsReady = false; ViewModel.Activate(); _qrTimer.Start(); await ViewModel.InitializeAsync(); _inputSettingsReady = true; }
+    protected override void OnNavigatedFrom(NavigationEventArgs e) { _inputSettingsReady = false; _qrTimer.Stop(); ViewModel.Deactivate(); base.OnNavigatedFrom(e); }
     private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetWorkDirectory(value); }
     private async void BrowseAria_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetAria2cPath(value); }
     private async void BrowseMkv_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetMkvmergePath(value); }
     private async void Apply_Click(object sender, RoutedEventArgs e) { await ViewModel.SaveDownloadSettingsAsync(); ((App)Application.Current).MainWindow.Navigate("download"); }
+    private async void ClipboardMonitoring_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (!_inputSettingsReady || sender is not ToggleSwitch toggle) return;
+        ViewModel.Settings.MonitorClipboard = toggle.IsOn;
+        await SaveInputSettingsAsync();
+    }
+    private async void DragLinkMonitoring_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (!_inputSettingsReady || sender is not ToggleSwitch toggle) return;
+        ViewModel.Settings.MonitorDragLinks = toggle.IsOn;
+        await SaveInputSettingsAsync();
+    }
+    private async Task SaveInputSettingsAsync()
+    {
+        await ViewModel.SaveInputSettingsAsync();
+        var window = ((App)Application.Current).MainWindow;
+        window.ConfigureClipboardMonitoring(ViewModel.Settings.MonitorClipboard);
+        window.ConfigureDragLinkMonitoring(ViewModel.Settings.MonitorDragLinks);
+    }
     private void SettingsScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e) { SettingsContent.Width = Math.Max(0, e.NewSize.Width); }
     private void SettingsNotification_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
 

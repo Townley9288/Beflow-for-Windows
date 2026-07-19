@@ -169,6 +169,18 @@ public sealed class SettingsViewModel : ObservableObject
         SetMessage("默认下载设置已保存", InfoBarSeverity.Success);
     }
 
+    public async Task SaveInputSettingsAsync()
+    {
+        var monitorClipboard = Settings.MonitorClipboard;
+        var monitorDragLinks = Settings.MonitorDragLinks;
+        await UpdateStoredSettingsAsync(settings =>
+        {
+            settings.MonitorClipboard = monitorClipboard;
+            settings.MonitorDragLinks = monitorDragLinks;
+        });
+        SetMessage("便捷输入设置已保存", InfoBarSeverity.Success);
+    }
+
     private void ResetDownloadSettings()
     {
         var defaults = new AppSettings();

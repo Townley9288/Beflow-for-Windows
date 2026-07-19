@@ -14,7 +14,7 @@
 
 ## 功能
 
-- 先解析、逐集选流后下载，支持当前集、多分P、番剧及整季增量解析
+- 先解析全部分集、逐集选流后下载，支持多分P、番剧及整季增量解析
 - 每集独立选择画质、真实分辨率、码率、编码与音频规格，支持批量规则和自动回退
 - 杜比视界、HDR、4K 至 360P，AVC、HEVC 和 AV1
 - E-AC-3、M4A、FLAC、AC-3、DTS 音频选择与自动回退
@@ -24,6 +24,7 @@
 - 下载后直接进入原生影视重命名，支持 TMDB、独立命名模板管理、媒体规格识别、字幕/弹幕/封面联动及安全撤销
 - 批量下载进度、规格历史详情、失败集重试、持久日志和任务取消
 - 跟随系统、浅色与深色主题切换，并记忆上次选择
+- 剪贴板链接自动识别与解析、下载及多音轨页面链接拖放，并提供独立开关
 - 安装版与便携版在线更新
 
 运行时不需要 Python、Node、Eel、Vue、WebView 或预先安装的 .NET Runtime。
@@ -65,7 +66,7 @@ dotnet build src\BBDownForWindows.App\BBDownForWindows.App.csproj -c Release -p:
 生成发行包：
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 1.1.0.4
+.\scripts\Build-Release.ps1 -Version 1.1.0.5
 ```
 
 正式 CI 使用 Native AOT 构建便携更新助手。本地 Native AOT 构建需要 Visual Studio 的 Desktop development with C++ 与 Windows 10/11 SDK；缺少时脚本会为本地测试回退到自包含单文件助手。
