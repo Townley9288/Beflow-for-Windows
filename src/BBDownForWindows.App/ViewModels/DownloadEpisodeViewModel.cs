@@ -6,6 +6,8 @@ namespace BBDownForWindows.App.ViewModels;
 
 public sealed class DownloadEpisodeViewModel : ObservableObject
 {
+    private const string MuxedAudioValue = "\u001fmuxed-audio";
+
     public sealed class Choice(string value, string label) : ObservableObject
     {
         private string _label = label;
@@ -32,9 +34,10 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
     {
         Episode = episode;
         _statusText = episode.State == DownloadEpisodeParseState.Ready ? "就绪" : episode.Error;
-        AudioOptions = episode.AudioStreams
-            .Select(item => new Choice(AudioKey(item), $"{item.Codec} · {item.Bitrate}"))
-            .ToList();
+        AudioOptions = episode.IsMuxedStream
+            ? [new Choice(MuxedAudioValue, "内封音频（合流）")]
+            : episode.AudioStreams.Select(item => new Choice(AudioKey(item), $"{item.Codec} · {item.Bitrate}")).ToList();
+        if (episode.IsMuxedStream) _selectedAudio = MuxedAudioValue;
         InitializeQualityOptions();
     }
 
@@ -116,8 +119,8 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
     public string StatusText { get => _statusText; private set => SetProperty(ref _statusText, value); }
     public string FallbackText { get => _fallbackText; private set { if (SetProperty(ref _fallbackText, value)) OnPropertyChanged(nameof(HasFallback)); } }
     public bool HasFallback => !string.IsNullOrWhiteSpace(FallbackText);
-    public bool VideoSelectionEnabled => IsReady && _downloadMode != DownloadMode.AudioOnly;
-    public bool AudioSelectionEnabled => IsReady && _downloadMode != DownloadMode.VideoOnly;
+    public bool VideoSelectionEnabled => IsReady && (Episode.IsMuxedStream || _downloadMode != DownloadMode.AudioOnly);
+    public bool AudioSelectionEnabled => IsReady && !Episode.IsMuxedStream && _downloadMode != DownloadMode.VideoOnly;
 
     public long EstimatedSizeBytes
     {
@@ -125,6 +128,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         {
             var video = FindSelectedVideo();
             var audio = FindSelectedAudio();
+            if (Episode.IsMuxedStream) return video?.EstimatedSizeBytes ?? 0;
             return (_downloadMode == DownloadMode.AudioOnly ? 0 : video?.EstimatedSizeBytes ?? 0)
                    + (_downloadMode == DownloadMode.VideoOnly ? 0 : audio?.EstimatedSizeBytes ?? 0);
         }
@@ -167,6 +171,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
                 SelectedEncoding = decision.Video.Codec;
             }
             if (decision.Audio is not null) SelectedAudio = AudioKey(decision.Audio);
+            else if (Episode.IsMuxedStream) SelectedAudio = MuxedAudioValue;
             _videoManual = false;
             _audioManual = false;
             _restoredBaseFallback = decision.FallbackReason;
@@ -184,6 +189,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         {
             _unavailableRestoredVideo = null;
             _unavailableRestoredAudio = null;
+            if (Episode.IsMuxedStream) SelectedAudio = MuxedAudioValue;
             if (selection.Video is not null)
             {
                 var match = Episode.VideoStreams
@@ -241,12 +247,13 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         {
             PageNumber = PageNumber,
             PageTitle = Title,
-            Video = _downloadMode == DownloadMode.AudioOnly
+            Video = _downloadMode == DownloadMode.AudioOnly && !Episode.IsMuxedStream
                 ? null
                 : _unavailableRestoredVideo ?? (video is null ? null : new VideoStreamSelection(video.Quality, video.Resolution, video.Codec, video.BitrateKbps, _videoManual)),
-            Audio = _downloadMode == DownloadMode.VideoOnly
+            Audio = _downloadMode == DownloadMode.VideoOnly || Episode.IsMuxedStream
                 ? null
                 : _unavailableRestoredAudio ?? (audio is null ? null : new AudioStreamSelection(audio.Codec, audio.BitrateKbps, _audioManual)),
+            IsMuxedStream = Episode.IsMuxedStream,
             FallbackReason = FallbackText,
             RelativeOutputPath = _relativeOutputPath
         };

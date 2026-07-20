@@ -69,4 +69,25 @@ public sealed class ParserTests
     {
         Assert.Equal("0\n1\n0\n2\n", BBDownParser.BuildInteractiveInput([1, 2], new Dictionary<int, int> { [1] = 1, [2] = 2 }, false));
     }
+
+    [Fact]
+    public void ParsesLegacyMuxedSegmentedStream()
+    {
+        const string output = """
+            开始解析P22: 123... (22 of 48)
+            共计1条流(共有3个分段).
+              0. [1080P 高码率] [AVC] [~4109 kbps] [555.27 MB]
+            任务完成
+            """;
+
+        var stream = Assert.Single(BBDownParser.ParsePageVideoStreams(output)[22]);
+
+        Assert.Equal(0, stream.Index);
+        Assert.Equal("1080P 高码率", stream.Quality);
+        Assert.Equal("1920x1080", stream.Resolution);
+        Assert.Equal("AVC", stream.Codec);
+        Assert.Equal(4109, stream.BitrateKbps);
+        Assert.Equal("555.27 MB", stream.Size);
+        Assert.Contains(22, BBDownParser.ParseMuxedStreamPages(output));
+    }
 }

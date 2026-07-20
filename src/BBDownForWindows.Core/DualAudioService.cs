@@ -119,6 +119,8 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
                 await Task.WhenAll(parseA, parseB);
                 var episodeA = await parseA;
                 var episodeB = await parseB;
+                if (episodeA.IsMuxedStream || episodeB.IsMuxedStream)
+                    throw new InvalidOperationException("旧式音视频合流分段暂不支持多音轨拆分");
 
                 var resolveOptions = CloneDownloadRequest(request.Options);
                 resolveOptions.DownloadMode = DownloadMode.VideoAndAudio;

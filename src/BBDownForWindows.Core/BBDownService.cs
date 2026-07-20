@@ -101,6 +101,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             State = DownloadEpisodeResultState.Pending,
             Video = item.Video,
             Audio = item.Audio,
+            IsMuxedStream = item.IsMuxedStream,
             FallbackReason = item.FallbackReason,
             RelativeOutputPath = item.RelativeOutputPath
         }).ToList();
@@ -178,6 +179,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                 }), context, cancellationToken);
                 episodeResult.Video = exact.Video;
                 episodeResult.Audio = exact.Audio;
+                episodeResult.IsMuxedStream = exact.IsMuxedStream;
                 episodeResult.FallbackReason = exact.FallbackReason;
                 episodeResult.OutputFiles = exact.OutputFiles;
                 foreach (var file in episodeResult.OutputFiles) allFiles.Add(file);
@@ -252,13 +254,14 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         }
 
         var arguments = BBDownCommandBuilder.BuildExactDownloadArguments(part, tools);
-        var input = BuildExactInput(decision.Video, decision.Audio, part.DownloadMode);
+        var input = BuildExactInput(decision.Video, decision.Audio, part.DownloadMode, request.Episode.IsMuxedStream);
         var before = SnapshotDirectory(request.OutputDirectory);
         var aria = new Aria2ProgressParser();
+        var progressMode = request.Episode.IsMuxedStream ? DownloadMode.VideoOnly : part.DownloadMode;
         var internalProgress = new BBDownInternalProgressParser(
             decision.Video?.EstimatedSizeBytes ?? 0,
             decision.Audio?.EstimatedSizeBytes ?? 0,
-            part.DownloadMode);
+            progressMode);
         var observerGate = new object();
         var downloadMessage = part.UseAria2c ? "正在使用 aria2c 下载" : "正在使用 BBDown 内置下载器下载";
         progress?.Report(new ExactDownloadProgress(DownloadProgressPhase.Downloading, 0, string.Empty, string.Empty, downloadMessage));
@@ -291,6 +294,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             PageNumber = request.Selection.PageNumber,
             Video = decision.Video is null ? null : new VideoStreamSelection(decision.Video.Quality, decision.Video.Resolution, decision.Video.Codec, decision.Video.BitrateKbps, request.Selection.Video?.IsManual == true),
             Audio = decision.Audio is null ? null : new AudioStreamSelection(decision.Audio.Codec, decision.Audio.BitrateKbps, request.Selection.Audio?.IsManual == true),
+            IsMuxedStream = request.Episode.IsMuxedStream,
             FallbackReason = decision.FallbackReason,
             OutputDirectory = request.OutputDirectory,
             RelativeOutputPath = request.RelativeOutputPath,
@@ -506,13 +510,17 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         public void Report(T value) => report(value);
     }
 
-    private static string BuildExactInput(VideoStreamInfo? video, AudioStreamInfo? audio, DownloadMode mode) => mode switch
+    private static string BuildExactInput(VideoStreamInfo? video, AudioStreamInfo? audio, DownloadMode mode, bool isMuxedStream)
     {
-        DownloadMode.VideoOnly when video is not null => $"{video.Index}\n",
-        DownloadMode.AudioOnly when audio is not null => $"{audio.Index}\n",
-        DownloadMode.VideoAndAudio when video is not null && audio is not null => $"{video.Index}\n{audio.Index}\n",
-        _ => throw new InvalidOperationException("所选下载类型缺少对应的视频或音频流")
-    };
+        if (isMuxedStream && video is not null) return $"{video.Index}\n";
+        return mode switch
+        {
+            DownloadMode.VideoOnly when video is not null => $"{video.Index}\n",
+            DownloadMode.AudioOnly when audio is not null => $"{audio.Index}\n",
+            DownloadMode.VideoAndAudio when video is not null && audio is not null => $"{video.Index}\n{audio.Index}\n",
+            _ => throw new InvalidOperationException("所选下载类型缺少对应的视频或音频流")
+        };
+    }
 
     private static void ReportProgress(IProgress<DownloadProgressSnapshot>? progress, DownloadProgressPhase phase, int completed, int total,
         EpisodeStreamSelection episode, double currentContribution, double? currentPercent, string speed, string eta, string message)

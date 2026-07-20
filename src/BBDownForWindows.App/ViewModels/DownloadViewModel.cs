@@ -280,6 +280,7 @@ public sealed class DownloadViewModel : ObservableObject
     public bool ApplyExternalInput(string? value)
     {
         if (!BilibiliInputParser.TryExtract(value, out var input)) return false;
+        if (input.Equals(Url, StringComparison.OrdinalIgnoreCase)) return false;
         Url = input;
         return true;
     }
@@ -314,6 +315,7 @@ public sealed class DownloadViewModel : ObservableObject
                 PageTitle = item.PageTitle,
                 Video = item.Video,
                 Audio = item.Audio,
+                IsMuxedStream = item.IsMuxedStream,
                 FallbackReason = item.FallbackReason,
                 RelativeOutputPath = item.RelativeOutputPath
             }).ToList();
@@ -695,6 +697,7 @@ public sealed class DownloadViewModel : ObservableObject
         {
             if (!row.IsSelected || !row.IsReady) return false;
             var selection = row.BuildSelection();
+            if (row.Episode.IsMuxedStream) return selection.Video is not null;
             return CurrentDownloadMode switch
             {
                 DownloadMode.VideoOnly => selection.Video is not null,

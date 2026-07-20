@@ -18,6 +18,7 @@ public static partial class BBDownParser
                 info.Pages.Add(new PageInfo(int.Parse(page.Groups[1].Value), page.Groups[2].Value, page.Groups[3].Value, page.Groups[4].Value));
                 continue;
             }
+            if (MuxedStreamHeadingRegex().IsMatch(line)) { section = "muxed"; continue; }
             if (line.Contains("视频流", StringComparison.Ordinal)) { section = "video"; continue; }
             if (line.Contains("音频流", StringComparison.Ordinal)) { section = "audio"; continue; }
             var stream = StreamRegex().Match(line);
@@ -25,6 +26,8 @@ public static partial class BBDownParser
             var parts = BracketRegex().Matches(stream.Groups[2].Value).Select(match => match.Groups[1].Value).ToArray();
             if (section == "video" && parts.Length >= 6 && TryResolution(parts[1], out var width, out var height))
                 info.VideoStreams.Add(new VideoStreamInfo(int.Parse(stream.Groups[1].Value), parts[0], parts[1], width, height, parts[2].ToUpperInvariant(), parts[3], parts[4], ParseBitrate(parts[4]), parts[5]));
+            else if (section == "muxed" && ParseMuxedStream(int.Parse(stream.Groups[1].Value), parts) is { } muxed)
+                info.VideoStreams.Add(muxed);
             else if (section == "audio" && parts.Length >= 3)
                 info.AudioStreams.Add(new AudioStreamInfo(int.Parse(stream.Groups[1].Value), parts[0], parts[1], ParseBitrate(parts[1]), parts[2]));
         }
@@ -47,14 +50,33 @@ public static partial class BBDownParser
                 continue;
             }
             if (currentPage is null) continue;
+            if (MuxedStreamHeadingRegex().IsMatch(line)) { section = "muxed"; continue; }
             if (line.Contains("视频流", StringComparison.Ordinal)) { section = "video"; continue; }
             if (line.Contains("音频流", StringComparison.Ordinal)) { section = "audio"; continue; }
-            if (section != "video") continue;
+            if (section is not ("video" or "muxed")) continue;
             var stream = StreamRegex().Match(line);
             if (!stream.Success) continue;
             var parts = BracketRegex().Matches(stream.Groups[2].Value).Select(match => match.Groups[1].Value).ToArray();
-            if (parts.Length < 6 || !TryResolution(parts[1], out var width, out var height)) continue;
-            result[currentPage.Value].Add(new VideoStreamInfo(int.Parse(stream.Groups[1].Value), parts[0], parts[1], width, height, parts[2].ToUpperInvariant(), parts[3], parts[4], ParseBitrate(parts[4]), parts[5]));
+            if (section == "muxed")
+            {
+                if (ParseMuxedStream(int.Parse(stream.Groups[1].Value), parts) is { } muxed) result[currentPage.Value].Add(muxed);
+                continue;
+            }
+            if (parts.Length >= 6 && TryResolution(parts[1], out var width, out var height))
+                result[currentPage.Value].Add(new VideoStreamInfo(int.Parse(stream.Groups[1].Value), parts[0], parts[1], width, height, parts[2].ToUpperInvariant(), parts[3], parts[4], ParseBitrate(parts[4]), parts[5]));
+        }
+        return result;
+    }
+
+    public static HashSet<int> ParseMuxedStreamPages(string output)
+    {
+        var result = new HashSet<int>();
+        int? currentPage = null;
+        foreach (var line in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var page = ParsingPageRegex().Match(line);
+            if (page.Success) currentPage = int.Parse(page.Groups[1].Value);
+            else if (currentPage is not null && MuxedStreamHeadingRegex().IsMatch(line)) result.Add(currentPage.Value);
         }
         return result;
     }
@@ -184,6 +206,29 @@ public static partial class BBDownParser
         return match.Success;
     }
 
+    private static VideoStreamInfo? ParseMuxedStream(int index, string[] parts)
+    {
+        if (parts.Length < 4 || !TryInferResolution(parts[0], out var width, out var height)) return null;
+        return new VideoStreamInfo(index, parts[0], $"{width}x{height}", width, height,
+            parts[1].ToUpperInvariant(), string.Empty, parts[2], ParseBitrate(parts[2]), parts[3]);
+    }
+
+    private static bool TryInferResolution(string quality, out int width, out int height)
+    {
+        var normalized = quality.ToUpperInvariant();
+        (width, height) = normalized switch
+        {
+            var value when value.Contains("8K", StringComparison.Ordinal) => (7680, 4320),
+            var value when value.Contains("4K", StringComparison.Ordinal) => (3840, 2160),
+            var value when value.Contains("1080", StringComparison.Ordinal) => (1920, 1080),
+            var value when value.Contains("720", StringComparison.Ordinal) => (1280, 720),
+            var value when value.Contains("480", StringComparison.Ordinal) => (852, 480),
+            var value when value.Contains("360", StringComparison.Ordinal) => (640, 360),
+            _ => (0, 0)
+        };
+        return width > 0;
+    }
+
     [GeneratedRegex("视频标题:\\s*(.+)$")] private static partial Regex TitleRegex();
     [GeneratedRegex("\\bP(\\d+):\\s*\\[(\\d+)\\]\\s*\\[(.+?)\\]\\s*\\[([^\\]]+)\\]")] private static partial Regex PageRegex();
     [GeneratedRegex("^\\s*(\\d+)\\.\\s*(.+)$")] private static partial Regex StreamRegex();
@@ -191,6 +236,7 @@ public static partial class BBDownParser
     [GeneratedRegex("开始解析P(\\d+):")] private static partial Regex ParsingPageRegex();
     [GeneratedRegex("已选择\\s*[：:]\\s*([^\\r\\n]+)", RegexOptions.IgnoreCase)] private static partial Regex SelectedRegex();
     [GeneratedRegex("共计\\s*(\\d+)\\s*个分P")] private static partial Regex TotalPagesRegex();
+    [GeneratedRegex("共计\\s*\\d+\\s*条流\\s*[（(]\\s*共有\\s*\\d+\\s*个分段\\s*[）)]")] private static partial Regex MuxedStreamHeadingRegex();
     [GeneratedRegex("(\\d+(?:\\.\\d+)?)\\s*kbps")] private static partial Regex BitrateRegex();
     [GeneratedRegex("^(\\d+)[x×](\\d+)$")] private static partial Regex ResolutionRegex();
 }

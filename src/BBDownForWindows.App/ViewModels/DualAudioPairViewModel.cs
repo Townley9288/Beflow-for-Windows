@@ -58,7 +58,8 @@ public sealed class DualAudioPairViewModel : ObservableObject
         set { if (SetProperty(ref _isSelected, value)) OnPropertyChanged(nameof(IsDownloadable)); }
     }
 
-    public bool IsDownloadable => SourceA is not null && SourceB is not null;
+    public bool IsDownloadable => SourceA is not null && SourceB is not null
+                                  && !SourceA.Episode.IsMuxedStream && !SourceB.Episode.IsMuxedStream;
     public int SelectedSourceBPageNumber
     {
         get => _selectedSourceBPageNumber;
@@ -120,7 +121,9 @@ public sealed class DualAudioPairViewModel : ObservableObject
             OnPropertyChanged(nameof(SourceBTitle));
             OnPropertyChanged(nameof(IsDownloadable));
             if (!IsDownloadable) IsSelected = false;
-            StatusText = IsDownloadable ? "就绪" : "未配对";
+            StatusText = SourceA is not null && SourceB is not null && !IsDownloadable
+                ? "旧式合流分段不支持多音轨"
+                : IsDownloadable ? "就绪" : "未配对";
             UpdateRecommendation();
         }
         finally { _suppressReassign = false; }
@@ -130,6 +133,7 @@ public sealed class DualAudioPairViewModel : ObservableObject
     public DualAudioPairSelection BuildSelection(int globalDelay)
     {
         if (SourceA is null || SourceB is null) throw new InvalidOperationException($"第 {PairNumber} 对尚未完成配对");
+        if (!IsDownloadable) throw new InvalidOperationException("旧式音视频合流分段暂不支持多音轨拆分");
         var sourceA = SourceA.BuildSelection();
         var sourceB = SourceB.BuildSelection();
         return new DualAudioPairSelection
@@ -183,6 +187,13 @@ public sealed class DualAudioPairViewModel : ObservableObject
         if (SourceA is null || SourceB is null)
         {
             RecommendationReason = "请先完成分集配对";
+            MainVideoSource = DualAudioSource.A;
+            NotifySizeChanged();
+            return;
+        }
+        if (SourceA.Episode.IsMuxedStream || SourceB.Episode.IsMuxedStream)
+        {
+            RecommendationReason = "旧式音视频合流分段暂不支持多音轨拆分";
             MainVideoSource = DualAudioSource.A;
             NotifySizeChanged();
             return;

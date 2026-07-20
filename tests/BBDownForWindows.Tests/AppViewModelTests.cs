@@ -63,6 +63,32 @@ public sealed class AppViewModelTests
         Assert.Contains(viewModel.EncodingOptions, item => item.Value == "HEVC" && item.Label == "HEVC");
     }
 
+    [Theory]
+    [InlineData(DownloadMode.VideoAndAudio)]
+    [InlineData(DownloadMode.VideoOnly)]
+    [InlineData(DownloadMode.AudioOnly)]
+    public void MuxedEpisodeShowsEmbeddedAudioAndCountsSizeOnce(DownloadMode mode)
+    {
+        var episode = new DownloadEpisodeInfo
+        {
+            Page = new PageInfo(22, "22", "第22集", "24m"),
+            State = DownloadEpisodeParseState.Ready,
+            IsMuxedStream = true,
+            VideoStreams = [new VideoStreamInfo(0, "1080P 高码率", "1920x1080", 1920, 1080, "AVC", string.Empty, "~4109 kbps", 4109, "555.27 MB")]
+        };
+        var viewModel = new DownloadEpisodeViewModel(episode);
+
+        viewModel.ApplyRule(new StreamSelectionRule("1080P 高码率", "AVC", "auto", AudioBitratePriority.Highest), mode);
+        var selection = viewModel.BuildSelection();
+
+        Assert.Equal("内封音频（合流）", viewModel.SelectedAudioLabel);
+        Assert.False(viewModel.AudioSelectionEnabled);
+        Assert.NotNull(selection.Video);
+        Assert.Null(selection.Audio);
+        Assert.True(selection.IsMuxedStream);
+        Assert.Equal(StreamSelectionPolicy.ParseSizeBytes("555.27 MB"), viewModel.EstimatedSizeBytes);
+    }
+
     [Fact]
     public void ExternalDownloadInputDoesNotReplaceCurrentValueWithUnsupportedText()
     {
@@ -73,6 +99,27 @@ public sealed class AppViewModelTests
 
         Assert.False(applied);
         Assert.Equal("BV1xx411c7mD", viewModel.Url);
+    }
+
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    public void ClipboardMonitoringOnlyInspectsChangesWhileWindowIsInactive(bool enabled, bool windowActive, bool expected)
+    {
+        Assert.Equal(expected, MainWindow.ShouldInspectClipboardChange(enabled, windowActive));
+    }
+
+    [Fact]
+    public void CurrentDownloadInputIsNotReappliedOrParsedFromClipboard()
+    {
+        const string url = "https://www.bilibili.com/bangumi/play/ep114762?from_spmid=666.25.episode.0";
+        using var fixture = new AppFixture();
+        var viewModel = new DownloadViewModel(fixture.Services) { Url = url };
+
+        Assert.True(MainWindow.IsDuplicateClipboardInput(url, url));
+        Assert.False(viewModel.ApplyExternalInput(url));
+        Assert.Equal(url, viewModel.Url);
     }
 
     [Fact]

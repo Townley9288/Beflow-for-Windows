@@ -49,6 +49,7 @@ public sealed class DownloadEpisodeInfo
     public required PageInfo Page { get; init; }
     public List<VideoStreamInfo> VideoStreams { get; init; } = [];
     public List<AudioStreamInfo> AudioStreams { get; init; } = [];
+    public bool IsMuxedStream { get; init; }
     public DownloadEpisodeParseState State { get; set; } = DownloadEpisodeParseState.Pending;
     public string Error { get; set; } = string.Empty;
 }
@@ -101,6 +102,7 @@ public sealed class EpisodeStreamSelection
     public string PageTitle { get; set; } = string.Empty;
     public VideoStreamSelection? Video { get; set; }
     public AudioStreamSelection? Audio { get; set; }
+    public bool IsMuxedStream { get; set; }
     public string FallbackReason { get; set; } = string.Empty;
     public string RelativeOutputPath { get; set; } = string.Empty;
 }
@@ -125,6 +127,7 @@ public sealed class DownloadEpisodeResult
     public DownloadEpisodeResultState State { get; set; } = DownloadEpisodeResultState.Pending;
     public VideoStreamSelection? Video { get; set; }
     public AudioStreamSelection? Audio { get; set; }
+    public bool IsMuxedStream { get; set; }
     public string FallbackReason { get; set; } = string.Empty;
     public string Error { get; set; } = string.Empty;
     public string RelativeOutputPath { get; set; } = string.Empty;
@@ -132,7 +135,7 @@ public sealed class DownloadEpisodeResult
     public List<string> OutputFiles { get; set; } = [];
     [JsonIgnore] public string PageText => $"P{PageNumber}";
     [JsonIgnore] public string VideoText => Video?.DisplayName ?? "—";
-    [JsonIgnore] public string AudioText => Audio?.DisplayName ?? "—";
+    [JsonIgnore] public string AudioText => IsMuxedStream ? "内封音频（合流）" : Audio?.DisplayName ?? "—";
     [JsonIgnore] public string StatusText => State switch
     {
         DownloadEpisodeResultState.Completed => "成功",
@@ -188,6 +191,7 @@ public sealed class ExactDownloadResult
     public int PageNumber { get; init; }
     public VideoStreamSelection? Video { get; init; }
     public AudioStreamSelection? Audio { get; init; }
+    public bool IsMuxedStream { get; init; }
     public string FallbackReason { get; init; } = string.Empty;
     public string OutputDirectory { get; init; } = string.Empty;
     public string RelativeOutputPath { get; init; } = string.Empty;

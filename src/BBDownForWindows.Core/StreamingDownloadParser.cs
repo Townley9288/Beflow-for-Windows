@@ -84,14 +84,17 @@ internal sealed partial class StreamingDownloadParser
         if (_currentPage is null) return;
         var number = _currentPage.Value;
         var page = _pages.TryGetValue(number, out var pageInfo) ? pageInfo : new PageInfo(number, string.Empty, $"P{number}", string.Empty);
-        var video = BBDownParser.ParsePageVideoStreams(_currentOutput.ToString()).GetValueOrDefault(number) ?? [];
-        var audio = BBDownParser.ParsePageAudioStreams(_currentOutput.ToString()).GetValueOrDefault(number) ?? [];
+        var output = _currentOutput.ToString();
+        var video = BBDownParser.ParsePageVideoStreams(output).GetValueOrDefault(number) ?? [];
+        var audio = BBDownParser.ParsePageAudioStreams(output).GetValueOrDefault(number) ?? [];
+        var isMuxedStream = BBDownParser.ParseMuxedStreamPages(output).Contains(number);
         var failed = _currentFailed || video.Count == 0;
         var episode = new DownloadEpisodeInfo
         {
             Page = page,
             VideoStreams = video,
             AudioStreams = audio,
+            IsMuxedStream = isMuxedStream,
             State = failed ? DownloadEpisodeParseState.Failed : DownloadEpisodeParseState.Ready,
             Error = failed ? (string.IsNullOrWhiteSpace(_currentError) ? "没有解析到可用视频流" : _currentError) : string.Empty
         };

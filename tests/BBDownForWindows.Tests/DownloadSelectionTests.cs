@@ -75,6 +75,22 @@ public sealed class DownloadSelectionTests
         Assert.Contains("无 E-AC-3", selected.FallbackReason);
     }
 
+    [Theory]
+    [InlineData(DownloadMode.VideoAndAudio)]
+    [InlineData(DownloadMode.VideoOnly)]
+    [InlineData(DownloadMode.AudioOnly)]
+    public void MuxedStreamSelectionAlwaysKeepsCombinedSource(DownloadMode mode)
+    {
+        var episode = MuxedEpisode();
+
+        var selected = StreamSelectionPolicy.Select(episode,
+            new StreamSelectionRule("1080P 高码率", "AVC", "auto", AudioBitratePriority.Highest), mode);
+
+        Assert.NotNull(selected.Video);
+        Assert.Null(selected.Audio);
+        Assert.Contains(StreamSelectionPolicy.MuxedStreamReason, selected.FallbackReason);
+    }
+
     [Fact]
     public void MissingManualStreamDoesNotSilentlyFallBack()
     {
@@ -368,9 +384,58 @@ public sealed class DownloadSelectionTests
         Assert.Contains(fixture.Runner.Requests, request => request.Arguments.Contains("--interactive"));
     }
 
+    [Theory]
+    [InlineData(DownloadMode.VideoAndAudio)]
+    [InlineData(DownloadMode.VideoOnly)]
+    [InlineData(DownloadMode.AudioOnly)]
+    public async Task MuxedExactDownloadSubmitsOneCombinedStreamIndex(DownloadMode mode)
+    {
+        var runner = new ScriptedRunner();
+        runner.MuxedPages.Add(22);
+        using var fixture = new ServiceFixture(runner);
+        var output = Directory.CreateDirectory(Path.Combine(fixture.Root.FullName, $"muxed-{mode}"));
+        var manager = new TaskManager(fixture.Paths, fixture.Runner);
+        ExactDownloadResult? result = null;
+
+        var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadBatch, false, $"muxed-{mode}", async (context, token) =>
+        {
+            var episode = await fixture.Service.ParseEpisodeAsync("ep114762", 22, "WEB", context, token);
+            Assert.Equal(DownloadEpisodeParseState.Ready, episode.State);
+            Assert.True(episode.IsMuxedStream);
+            var stream = Assert.Single(episode.VideoStreams);
+            result = await fixture.Service.DownloadExactAsync(new ExactDownloadRequest
+            {
+                Options = new DownloadRequest { Url = "ep114762", WorkDirectory = output.FullName, UseAria2c = true, DownloadMode = mode },
+                Episode = episode,
+                Selection = new EpisodeStreamSelection
+                {
+                    PageNumber = 22,
+                    PageTitle = "第22集",
+                    Video = new VideoStreamSelection(stream.Quality, stream.Resolution, stream.Codec, stream.BitrateKbps),
+                    IsMuxedStream = true
+                },
+                OutputDirectory = output.FullName,
+                RelativeOutputPath = "[P22]合流分段"
+            }, null, context, token);
+        });
+
+        Assert.Equal(TaskState.Completed, snapshot.State);
+        Assert.True(result!.IsMuxedStream);
+        Assert.Null(result.Audio);
+        Assert.Equal("0\n", Assert.Single(runner.Requests, item => item.Arguments.Contains("--interactive")).StandardInput);
+    }
+
     private static DownloadEpisodeInfo Episode(List<VideoStreamInfo> video, List<AudioStreamInfo> audio) => new()
     {
         Page = new PageInfo(1, "1", "第一集", "24m"), VideoStreams = video, AudioStreams = audio, State = DownloadEpisodeParseState.Ready
+    };
+
+    private static DownloadEpisodeInfo MuxedEpisode() => new()
+    {
+        Page = new PageInfo(22, "22", "第22集", "24m"),
+        VideoStreams = [new VideoStreamInfo(0, "1080P 高码率", "1920x1080", 1920, 1080, "AVC", string.Empty, "~4109 kbps", 4109, "555.27 MB")],
+        IsMuxedStream = true,
+        State = DownloadEpisodeParseState.Ready
     };
 
     private static EpisodeStreamSelection Selection(int page) => new()
@@ -412,6 +477,7 @@ public sealed class DownloadSelectionTests
         public int FailDownloadPage { get; set; }
         public int ParseExitCode { get; set; }
         public string ParseFailureOutput { get; set; } = string.Empty;
+        public HashSet<int> MuxedPages { get; } = [];
 
         public Task<ProcessResult> RunAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
         {
@@ -439,7 +505,9 @@ public sealed class DownloadSelectionTests
                 return Task.FromResult(new ProcessResult(ParseExitCode, ParseFailureOutput, false));
             }
 
-            var output = request.Arguments.Contains("ALL") ? InfoOutput(1) + InfoOutput(2, includeHeader: false) + "任务完成\n" : InfoOutput(page) + "任务完成\n";
+            var output = request.Arguments.Contains("ALL")
+                ? InfoOutput(1) + InfoOutput(2, includeHeader: false) + "任务完成\n"
+                : (MuxedPages.Contains(page) ? MuxedInfoOutput(page) : InfoOutput(page)) + "任务完成\n";
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries)) onOutput?.Invoke(line + "\n");
             return Task.FromResult(new ProcessResult(0, output, false));
         }
@@ -458,6 +526,15 @@ public sealed class DownloadSelectionTests
               1. [1080P 高清] [1920x1080] [HEVC] [25] [1000 kbps] [~100 MB]
             共计1条音频流.
               2. [M4A] [192 kbps] [~20 MB]
+            """;
+
+        private static string MuxedInfoOutput(int page) => $"""
+            视频标题: 测试合集
+            共计 48 个分P, 已选择：P{page}
+            P{page}: [22] [第{page}集] [24m]
+            开始解析P{page}: 123... ({page} of 48)
+            共计1条流(共有3个分段).
+              0. [1080P 高码率] [AVC] [~4109 kbps] [555.27 MB]
             """;
     }
 

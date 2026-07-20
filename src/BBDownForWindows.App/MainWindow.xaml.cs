@@ -15,6 +15,7 @@ public sealed partial class MainWindow : Window
     private string _currentNavigationTag = string.Empty;
     private bool _clipboardMonitoring;
     private bool _dragLinkMonitoring = true;
+    private bool _isWindowActive;
     private string _lastClipboardInput = string.Empty;
     private string _pendingClipboardInput = string.Empty;
     public MainWindow()
@@ -28,6 +29,7 @@ public sealed partial class MainWindow : Window
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
         if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
         Navigate("download");
+        Activated += MainWindow_Activated;
         AppWindow.Closing += AppWindow_Closing;
         Closed += MainWindow_Closed;
         ((App)Application.Current).Services.TaskConsole.PropertyChanged += TaskConsole_PropertyChanged;
@@ -161,9 +163,20 @@ public sealed partial class MainWindow : Window
 
     private void Clipboard_ContentChanged(object? sender, object e)
     {
-        if (!_clipboardMonitoring) return;
+        if (!ShouldInspectClipboardChange(_clipboardMonitoring, _isWindowActive)) return;
         DispatcherQueue.TryEnqueue(async () => await InspectClipboardAsync());
     }
+
+    private void MainWindow_Activated(object sender, WindowActivatedEventArgs args) =>
+        _isWindowActive = args.WindowActivationState != WindowActivationState.Deactivated;
+
+    internal static bool ShouldInspectClipboardChange(bool monitoringEnabled, bool windowActive) =>
+        monitoringEnabled && !windowActive;
+
+    internal static bool IsDuplicateClipboardInput(string? currentInput, string? incomingInput) =>
+        BilibiliInputParser.TryExtract(currentInput, out var current)
+        && BilibiliInputParser.TryExtract(incomingInput, out var incoming)
+        && current.Equals(incoming, StringComparison.OrdinalIgnoreCase);
 
     private async Task InspectClipboardAsync()
     {
@@ -204,6 +217,7 @@ public sealed partial class MainWindow : Window
     private void ShowClipboardInput(string input)
     {
         _pendingClipboardInput = string.Empty;
+        if (ContentFrame.Content is Pages.DownloadPage page && IsDuplicateClipboardInput(page.ViewModel.Url, input)) return;
         if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
             presenter.Restore();
         Activate();
@@ -318,6 +332,7 @@ public sealed partial class MainWindow : Window
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
         if (_clipboardMonitoring) Clipboard.ContentChanged -= Clipboard_ContentChanged;
+        Activated -= MainWindow_Activated;
         ((App)Application.Current).Services.TaskConsole.PropertyChanged -= TaskConsole_PropertyChanged;
     }
 }

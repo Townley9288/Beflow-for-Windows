@@ -10,6 +10,8 @@ public sealed record StreamSelectionDecision(
 
 public static partial class StreamSelectionPolicy
 {
+    public const string MuxedStreamReason = "旧式音视频合流分段";
+
     private static readonly HashSet<string> KnownQualityRules = new(StringComparer.OrdinalIgnoreCase)
     { "杜比视界", "HDR 真彩", "4K 超清", "1080P 高码率", "1080P 高清", "720P 高清", "480P 清晰", "360P 流畅" };
 
@@ -22,10 +24,11 @@ public static partial class StreamSelectionPolicy
         VideoStreamInfo? video = null;
         AudioStreamInfo? audio = null;
 
-        if (mode != DownloadMode.AudioOnly)
+        if (episode.IsMuxedStream || mode != DownloadMode.AudioOnly)
             video = SelectVideo(episode.VideoStreams, rule.QualityRule, rule.PreferredEncoding, reasons);
-        if (mode != DownloadMode.VideoOnly)
+        if (!episode.IsMuxedStream && mode != DownloadMode.VideoOnly)
             audio = SelectAudio(episode.AudioStreams, rule.PreferredAudioCodec, rule.AudioBitratePriority, reasons);
+        if (episode.IsMuxedStream) reasons.Add(MuxedStreamReason);
 
         return new StreamSelectionDecision(video, audio, string.Join("；", reasons.Distinct()));
     }
@@ -39,7 +42,7 @@ public static partial class StreamSelectionPolicy
         VideoStreamInfo? video = null;
         AudioStreamInfo? audio = null;
 
-        if (options.DownloadMode != DownloadMode.AudioOnly)
+        if (episode.IsMuxedStream || options.DownloadMode != DownloadMode.AudioOnly)
         {
             if (desired.Video is null) throw new InvalidOperationException($"P{desired.PageNumber} 没有选择视频流");
             video = FindVideo(episode.VideoStreams, desired.Video, desired.Video.IsManual);
@@ -51,7 +54,7 @@ public static partial class StreamSelectionPolicy
             }
         }
 
-        if (options.DownloadMode != DownloadMode.VideoOnly)
+        if (!episode.IsMuxedStream && options.DownloadMode != DownloadMode.VideoOnly)
         {
             if (desired.Audio is null) throw new InvalidOperationException($"P{desired.PageNumber} 没有选择音频流");
             audio = FindAudio(episode.AudioStreams, desired.Audio, desired.Audio.IsManual);
@@ -63,6 +66,7 @@ public static partial class StreamSelectionPolicy
             }
         }
 
+        if (episode.IsMuxedStream) reasons.Add(MuxedStreamReason);
         if (!string.IsNullOrWhiteSpace(desired.FallbackReason)) reasons.Insert(0, desired.FallbackReason);
         return new StreamSelectionDecision(video, audio, string.Join("；", reasons.Distinct()));
     }
