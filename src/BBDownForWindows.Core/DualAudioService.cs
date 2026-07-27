@@ -631,6 +631,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
     private static DownloadCatalog FilterCatalog(DownloadCatalog catalog, Func<DownloadEpisodeInfo, bool> predicate) => new()
     {
         SourceUrl = catalog.SourceUrl,
+        ResolvedUrl = catalog.ResolvedUrl,
         Title = catalog.Title,
         Metadata = catalog.Metadata,
         ParsedAt = catalog.ParsedAt,

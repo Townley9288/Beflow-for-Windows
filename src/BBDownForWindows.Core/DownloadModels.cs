@@ -22,6 +22,7 @@ public sealed class BilibiliVideoMetadata
     public string OwnerId { get; init; } = string.Empty;
     public string OwnerAvatarUrl { get; init; } = string.Empty;
     public string CanonicalUrl { get; init; } = string.Empty;
+    public string PlaybackUrl { get; init; } = string.Empty;
     public string ResourceType { get; init; } = string.Empty;
     public string Aid { get; init; } = string.Empty;
     public string Bvid { get; init; } = string.Empty;
@@ -57,6 +58,7 @@ public sealed class DownloadEpisodeInfo
 public sealed class DownloadCatalog
 {
     public string SourceUrl { get; init; } = string.Empty;
+    public string ResolvedUrl { get; init; } = string.Empty;
     public string Title { get; init; } = string.Empty;
     public BilibiliVideoMetadata? Metadata { get; init; }
     public DateTimeOffset ParsedAt { get; init; } = DateTimeOffset.Now;

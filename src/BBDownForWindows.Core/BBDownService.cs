@@ -21,11 +21,15 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
     public async Task<DownloadCatalog> ParseDownloadAsync(DownloadParseRequest request, IProgress<DownloadParseProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Url)) throw new ArgumentException("视频 URL 不能为空");
-        var metadataTask = metadataService?.GetAsync(request.Url, cancellationToken) ?? Task.FromResult<BilibiliVideoMetadata?>(null);
+        var sourceUrl = request.Url.Trim();
+        var metadata = metadataService is null ? null : await metadataService.GetAsync(sourceUrl, cancellationToken);
+        var resolvedUrl = string.IsNullOrWhiteSpace(metadata?.PlaybackUrl) ? sourceUrl : metadata.PlaybackUrl;
+        if (!resolvedUrl.Equals(sourceUrl, StringComparison.OrdinalIgnoreCase))
+            context.AppendLog($"检测到番剧播放地址，已按 {resolvedUrl} 解析完整清晰度。\n");
         var tools = await ResolveToolsAsync(cancellationToken);
         var infoRequest = new DownloadRequest
         {
-            Url = request.Url.Trim(),
+            Url = resolvedUrl,
             Season = request.Mode == DownloadParseMode.All && string.IsNullOrWhiteSpace(request.Pages),
             Pages = request.Pages,
             ApiMode = request.ApiMode
@@ -37,22 +41,13 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         if ((result.Cancelled || cancellationToken.IsCancellationRequested) && parser.Episodes.Count == 0) throw new OperationCanceledException(cancellationToken);
         if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException(BuildProcessFailureMessage("BBDown 信息解析失败", result));
         if (parser.Episodes.Count == 0) throw new InvalidOperationException("没有解析到可下载的分集");
-        BilibiliVideoMetadata? metadata;
-        try
-        {
-            metadata = await metadataTask;
-        }
-        catch (OperationCanceledException) when (parser.Episodes.Count > 0 && cancellationToken.IsCancellationRequested)
-        {
-            metadata = null;
-            context.AppendLog("解析取消后跳过公开元数据补充，保留已解析分集。\n");
-        }
         if (metadataService is not null && metadata is null)
             context.AppendLog("B 站公开元数据暂不可用，命名规则中的账号、编号或发布时间字段可能留空。\n");
         var title = !string.IsNullOrWhiteSpace(parser.Title) ? parser.Title : metadata?.Title ?? string.Empty;
         return new DownloadCatalog
         {
-            SourceUrl = request.Url.Trim(),
+            SourceUrl = sourceUrl,
+            ResolvedUrl = resolvedUrl,
             Title = title,
             Metadata = metadata,
             ParsedAt = DateTimeOffset.Now,

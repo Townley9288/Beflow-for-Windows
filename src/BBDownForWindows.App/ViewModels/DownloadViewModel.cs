@@ -430,6 +430,7 @@ public sealed class DownloadViewModel : ObservableObject
             Catalog = new DownloadCatalog
             {
                 SourceUrl = existing.SourceUrl,
+                ResolvedUrl = string.IsNullOrWhiteSpace(catalog.ResolvedUrl) ? existing.ResolvedUrl : catalog.ResolvedUrl,
                 Title = string.IsNullOrWhiteSpace(catalog.Title) ? existing.Title : catalog.Title,
                 Metadata = catalog.Metadata ?? existing.Metadata,
                 ParsedAt = catalog.ParsedAt,
@@ -577,7 +578,7 @@ public sealed class DownloadViewModel : ObservableObject
         {
             TaskType = TaskKind.DownloadBatch,
             Title = result.Title,
-            Url = options.Url,
+            Url = Url.Trim(),
             Timestamp = DateTimeOffset.Now,
             LogPath = snapshot.LogPath,
             OutputDirectory = result.OutputDirectory,
@@ -624,7 +625,7 @@ public sealed class DownloadViewModel : ObservableObject
         var settings = await _services.Settings.LoadAsync();
         return new DownloadRequest
         {
-            Url = Url.Trim(), Quality = QualityRule, Encoding = Encoding,
+            Url = CatalogMatchesCurrentUrl() && !string.IsNullOrWhiteSpace(Catalog!.ResolvedUrl) ? Catalog.ResolvedUrl : Url.Trim(), Quality = QualityRule, Encoding = Encoding,
             DownloadMode = CurrentDownloadMode, AudioCodec = AudioCodec,
             AudioBitratePriority = AudioBitrate == "lowest" ? AudioBitratePriority.Lowest : AudioBitratePriority.Highest,
             Danmaku = Danmaku, Subtitle = Subtitle, Cover = Cover, WorkDirectory = WorkDirectory, MultiThread = MultiThread,

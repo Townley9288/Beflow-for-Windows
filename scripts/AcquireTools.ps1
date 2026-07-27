@@ -71,7 +71,8 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $ParserPath = Join-Path $WorkingDirectory 'BBDown.Core\Parser.cs'
     $ParserContent = [IO.File]::ReadAllText($ParserPath)
     $ParserNeedle = 'apiBuilder.Append($"avid={aid}&cid={cid}&fnval=4048&fnver=0&fourk=1");'
-    $ParserReplacement = 'apiBuilder.Append($"avid={aid}&cid={cid}&fnval=4048&fnver=0&fourk=1");' + [Environment]::NewLine +
+    $ParserReplacement = 'string webFnval = bangumi ? "143312" : "4048";' + [Environment]::NewLine +
+        '                apiBuilder.Append($"avid={aid}&cid={cid}&fnval={webFnval}&fnver=0&fourk=1");' + [Environment]::NewLine +
         '                if (bangumi) apiBuilder.Append("&drm_tech_type=3");'
     if (-not $ParserContent.Contains($ParserNeedle)) { throw 'The pinned BBDown WEB playurl request changed; refusing to apply an unverified source patch.' }
     $ParserContent = $ParserContent.Replace($ParserNeedle, $ParserReplacement)
@@ -81,7 +82,7 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     & dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:ManagePackageVersionsCentrally=false -p:Version=$($Entry.version) -o $Publish | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patched BBDown build failed with exit code $LASTEXITCODE" }
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Patched BBDown build did not produce BBDown.exe.' }
-    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`npgc_web_fnval=4048`npgc_drm_tech_type=3`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`n", [Text.UTF8Encoding]::new($false))
     return $Publish
 }
 

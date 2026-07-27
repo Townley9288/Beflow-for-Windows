@@ -312,6 +312,27 @@ public sealed class DownloadSelectionTests
     }
 
     [Fact]
+    public async Task ParseResolvesAvAliasToItsBangumiPlaybackUrl()
+    {
+        const string source = "https://www.bilibili.com/video/av116933286430543?t=60.9";
+        const string playback = "https://www.bilibili.com/bangumi/play/ep4368409";
+        using var fixture = new ServiceFixture(new ScriptedRunner(), new FixedMetadataService(new BilibiliVideoMetadata { PlaybackUrl = playback }));
+        DownloadCatalog? catalog = null;
+        var manager = new TaskManager(fixture.Paths, fixture.Runner);
+
+        var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadParse, false, "redirect-parse", async (context, token) =>
+        {
+            catalog = await fixture.Service.ParseDownloadAsync(new DownloadParseRequest(source, DownloadParseMode.All), null, context, token);
+        });
+
+        Assert.Equal(TaskState.Completed, snapshot.State);
+        Assert.NotNull(catalog);
+        Assert.Equal(source, catalog.SourceUrl);
+        Assert.Equal(playback, catalog.ResolvedUrl);
+        Assert.Equal(playback, fixture.Runner.Requests[0].Arguments[0]);
+    }
+
+    [Fact]
     public async Task ParseFailurePersistsUsefulSanitizedDiagnostics()
     {
         var runner = new ScriptedRunner
@@ -395,12 +416,50 @@ public sealed class DownloadSelectionTests
         Assert.StartsWith("https://", ugc.CoverUrl);
         Assert.Equal("123", ugc.Aid);
         Assert.Equal("456", ugc.OwnerId);
+        Assert.Empty(ugc.PlaybackUrl);
         Assert.NotNull(ugc.FindEpisode("11"));
         Assert.Equal("番剧", pgc!.Title);
         Assert.Equal("出品方", pgc.OwnerName);
         Assert.Equal("456", pgc.SeasonId);
         Assert.Equal("999", pgc.OwnerId);
         Assert.Equal("ep789", "ep" + pgc.FindEpisode("22")!.EpisodeId);
+    }
+
+    [Fact]
+    public async Task MetadataServiceFallsBackToEpisodeOwnerForLegacyPgc()
+    {
+        var handler = new LegacyPgcMetadataHandler();
+        var metadata = await new BilibiliMetadataService(new HttpClient(handler))
+            .GetAsync("https://www.bilibili.com/bangumi/play/ss2572");
+
+        Assert.NotNull(metadata);
+        Assert.Equal("Charlotte", metadata.Title);
+        Assert.Equal("哔哩哔哩番剧", metadata.OwnerName);
+        Assert.Equal("928123", metadata.OwnerId);
+        Assert.Equal("https://face/legacy.jpg", metadata.OwnerAvatarUrl);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task MetadataServiceReadsSafeBangumiPlaybackRedirect()
+    {
+        var metadata = await new BilibiliMetadataService(new HttpClient(new RedirectedUgcMetadataHandler()))
+            .GetAsync("https://www.bilibili.com/video/av116933286430543");
+
+        Assert.NotNull(metadata);
+        Assert.Equal("https://www.bilibili.com/bangumi/play/ep4368409", metadata.PlaybackUrl);
+    }
+
+    [Fact]
+    public async Task MetadataServiceKeepsLegacyPgcMetadataWhenOwnerFallbackFails()
+    {
+        var metadata = await new BilibiliMetadataService(new HttpClient(new LegacyPgcMetadataHandler(failOwnerRequest: true)))
+            .GetAsync("https://www.bilibili.com/bangumi/play/ss2572");
+
+        Assert.NotNull(metadata);
+        Assert.Equal("Charlotte", metadata.Title);
+        Assert.Empty(metadata.OwnerName);
+        Assert.Equal("2572", metadata.SeasonId);
     }
 
     [Fact]
@@ -527,7 +586,7 @@ public sealed class DownloadSelectionTests
 
     private sealed class ServiceFixture : IDisposable
     {
-        public ServiceFixture(ScriptedRunner runner)
+        public ServiceFixture(ScriptedRunner runner, IBilibiliMetadataService? metadataService = null)
         {
             Root = Directory.CreateTempSubdirectory();
             var app = Directory.CreateDirectory(Path.Combine(Root.FullName, "app"));
@@ -536,7 +595,7 @@ public sealed class DownloadSelectionTests
             var source = Path.Combine(app.FullName, "BBDown.exe");
             File.WriteAllText(source, "binary");
             Runner = runner;
-            Service = new BBDownService(Paths, runner, new FixedToolLocator(source), new FixedSettingsStore());
+            Service = new BBDownService(Paths, runner, new FixedToolLocator(source), new FixedSettingsStore(), metadataService);
         }
         public DirectoryInfo Root { get; }
         public ApplicationPaths Paths { get; }
@@ -633,6 +692,39 @@ public sealed class DownloadSelectionTests
                 ? """{"code":0,"result":{"title":"番剧","cover":"https://cover/pgc.jpg","season_id":456,"publish":{"pub_time":"2026-01-01"},"up_info":{"uname":"出品方","mid":999,"avatar":"https://face/pgc.jpg"},"episodes":[{"cid":22,"aid":123,"bvid":"BV1EP","id":789,"pub_time":1767225600}]}}"""
                 : """{"code":0,"data":{"title":"普通视频","pic":"http://cover/ugc.jpg","aid":123,"bvid":"BV1TEST","pubdate":1767225600,"owner":{"name":"UP主","mid":456,"face":"https://face/ugc.jpg"},"pages":[{"cid":11,"page":1,"part":"第一集"}]}}""";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
+        }
+    }
+
+    private sealed class FixedMetadataService(BilibiliVideoMetadata metadata) : IBilibiliMetadataService
+    {
+        public Task<BilibiliVideoMetadata?> GetAsync(string url, CancellationToken cancellationToken = default) => Task.FromResult<BilibiliVideoMetadata?>(metadata);
+    }
+
+    private sealed class RedirectedUgcMetadataHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            const string json = """{"code":0,"data":{"title":"百日成王","pic":"https://cover/video.jpg","aid":116933286430543,"bvid":"BV1TEST","redirect_url":"https://www.bilibili.com/bangumi/play/ep4368409?t=60.9","owner":{"name":"哔哩哔哩国创","mid":98627270,"face":"https://face/video.jpg"},"pages":[{"cid":40028146972,"page":1,"part":"第10集"}]}}""";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
+        }
+    }
+
+    private sealed class LegacyPgcMetadataHandler(bool failOwnerRequest = false) : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            if (request.RequestUri!.AbsolutePath.Contains("pgc/view", StringComparison.Ordinal))
+            {
+                const string pgc = """{"code":0,"result":{"title":"Charlotte","cover":"https://cover/legacy.jpg","season_id":2572,"publish":{"pub_time":"2015-07-04"},"episodes":[{"cid":210514802,"aid":2524490,"bvid":"BV1gs411S7R6","id":63840,"pub_time":1436027400}]}}""";
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(pgc, Encoding.UTF8, "application/json") });
+            }
+            if (failOwnerRequest)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+            const string ugc = """{"code":0,"data":{"title":"【7月】Charlotte 夏洛特 01","pic":"https://cover/episode.jpg","aid":2524490,"bvid":"BV1gs411S7R6","owner":{"name":"哔哩哔哩番剧","mid":928123,"face":"http://face/legacy.jpg"},"pages":[{"cid":210514802,"page":1,"part":"第一集"}]}}""";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(ugc, Encoding.UTF8, "application/json") });
         }
     }
 }

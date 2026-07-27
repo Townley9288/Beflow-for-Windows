@@ -53,6 +53,7 @@ public sealed partial class BilibiliMetadataService(HttpClient httpClient) : IBi
             OwnerId = owner.ValueKind == JsonValueKind.Object ? GetScalar(owner, "mid") : string.Empty,
             OwnerAvatarUrl = owner.ValueKind == JsonValueKind.Object ? NormalizeImage(GetString(owner, "face")) : string.Empty,
             CanonicalUrl = string.IsNullOrWhiteSpace(bvid) ? string.Empty : $"https://www.bilibili.com/video/{bvid}",
+            PlaybackUrl = NormalizePlaybackUrl(GetString(data, "redirect_url")),
             ResourceType = episodes.Count > 1 ? "多P视频" : "视频",
             Aid = GetScalar(data, "aid"),
             Bvid = bvid,
@@ -73,6 +74,7 @@ public sealed partial class BilibiliMetadataService(HttpClient httpClient) : IBi
         var sourceEpisodeId = query.StartsWith("ep_id=", StringComparison.OrdinalIgnoreCase) ? query[6..] : string.Empty;
         var episodes = new Dictionary<string, BilibiliEpisodeMetadata>(StringComparer.OrdinalIgnoreCase);
         BilibiliEpisodeMetadata? sourceEpisode = null;
+        BilibiliEpisodeMetadata? firstEpisode = null;
         if (result.TryGetProperty("episodes", out var episodeArray) && episodeArray.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in episodeArray.EnumerateArray())
@@ -85,8 +87,22 @@ public sealed partial class BilibiliMetadataService(HttpClient httpClient) : IBi
                     GetString(item, "bvid"),
                     GetScalar(item, "id"),
                     ReadTimestamp(item, "pub_time") ?? ReadTimestamp(item, "pubdate"));
+                firstEpisode ??= episode;
                 episodes[cid] = episode;
                 if (!string.IsNullOrWhiteSpace(sourceEpisodeId) && episode.EpisodeId == sourceEpisodeId) sourceEpisode = episode;
+            }
+        }
+        var ownerName = up.ValueKind == JsonValueKind.Object ? GetString(up, "uname") : string.Empty;
+        var ownerId = up.ValueKind == JsonValueKind.Object ? GetScalar(up, "mid") : string.Empty;
+        var ownerAvatarUrl = up.ValueKind == JsonValueKind.Object ? NormalizeImage(GetString(up, "avatar")) : string.Empty;
+        if (string.IsNullOrWhiteSpace(ownerName))
+        {
+            var fallbackOwner = await TryGetEpisodeOwnerAsync(sourceEpisode ?? firstEpisode, cancellationToken);
+            if (fallbackOwner is not null)
+            {
+                ownerName = fallbackOwner.OwnerName;
+                if (string.IsNullOrWhiteSpace(ownerId)) ownerId = fallbackOwner.OwnerId;
+                if (string.IsNullOrWhiteSpace(ownerAvatarUrl)) ownerAvatarUrl = fallbackOwner.OwnerAvatarUrl;
             }
         }
         var publish = result.TryGetProperty("publish", out var publishElement) && publishElement.ValueKind == JsonValueKind.Object ? publishElement : default;
@@ -98,9 +114,9 @@ public sealed partial class BilibiliMetadataService(HttpClient httpClient) : IBi
         {
             Title = GetString(result, "title"),
             CoverUrl = NormalizeImage(GetString(result, "cover")),
-            OwnerName = up.ValueKind == JsonValueKind.Object ? GetString(up, "uname") : string.Empty,
-            OwnerId = up.ValueKind == JsonValueKind.Object ? GetScalar(up, "mid") : string.Empty,
-            OwnerAvatarUrl = up.ValueKind == JsonValueKind.Object ? NormalizeImage(GetString(up, "avatar")) : string.Empty,
+            OwnerName = ownerName,
+            OwnerId = ownerId,
+            OwnerAvatarUrl = ownerAvatarUrl,
             CanonicalUrl = string.IsNullOrWhiteSpace(seasonId) ? string.Empty : $"https://www.bilibili.com/bangumi/play/ss{seasonId}",
             ResourceType = "番剧",
             Aid = sourceEpisode?.Aid ?? string.Empty,
@@ -110,6 +126,23 @@ public sealed partial class BilibiliMetadataService(HttpClient httpClient) : IBi
             PublishedAt = publishedAt,
             EpisodesByCid = episodes
         };
+    }
+
+    private async Task<BilibiliVideoMetadata?> TryGetEpisodeOwnerAsync(BilibiliEpisodeMetadata? episode, CancellationToken cancellationToken)
+    {
+        if (episode is null) return null;
+        var query = !string.IsNullOrWhiteSpace(episode.Bvid)
+            ? $"bvid={Uri.EscapeDataString(episode.Bvid)}"
+            : !string.IsNullOrWhiteSpace(episode.Aid) ? $"aid={Uri.EscapeDataString(episode.Aid)}" : string.Empty;
+        if (string.IsNullOrWhiteSpace(query)) return null;
+        try
+        {
+            return await GetUgcAsync(query, cancellationToken);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private static bool TryData(JsonElement root, string property, out JsonElement data)
@@ -153,6 +186,15 @@ public sealed partial class BilibiliMetadataService(HttpClient httpClient) : IBi
     }
 
     private static string NormalizeImage(string value) => value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ? "https://" + value[7..] : value;
+
+    private static string NormalizePlaybackUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            !uri.Host.Equals("www.bilibili.com", StringComparison.OrdinalIgnoreCase)) return string.Empty;
+        var episode = EpisodeRegex().Match(uri.AbsolutePath);
+        return episode.Success ? $"https://www.bilibili.com/bangumi/play/ep{episode.Groups[1].Value}" : string.Empty;
+    }
 
     [GeneratedRegex("(BV[0-9A-Za-z]+)", RegexOptions.IgnoreCase)] private static partial Regex BvRegex();
     [GeneratedRegex("(?:^|/|\\b)av(\\d+)", RegexOptions.IgnoreCase)] private static partial Regex AvRegex();

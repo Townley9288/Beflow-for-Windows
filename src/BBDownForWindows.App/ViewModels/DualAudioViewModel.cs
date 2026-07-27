@@ -465,8 +465,10 @@ public sealed class DualAudioViewModel : ObservableObject
         return new DualAudioBatchRequest
         {
             SourceMode = SourceModeText == "同一链接奇偶分P" ? DualAudioSourceMode.Interleaved : DualAudioSourceMode.Separate,
-            SourceAUrl = SourceAUrl.Trim(),
-            SourceBUrl = SourceModeText == "同一链接奇偶分P" ? SourceAUrl.Trim() : SourceBUrl.Trim(),
+            SourceAUrl = !string.IsNullOrWhiteSpace(_catalog?.SourceA?.ResolvedUrl) ? _catalog.SourceA.ResolvedUrl : SourceAUrl.Trim(),
+            SourceBUrl = !string.IsNullOrWhiteSpace(_catalog?.SourceB?.ResolvedUrl)
+                ? _catalog.SourceB.ResolvedUrl
+                : SourceModeText == "同一链接奇偶分P" ? SourceAUrl.Trim() : SourceBUrl.Trim(),
             SourceATitle = SourceATitle,
             SourceBTitle = SourceBTitle,
             ApiMode = settings.ApiMode,
