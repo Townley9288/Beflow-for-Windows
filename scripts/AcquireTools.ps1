@@ -43,7 +43,7 @@ function Expand-VerifiedArchive([string]$Archive, [string]$Name) {
     return $Destination
 }
 
-function Build-BBDownWithBeflowQualityPatch([string]$SourceArchive, $Entry) {
+function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $SourceExpanded = Expand-VerifiedArchive $SourceArchive "bbdown-source-$($Entry.commit.Substring(0, 7))"
     $SourceRoot = Get-ChildItem -LiteralPath $SourceExpanded -Directory |
         Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'BBDown\BBDown.csproj') -PathType Leaf } |
@@ -53,7 +53,7 @@ function Build-BBDownWithBeflowQualityPatch([string]$SourceArchive, $Entry) {
     $BuildRoot = Join-Path $CacheDirectory "expanded\bbdown-$($Entry.version)"
     $Publish = Join-Path $BuildRoot 'publish'
     $Executable = Join-Path $Publish 'BBDown.exe'
-    $Marker = Join-Path $BuildRoot 'beflow-quality-patch.complete'
+    $Marker = Join-Path $BuildRoot 'beflow-patches.complete'
     if ((Test-Path -LiteralPath $Executable -PathType Leaf) -and (Test-Path -LiteralPath $Marker -PathType Leaf)) { return $Publish }
 
     $WorkingDirectory = Join-Path $CacheDirectory "work\bbdown-$($Entry.version)-$PID"
@@ -68,11 +68,28 @@ function Build-BBDownWithBeflowQualityPatch([string]$SourceArchive, $Entry) {
     $ConfigContent = $ConfigContent.Replace($Needle, $Replacement)
     [IO.File]::WriteAllText($ConfigPath, $ConfigContent, [Text.UTF8Encoding]::new($false))
 
+    $ParserPath = Join-Path $WorkingDirectory 'BBDown.Core\Parser.cs'
+    $ParserContent = [IO.File]::ReadAllText($ParserPath)
+    $ParserNeedle = 'apiBuilder.Append($"avid={aid}&cid={cid}&fnval=4048&fnver=0&fourk=1");'
+    $ParserReplacement = 'string webFnval = bangumi ? "143312" : "4048";' + [Environment]::NewLine +
+        '                apiBuilder.Append($"avid={aid}&cid={cid}&fnval={webFnval}&fnver=0&fourk=1");'
+    if (-not $ParserContent.Contains($ParserNeedle)) { throw 'The pinned BBDown WEB playurl request changed; refusing to apply an unverified source patch.' }
+    $ParserContent = $ParserContent.Replace($ParserNeedle, $ParserReplacement)
+    [IO.File]::WriteAllText($ParserPath, $ParserContent, [Text.UTF8Encoding]::new($false))
+
+    $HttpUtilPath = Join-Path $WorkingDirectory 'BBDown.Core\Util\HTTPUtil.cs'
+    $HttpUtilContent = [IO.File]::ReadAllText($HttpUtilPath)
+    $HttpUtilNeedle = 'Config.COOKIE + ";CURRENT_FNVAL=4048;"'
+    $HttpUtilReplacement = 'Config.COOKIE + ";CURRENT_FNVAL=143312;"'
+    if (-not $HttpUtilContent.Contains($HttpUtilNeedle)) { throw 'The pinned BBDown page FNVAL cookie changed; refusing to apply an unverified source patch.' }
+    $HttpUtilContent = $HttpUtilContent.Replace($HttpUtilNeedle, $HttpUtilReplacement)
+    [IO.File]::WriteAllText($HttpUtilPath, $HttpUtilContent, [Text.UTF8Encoding]::new($false))
+
     $Project = Join-Path $WorkingDirectory 'BBDown\BBDown.csproj'
     & dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:ManagePackageVersionsCentrally=false -p:Version=$($Entry.version) -o $Publish | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patched BBDown build failed with exit code $LASTEXITCODE" }
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Patched BBDown build did not produce BBDown.exe.' }
-    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`npgc_web_fnval=143312`n", [Text.UTF8Encoding]::new($false))
     return $Publish
 }
 
@@ -91,7 +108,7 @@ if (-not $FfmpegArchivePath) {
 }
 $FfmpegArchive = Get-Archive $Manifest.ffmpeg $FfmpegArchivePath $FfmpegArchiveUrl
 
-$BBDownExpanded = Build-BBDownWithBeflowQualityPatch $BBDownSourceArchive $Manifest.bbdownSource
+$BBDownExpanded = Build-BBDownWithBeflowPatches $BBDownSourceArchive $Manifest.bbdownSource
 $AriaExpanded = Expand-VerifiedArchive $AriaArchive 'aria2-1.37.0'
 $FfmpegExpanded = Expand-VerifiedArchive $FfmpegArchive 'ffmpeg-20240110'
 
