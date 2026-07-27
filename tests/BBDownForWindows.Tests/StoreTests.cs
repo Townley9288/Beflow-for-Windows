@@ -75,7 +75,7 @@ public sealed class StoreTests
     [InlineData("HDR 真彩", "4K·HDR真彩")]
     [InlineData("4K 超清", "4K 超高清")]
     [InlineData("SDR增强", "4K·SDR增强")]
-    [InlineData("4K 大视界", "4K·SDR增强")]
+    [InlineData("4K 大视界", "4K 超高清")]
     [InlineData("720P 高清", "720P 准高清")]
     [InlineData("480P 清晰", "480P 标清")]
     public async Task LegacyQualitySettingsMigrateToCurrentBilibiliNames(string storedQuality, string expected)

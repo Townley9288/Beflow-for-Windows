@@ -94,8 +94,8 @@ public static partial class StreamSelectionPolicy
         {
             "highest" or "自动" or "最高" or "最高可用" => "4K 超高清",
             "HDR 真彩" or "HDR真彩" or "4K HDR 真彩" or "4K HDR真彩" or "4K·HDR真彩" => "4K·HDR真彩",
-            "SDR增强" or "4K SDR增强" or "4K·SDR增强" or "4K 大视界" or "大视界" or "大视界4K" => "4K·SDR增强",
-            "4K" or "4K 超清" or "4K 超高清" => "4K 超高清",
+            "SDR增强" or "4K SDR增强" or "4K·SDR增强" => "4K·SDR增强",
+            "4K" or "4K 超清" or "4K 超高清" or "4K 大视界" or "大视界" or "大视界4K" => "4K 超高清",
             "1080P" => "1080P 高清",
             "720P" or "720P 高清" or "720P 准高清" => "720P 准高清",
             "480P" or "480P 清晰" or "480P 标清" => "480P 标清",

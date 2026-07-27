@@ -96,21 +96,21 @@ public sealed class AppViewModelTests
 
         Assert.Contains(download.QualityRuleOptions, item => item.Value == "4K·HDR真彩" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(download.QualityRuleOptions, item => item.Value == "4K·SDR增强" && item.Label.Contains("大视界", StringComparison.Ordinal));
-        Assert.Contains(download.QualityRuleOptions, item => item.Value == "4K 超高清");
+        Assert.Contains(download.QualityRuleOptions, item => item.Value == "4K 超高清" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(download.QualityRuleOptions, item => item.Value == "720P 准高清");
         Assert.Contains(download.QualityRuleOptions, item => item.Value == "480P 标清");
         Assert.DoesNotContain(download.QualityRuleOptions, item => item.Value is "720P 高清" or "480P 清晰");
 
         Assert.Contains(settings.QualityOptions, item => item.Value == "4K·HDR真彩" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(settings.QualityOptions, item => item.Value == "4K·SDR增强" && item.Label.Contains("大视界", StringComparison.Ordinal));
-        Assert.Contains(settings.QualityOptions, item => item.Value == "4K 超高清");
+        Assert.Contains(settings.QualityOptions, item => item.Value == "4K 超高清" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(settings.QualityOptions, item => item.Value == "720P 准高清");
         Assert.Contains(settings.QualityOptions, item => item.Value == "480P 标清");
         Assert.DoesNotContain(settings.QualityOptions, item => item.Value is "720P 高清" or "480P 清晰");
 
         Assert.Contains(dualAudio.QualityOptions, item => item.Value == "4K·HDR真彩" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(dualAudio.QualityOptions, item => item.Value == "4K·SDR增强" && item.Label.Contains("大视界", StringComparison.Ordinal));
-        Assert.Contains(dualAudio.QualityOptions, item => item.Value == "4K 超高清");
+        Assert.Contains(dualAudio.QualityOptions, item => item.Value == "4K 超高清" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(dualAudio.QualityOptions, item => item.Value == "720P 准高清");
         Assert.Contains(dualAudio.QualityOptions, item => item.Value == "480P 标清");
         Assert.DoesNotContain(dualAudio.QualityOptions, item => item.Value is "720P 高清" or "480P 清晰");

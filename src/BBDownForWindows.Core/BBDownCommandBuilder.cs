@@ -5,7 +5,8 @@ public static class BBDownCommandBuilder
     private static readonly Dictionary<string, string> QualityMap = new(StringComparer.OrdinalIgnoreCase)
     {
         ["杜比视界"] = "杜比视界", ["HDR 真彩"] = "HDR 真彩", ["HDR真彩"] = "HDR 真彩", ["4K·HDR真彩"] = "HDR 真彩",
-        ["SDR增强"] = "4K·SDR增强", ["4K·SDR增强"] = "4K·SDR增强", ["4K 大视界"] = "4K·SDR增强", ["大视界"] = "4K·SDR增强",
+        ["SDR增强"] = "4K·SDR增强", ["4K·SDR增强"] = "4K·SDR增强",
+        ["4K 大视界"] = "4K 超清", ["大视界"] = "4K 超清", ["大视界4K"] = "4K 超清",
         ["4K"] = "4K 超清", ["4K 超清"] = "4K 超清", ["4K 超高清"] = "4K 超清",
         ["1080P 高码率"] = "1080P 高码率", ["1080P"] = "1080P 高清", ["1080P 高清"] = "1080P 高清",
         ["720P"] = "720P 高清", ["720P 高清"] = "720P 高清", ["720P 准高清"] = "720P 高清",

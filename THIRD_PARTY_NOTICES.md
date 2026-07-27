@@ -2,7 +2,7 @@
 
 Beflow for Windows is an independent graphical frontend. Release packages may aggregate the following command-line tools as separate executables:
 
-- **BBDown 1.6.3 with Beflow new-quality compatibility patches** — MIT. The patches add Bilibili quality `122` (`4K·SDR增强`) and update PGC WEB playurl capability flag `fnval`/`CURRENT_FNVAL` from `4048` to the current player value `143312`; ordinary AV/BV WEB requests retain `4048`. BBDown's download implementation is otherwise unchanged. Source and license: <https://github.com/nilaoda/BBDown/tree/45622f79cd766e0fc6f5cbd49fcf4960340f35c3>. The release package includes `licenses/BBDown-LICENSE.txt`.
+- **BBDown 1.6.3 with Beflow new-quality compatibility patches** — MIT. The patches add Bilibili quality `122` (`4K·SDR增强`) and request PGC WEB playurl with Bilibili's current self-managed playback capability (`drm_tech_type=3`), exposing the clear 4K/HDR/high-bitrate streams returned for supported titles; both PGC and ordinary AV/BV WEB requests retain `fnval=4048`. BBDown's download implementation is otherwise unchanged. Source and license: <https://github.com/nilaoda/BBDown/tree/45622f79cd766e0fc6f5cbd49fcf4960340f35c3>. The release package includes `licenses/BBDown-LICENSE.txt`.
 - **aria2 1.37.0** — GPL-2.0-or-later. Source and license: <https://github.com/aria2/aria2>.
 - **FFmpeg N-113240-g6d2f64534d-20240110 win64 GPL build** — GPLv3 build. Source project: <https://ffmpeg.org/>; Windows build project: <https://github.com/BtbN/FFmpeg-Builds>.
 - **Microsoft Windows App SDK 1.8** — Microsoft software license terms.

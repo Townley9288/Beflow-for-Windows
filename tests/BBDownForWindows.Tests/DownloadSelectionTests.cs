@@ -66,7 +66,8 @@ public sealed class DownloadSelectionTests
     [InlineData("4K 超高清", "4K 超高清")]
     [InlineData("SDR增强", "4K·SDR增强")]
     [InlineData("4K·SDR增强", "4K·SDR增强")]
-    [InlineData("4K 大视界", "4K·SDR增强")]
+    [InlineData("4K 大视界", "4K 超高清")]
+    [InlineData("大视界4K", "4K 超高清")]
     [InlineData("720P 高清", "720P 准高清")]
     [InlineData("720P 准高清", "720P 准高清")]
     [InlineData("480P 清晰", "480P 标清")]
@@ -87,8 +88,8 @@ public sealed class DownloadSelectionTests
             ],
             [new AudioStreamInfo(0, "M4A", "192 kbps", 192, "30 MB")]);
 
-        var enhanced = StreamSelectionPolicy.Select(episode, new StreamSelectionRule("4K 大视界", "HEVC", "auto", AudioBitratePriority.Highest), DownloadMode.VideoAndAudio);
-        var regular = StreamSelectionPolicy.Select(episode, new StreamSelectionRule("4K 超高清", "HEVC", "auto", AudioBitratePriority.Highest), DownloadMode.VideoAndAudio);
+        var enhanced = StreamSelectionPolicy.Select(episode, new StreamSelectionRule("4K·SDR增强", "HEVC", "auto", AudioBitratePriority.Highest), DownloadMode.VideoAndAudio);
+        var regular = StreamSelectionPolicy.Select(episode, new StreamSelectionRule("4K 大视界", "HEVC", "auto", AudioBitratePriority.Highest), DownloadMode.VideoAndAudio);
 
         Assert.Equal(0, enhanced.Video!.Index);
         Assert.Equal(1, regular.Video!.Index);
