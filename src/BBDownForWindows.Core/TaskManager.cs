@@ -59,7 +59,7 @@ public sealed class TaskManager : ITaskManager
             {
                 snapshot.LogPath = CreateLogPath(snapshot.Id, logLabel);
                 writer = new StreamWriter(new FileStream(snapshot.LogPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read), new System.Text.UTF8Encoding(false)) { AutoFlush = true };
-                await writer.WriteLineAsync("Beflow for Windows 任务日志");
+                await writer.WriteLineAsync("Beflow 任务日志");
                 await writer.WriteLineAsync($"任务ID: {snapshot.Id}");
                 await writer.WriteLineAsync($"开始时间: {snapshot.StartedAt:O}");
                 await writer.WriteLineAsync();

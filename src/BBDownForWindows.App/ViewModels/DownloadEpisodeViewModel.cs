@@ -193,7 +193,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
             if (selection.Video is not null)
             {
                 var match = Episode.VideoStreams
-                    .Where(item => item.Quality.Equals(selection.Video.Quality, StringComparison.OrdinalIgnoreCase)
+                    .Where(item => StreamSelectionPolicy.AreEquivalentQualities(item.Quality, selection.Video.Quality)
                                    && item.Resolution.Equals(selection.Video.Resolution, StringComparison.OrdinalIgnoreCase)
                                    && item.Codec.Equals(selection.Video.Codec, StringComparison.OrdinalIgnoreCase)
                                    && (!selection.Video.IsManual || item.BitrateKbps == selection.Video.BitrateKbps))
@@ -320,7 +320,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
             var stream = candidates.FirstOrDefault(item => item.Codec.Equals(_selectedEncoding, StringComparison.OrdinalIgnoreCase)) ?? candidates.FirstOrDefault();
             choice.Label = stream is null
                 ? choice.Value
-                : $"{stream.Quality} · {FormatResolution(stream.Resolution)} · {stream.Bitrate}";
+                : $"{StreamSelectionPolicy.NormalizeQualityRule(stream.Quality)} · {FormatResolution(stream.Resolution)} · {stream.Bitrate}";
         }
     }
 
@@ -329,7 +329,7 @@ public sealed class DownloadEpisodeViewModel : ObservableObject
         && item.Codec.Equals(SelectedEncoding, StringComparison.OrdinalIgnoreCase));
 
     private AudioStreamInfo? FindSelectedAudio() => Episode.AudioStreams.FirstOrDefault(item => AudioKey(item).Equals(SelectedAudio, StringComparison.OrdinalIgnoreCase));
-    private static string QualityKey(VideoStreamInfo stream) => $"{stream.Quality}\u001f{stream.Resolution}";
+    private static string QualityKey(VideoStreamInfo stream) => $"{StreamSelectionPolicy.NormalizeQualityRule(stream.Quality)}\u001f{stream.Resolution}";
     private static string AudioKey(AudioStreamInfo stream) => $"{stream.Index}\u001f{stream.Codec}\u001f{stream.BitrateKbps}";
     private static string FormatResolution(string resolution) => resolution.Replace("x", "×", StringComparison.OrdinalIgnoreCase);
     private void RefreshRestoredStreamStatus()

@@ -13,7 +13,7 @@ public static partial class StreamSelectionPolicy
     public const string MuxedStreamReason = "旧式音视频合流分段";
 
     private static readonly HashSet<string> KnownQualityRules = new(StringComparer.OrdinalIgnoreCase)
-    { "杜比视界", "HDR 真彩", "4K 超清", "1080P 高码率", "1080P 高清", "720P 高清", "480P 清晰", "360P 流畅" };
+    { "杜比视界", "4K·HDR真彩", "4K·SDR增强", "4K 超高清", "1080P 高码率", "1080P 高清", "720P 准高清", "480P 标清", "360P 流畅" };
 
     public static StreamSelectionDecision Select(
         DownloadEpisodeInfo episode,
@@ -89,14 +89,16 @@ public static partial class StreamSelectionPolicy
 
     public static string NormalizeQualityRule(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value)) return "4K 超清";
+        if (string.IsNullOrWhiteSpace(value)) return "4K 超高清";
         return value.Trim() switch
         {
-            "highest" or "自动" or "最高" or "最高可用" => "4K 超清",
-            "4K" => "4K 超清",
+            "highest" or "自动" or "最高" or "最高可用" => "4K 超高清",
+            "HDR 真彩" or "HDR真彩" or "4K HDR 真彩" or "4K HDR真彩" or "4K·HDR真彩" => "4K·HDR真彩",
+            "SDR增强" or "4K SDR增强" or "4K·SDR增强" or "4K 大视界" or "大视界" or "大视界4K" => "4K·SDR增强",
+            "4K" or "4K 超清" or "4K 超高清" => "4K 超高清",
             "1080P" => "1080P 高清",
-            "720P" => "720P 高清",
-            "480P" => "480P 清晰",
+            "720P" or "720P 高清" or "720P 准高清" => "720P 准高清",
+            "480P" or "480P 清晰" or "480P 标清" => "480P 标清",
             "360P" => "360P 流畅",
             var normalized => normalized
         };
@@ -112,7 +114,7 @@ public static partial class StreamSelectionPolicy
     {
         if (streams.Count == 0) throw new InvalidOperationException("没有可用视频流");
         var normalizedRule = NormalizeQualityRule(qualityRule);
-        var exact = streams.Where(item => QualityMatches(item.Quality, normalizedRule)).ToList();
+        var exact = streams.Where(item => AreEquivalentQualities(item.Quality, normalizedRule)).ToList();
 
         List<VideoStreamInfo> qualityCandidates;
         if (exact.Count > 0)
@@ -124,8 +126,8 @@ public static partial class StreamSelectionPolicy
             var allowed = streams.Where(item => !IsSpecialQuality(item.Quality)).ToList();
             if (allowed.Count == 0) allowed = streams.ToList();
             var first = allowed[0];
-            qualityCandidates = allowed.Where(item => item.Quality.Equals(first.Quality, StringComparison.OrdinalIgnoreCase) && item.Resolution.Equals(first.Resolution, StringComparison.OrdinalIgnoreCase)).ToList();
-            reasons.Add($"无 {qualityRule}，已回退到 {first.Quality} · {first.Resolution}");
+            qualityCandidates = allowed.Where(item => AreEquivalentQualities(item.Quality, first.Quality) && item.Resolution.Equals(first.Resolution, StringComparison.OrdinalIgnoreCase)).ToList();
+            reasons.Add($"无 {NormalizeQualityRule(qualityRule)}，已回退到 {NormalizeQualityRule(first.Quality)} · {first.Resolution}");
         }
 
         var encoded = qualityCandidates.FirstOrDefault(item => item.Codec.Equals(preferredEncoding, StringComparison.OrdinalIgnoreCase));
@@ -157,7 +159,7 @@ public static partial class StreamSelectionPolicy
     }
 
     private static VideoStreamInfo? FindVideo(IEnumerable<VideoStreamInfo> streams, VideoStreamSelection desired, bool requireExactBitrate) =>
-        streams.Where(item => item.Quality.Equals(desired.Quality, StringComparison.OrdinalIgnoreCase)
+        streams.Where(item => AreEquivalentQualities(item.Quality, desired.Quality)
                               && item.Resolution.Equals(desired.Resolution, StringComparison.OrdinalIgnoreCase)
                               && item.Codec.Equals(desired.Codec, StringComparison.OrdinalIgnoreCase)
                               && (!requireExactBitrate || item.BitrateKbps == desired.BitrateKbps))
@@ -173,10 +175,14 @@ public static partial class StreamSelectionPolicy
     private static bool IsSpecialQuality(string quality) =>
         quality.Contains("杜比", StringComparison.OrdinalIgnoreCase) || quality.Contains("HDR", StringComparison.OrdinalIgnoreCase);
 
-    private static bool QualityMatches(string actual, string requested) =>
-        actual.Equals(requested, StringComparison.OrdinalIgnoreCase)
-        || actual.StartsWith(requested, StringComparison.OrdinalIgnoreCase)
-        || requested.StartsWith(actual, StringComparison.OrdinalIgnoreCase);
+    public static bool AreEquivalentQualities(string actual, string requested)
+    {
+        var normalizedActual = NormalizeQualityRule(actual);
+        var normalizedRequested = NormalizeQualityRule(requested);
+        return normalizedActual.Equals(normalizedRequested, StringComparison.OrdinalIgnoreCase)
+               || normalizedActual.StartsWith(normalizedRequested, StringComparison.OrdinalIgnoreCase)
+               || normalizedRequested.StartsWith(normalizedActual, StringComparison.OrdinalIgnoreCase);
+    }
 
     [GeneratedRegex("([0-9]+(?:\\.[0-9]+)?)\\s*(KB|KiB|MB|MiB|GB|GiB|TB|TiB|B)", RegexOptions.IgnoreCase)]
     private static partial Regex SizeRegex();

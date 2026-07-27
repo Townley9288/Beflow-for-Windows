@@ -328,7 +328,7 @@ public sealed partial class DownloadNamingService : IDownloadNamingService
             "分集发布时间" => FormatDate(episode?.PublishedAt),
             "下载日期" => context.DownloadedAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             "下载时间" => context.DownloadedAt.ToString("HH-mm-ss", CultureInfo.InvariantCulture),
-            "画质" => context.Video?.Quality ?? string.Empty,
+            "画质" => context.Video is null ? string.Empty : StreamSelectionPolicy.NormalizeQualityRule(context.Video.Quality),
             "分辨率" => context.Video?.Resolution ?? string.Empty,
             "帧率" => FormatFps(context.Video?.Fps),
             "视频编码" => context.Video?.Codec ?? string.Empty,
@@ -460,7 +460,7 @@ public sealed partial class DownloadNamingService : IDownloadNamingService
             ProfileKind = kind,
             TotalPages = kind == DownloadNamingProfileKind.MultiEpisode ? 12 : 1,
             Metadata = metadata,
-            Video = new VideoStreamInfo(1, "4K 超清", "3840x2160", 3840, 2160, "HEVC", "60", "12000 kbps", 12000, "1 GB"),
+            Video = new VideoStreamInfo(1, "4K 超高清", "3840x2160", 3840, 2160, "HEVC", "60", "12000 kbps", 12000, "1 GB"),
             Audio = new AudioStreamInfo(2, "E-AC-3", "384 kbps", 384, "50 MB"),
             DownloadedAt = new DateTimeOffset(2026, 7, 18, 20, 30, 0, TimeSpan.FromHours(8))
         };

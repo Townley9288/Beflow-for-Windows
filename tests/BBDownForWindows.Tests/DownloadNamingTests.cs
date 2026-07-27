@@ -6,6 +6,28 @@ namespace BBDownForWindows.Tests;
 public sealed class DownloadNamingTests
 {
     [Fact]
+    public void NamingUsesCurrentBilibiliQualityNameForLegacyBBDownStream()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var plan = new DownloadNamingService().BuildPlan(new DownloadNamingContext
+            {
+                RootDirectory = root.FullName,
+                SourceUrl = "BV1",
+                VideoTitle = "测试",
+                Page = new PageInfo(1, "1", "第一集", "24m"),
+                ProfileKind = DownloadNamingProfileKind.SingleVideo,
+                Profile = new DownloadNamingProfile { MainFolderTemplate = "{视频标题}", FileNameTemplate = "{画质}" },
+                Video = new VideoStreamInfo(3, "720P 高清", "1280x720", 1280, 720, "HEVC", "25", "500 kbps", 500, "80 MB")
+            }, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+            Assert.EndsWith("720P 准高清", plan.RelativePath);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
     public void RendersFinalMetadataAndActualMediaSpecifications()
     {
         var root = Directory.CreateTempSubdirectory();
@@ -52,7 +74,7 @@ public sealed class DownloadNamingTests
 
             Assert.Contains("测试番剧.av100.BV1TEST.ss200.出品方.42.2026-01-02.2026-07-18.20-30-00.TV", plan.RelativePath);
             Assert.Contains(Path.Combine("02.300.ep400.2026-01-03",
-                "第二集.番剧.视频+音频.HDR 真彩.3840x2160.60fps.HEVC.12000kbps.E-AC-3.384kbps.TV"), plan.RelativePath);
+                "第二集.番剧.视频+音频.4K·HDR真彩.3840x2160.60fps.HEVC.12000kbps.E-AC-3.384kbps.TV"), plan.RelativePath);
             Assert.Empty(plan.Warnings);
         }
         finally { root.Delete(true); }

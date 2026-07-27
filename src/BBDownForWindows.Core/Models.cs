@@ -67,7 +67,7 @@ public sealed class AppSettings
         };
     }
     [JsonPropertyName("quality")] public string Quality { get; set; } = "4K";
-    [JsonPropertyName("videoQualityRule")] public string VideoQualityRule { get; set; } = "4K 超清";
+    [JsonPropertyName("videoQualityRule")] public string VideoQualityRule { get; set; } = "4K 超高清";
     [JsonPropertyName("includeHdrDolbyInAutoSelection")] public bool IncludeHdrDolbyInAutoSelection { get; set; }
     [JsonPropertyName("encoding")] public string Encoding { get; set; } = "AVC";
     [JsonPropertyName("audioOnly")] public string LegacyAudioOnly
@@ -118,7 +118,7 @@ public sealed class AppSettings
     {
         if (!_schemaVersionSpecified || SchemaVersion < 3) VideoQualityRule = StreamSelectionPolicy.NormalizeQualityRule(Quality);
         VideoQualityRule = StreamSelectionPolicy.NormalizeQualityRule(VideoQualityRule);
-        if (!StreamSelectionPolicy.IsKnownQualityRule(VideoQualityRule)) VideoQualityRule = "4K 超清";
+        if (!StreamSelectionPolicy.IsKnownQualityRule(VideoQualityRule)) VideoQualityRule = "4K 超高清";
         Encoding = Encoding?.Trim().ToUpperInvariant() ?? "AVC";
         if (Encoding is not ("AVC" or "HEVC" or "AV1")) Encoding = "AVC";
         var knownAudio = new[] { "auto", "E-AC-3", "M4A", "FLAC", "AC-3", "DTS" };
@@ -317,7 +317,7 @@ public sealed class HistoryRecord
                 }
                 else
                 {
-                    AddIfPresent(tags, Download.Quality);
+                    AddIfPresent(tags, StreamSelectionPolicy.NormalizeQualityRule(Download.Quality));
                     AddIfPresent(tags, Download.Encoding);
                 }
 
@@ -343,7 +343,7 @@ public sealed class HistoryRecord
             if (DualAudio is not null)
             {
                 if (TaskType == TaskKind.DualAudioRemux) return ["仅重新封装"];
-                AddIfPresent(tags, DualAudio.Quality);
+                AddIfPresent(tags, StreamSelectionPolicy.NormalizeQualityRule(DualAudio.Quality));
                 AddIfPresent(tags, DualAudio.Encoding);
                 tags.Add("双音轨封装");
             }
@@ -363,7 +363,7 @@ public sealed class HistoryRecord
             .Select(item => item.Video!)
             .GroupBy(video => new
             {
-                Quality = video.Quality.Trim(),
+                Quality = StreamSelectionPolicy.NormalizeQualityRule(video.Quality),
                 Resolution = video.Resolution.Trim(),
                 Codec = video.Codec.Trim()
             })

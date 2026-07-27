@@ -5,6 +5,13 @@
     "url": "https://github.com/nilaoda/BBDown/releases/download/1.6.3/BBDown_1.6.3_20240814_win-x64.zip",
     "sha256": "40F1E2AF0D4E74DF765C6F93D2E931F9BEA201D5168D0BC62DC35A54B7E0EC02"
   },
+  "bbdownSource": {
+    "version": "1.6.3-beflow.1",
+    "commit": "45622f79cd766e0fc6f5cbd49fcf4960340f35c3",
+    "archive": "BBDown_1.6.3_source_45622f7.zip",
+    "url": "https://codeload.github.com/nilaoda/BBDown/zip/45622f79cd766e0fc6f5cbd49fcf4960340f35c3",
+    "sha256": "E7B5153842987A02230EC57D53B3D74495076F27CC901CC1AC1F4B2AB0979896"
+  },
   "aria2": {
     "version": "1.37.0",
     "archive": "aria2-1.37.0-win-64bit-build1.zip",

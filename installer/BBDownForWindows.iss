@@ -1,6 +1,6 @@
-#define MyAppName "Beflow for Windows"
+#define MyAppName "Beflow"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.1.0.7"
+  #define MyAppVersion "1.1.0.8"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\artifacts\publish"
@@ -35,7 +35,7 @@ PrivilegesRequiredOverridesAllowed=dialog commandline
 UninstallDisplayIcon={app}\Beflow.exe
 SetupIconFile={#AppIconFile}
 VersionInfoDescription=A Simple Desktop Video Downloader / 基于 BBDown 构建的桌面视频下载器图形界面
-VersionInfoProductName=Beflow for Windows
+VersionInfoProductName=Beflow
 SetupLogging=yes
 CloseApplications=yes
 RestartApplications=no
@@ -58,13 +58,15 @@ Type: files; Name: "{app}\BBDownForWindows.runtimeconfig.json"
 Type: files; Name: "{app}\BBDownForWindows.pri"
 Type: files; Name: "{autoprograms}\BBDown for Windows.lnk"
 Type: files; Name: "{autodesktop}\BBDown for Windows.lnk"
+Type: files; Name: "{autoprograms}\Beflow for Windows.lnk"
+Type: files; Name: "{autodesktop}\Beflow for Windows.lnk"
 
 [Icons]
-Name: "{autoprograms}\Beflow for Windows"; Filename: "{app}\Beflow.exe"
-Name: "{autodesktop}\Beflow for Windows"; Filename: "{app}\Beflow.exe"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\Beflow.exe"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\Beflow.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Beflow.exe"; Description: "启动 Beflow for Windows"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Beflow.exe"; Description: "启动 Beflow"; Flags: nowait postinstall skipifsilent
 
 [Code]
 function IsRetainedMuiLanguage(const DirectoryName: String): Boolean;

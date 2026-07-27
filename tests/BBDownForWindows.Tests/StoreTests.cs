@@ -63,10 +63,33 @@ public sealed class StoreTests
 
             var settings = await new SettingsStore(paths).LoadAsync();
 
-            Assert.Equal("4K 超清", settings.VideoQualityRule);
+            Assert.Equal("4K 超高清", settings.VideoQualityRule);
             Assert.Equal("AVC", settings.Encoding);
             Assert.Equal("auto", settings.AudioCodec);
             Assert.False(settings.CheckUpdatesOnStartup);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Theory]
+    [InlineData("HDR 真彩", "4K·HDR真彩")]
+    [InlineData("4K 超清", "4K 超高清")]
+    [InlineData("SDR增强", "4K·SDR增强")]
+    [InlineData("4K 大视界", "4K·SDR增强")]
+    [InlineData("720P 高清", "720P 准高清")]
+    [InlineData("480P 清晰", "480P 标清")]
+    public async Task LegacyQualitySettingsMigrateToCurrentBilibiliNames(string storedQuality, string expected)
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            paths.EnsureCreated();
+            await File.WriteAllTextAsync(paths.SettingsFile, $"{{\"schemaVersion\":4,\"videoQualityRule\":\"{storedQuality}\"}}");
+
+            var settings = await new SettingsStore(paths).LoadAsync();
+
+            Assert.Equal(expected, settings.VideoQualityRule);
         }
         finally { root.Delete(true); }
     }
@@ -399,9 +422,9 @@ public sealed class StoreTests
             DualAudio = new DualAudioRequest()
         };
 
-        Assert.Equal(["4K", "AVC", "视频+音频"], download.SpecificationTags);
+        Assert.Equal(["4K 超高清", "AVC", "视频+音频"], download.SpecificationTags);
         Assert.Equal(["FLAC", "仅音频"], audioOnly.SpecificationTags);
-        Assert.Equal(["1080P", "HEVC", "双音轨封装"], dualAudio.SpecificationTags);
+        Assert.Equal(["1080P 高清", "HEVC", "双音轨封装"], dualAudio.SpecificationTags);
         Assert.Equal(["仅重新封装"], remux.SpecificationTags);
         Assert.Empty(new HistoryRecord().SpecificationTags);
         Assert.DoesNotContain("specificationTags", System.Text.Json.JsonSerializer.Serialize(download), StringComparison.OrdinalIgnoreCase);

@@ -43,7 +43,40 @@ function Expand-VerifiedArchive([string]$Archive, [string]$Name) {
     return $Destination
 }
 
-$BBDownArchive = Get-Archive $Manifest.bbdown
+function Build-BBDownWithBeflowQualityPatch([string]$SourceArchive, $Entry) {
+    $SourceExpanded = Expand-VerifiedArchive $SourceArchive "bbdown-source-$($Entry.commit.Substring(0, 7))"
+    $SourceRoot = Get-ChildItem -LiteralPath $SourceExpanded -Directory |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'BBDown\BBDown.csproj') -PathType Leaf } |
+        Select-Object -First 1
+    if (-not $SourceRoot) { throw 'The verified BBDown source archive does not contain BBDown\BBDown.csproj.' }
+
+    $BuildRoot = Join-Path $CacheDirectory "expanded\bbdown-$($Entry.version)"
+    $Publish = Join-Path $BuildRoot 'publish'
+    $Executable = Join-Path $Publish 'BBDown.exe'
+    $Marker = Join-Path $BuildRoot 'beflow-quality-patch.complete'
+    if ((Test-Path -LiteralPath $Executable -PathType Leaf) -and (Test-Path -LiteralPath $Marker -PathType Leaf)) { return $Publish }
+
+    $WorkingDirectory = Join-Path $CacheDirectory "work\bbdown-$($Entry.version)-$PID"
+    New-Item -ItemType Directory -Force -Path $WorkingDirectory, $Publish | Out-Null
+    Copy-Item -Path (Join-Path $SourceRoot.FullName '*') -Destination $WorkingDirectory -Recurse -Force
+
+    $ConfigPath = Join-Path $WorkingDirectory 'BBDown.Core\Config.cs'
+    $ConfigContent = [IO.File]::ReadAllText($ConfigPath)
+    $Needle = '{"127","8K 超高清" }, {"126","杜比视界" }, {"125","HDR 真彩" }, {"120","4K 超清" }'
+    $Replacement = '{"127","8K 超高清" }, {"126","杜比视界" }, {"125","HDR 真彩" }, {"122","4K·SDR增强" }, {"120","4K 超清" }'
+    if (-not $ConfigContent.Contains($Needle)) { throw 'The pinned BBDown quality table changed; refusing to apply an unverified source patch.' }
+    $ConfigContent = $ConfigContent.Replace($Needle, $Replacement)
+    [IO.File]::WriteAllText($ConfigPath, $ConfigContent, [Text.UTF8Encoding]::new($false))
+
+    $Project = Join-Path $WorkingDirectory 'BBDown\BBDown.csproj'
+    & dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:ManagePackageVersionsCentrally=false -p:Version=$($Entry.version) -o $Publish | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "Patched BBDown build failed with exit code $LASTEXITCODE" }
+    if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Patched BBDown build did not produce BBDown.exe.' }
+    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`n", [Text.UTF8Encoding]::new($false))
+    return $Publish
+}
+
+$BBDownSourceArchive = Get-Archive $Manifest.bbdownSource
 $AriaArchive = Get-Archive $Manifest.aria2
 if (-not $FfmpegArchivePath) {
     $ArchiveName = $Manifest.ffmpeg.archive
@@ -58,7 +91,7 @@ if (-not $FfmpegArchivePath) {
 }
 $FfmpegArchive = Get-Archive $Manifest.ffmpeg $FfmpegArchivePath $FfmpegArchiveUrl
 
-$BBDownExpanded = Expand-VerifiedArchive $BBDownArchive 'bbdown-1.6.3'
+$BBDownExpanded = Build-BBDownWithBeflowQualityPatch $BBDownSourceArchive $Manifest.bbdownSource
 $AriaExpanded = Expand-VerifiedArchive $AriaArchive 'aria2-1.37.0'
 $FfmpegExpanded = Expand-VerifiedArchive $FfmpegArchive 'ffmpeg-20240110'
 

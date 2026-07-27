@@ -21,7 +21,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = "Beflow for Windows";
+        Title = "Beflow";
         var theme = ((App)Application.Current).Services.Theme;
         theme.Attach(WindowRoot, AppWindow);
         theme.Changed += Theme_Changed;

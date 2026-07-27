@@ -44,6 +44,24 @@ public sealed class ParserTests
     }
 
     [Fact]
+    public void ParsesSdrEnhanced4KStream()
+    {
+        const string output = """
+            开始解析P1: 111... (1 of 1)
+            共计1条视频流.
+              0. [4K·SDR增强] [3840x2160] [HEVC] [25] [11000 kbps] [~1.60 GB]
+            共计1条音频流.
+              0. [M4A] [192 kbps] [~30 MB]
+            """;
+
+        var stream = Assert.Single(BBDownParser.ParsePageVideoStreams(output)[1]);
+
+        Assert.Equal("4K·SDR增强", stream.Quality);
+        Assert.Equal("3840x2160", stream.Resolution);
+        Assert.Equal("HEVC", stream.Codec);
+    }
+
+    [Fact]
     public void SelectsPreferredCodecAndFallsBackPerPage()
     {
         var audio = BBDownParser.ParsePageAudioStreams(InfoOutput);

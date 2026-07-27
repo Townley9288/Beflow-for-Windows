@@ -43,9 +43,10 @@ public sealed class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<OptionItem> QualityOptions { get; } =
     [
-        new("杜比视界", "杜比视界"), new("HDR 真彩", "HDR 真彩"),
-        new("4K 超清", "4K 超清"), new("1080P 高码率", "1080P 高码率"), new("1080P 高清", "1080P 高清"),
-        new("720P 高清", "720P 高清"), new("480P 清晰", "480P 清晰"), new("360P 流畅", "360P 流畅")
+        new("杜比视界", "杜比视界"), new("4K·HDR真彩", "4K·HDR真彩（大视界）"),
+        new("4K·SDR增强", "4K·SDR增强（大视界）"), new("4K 超高清", "4K 超高清"),
+        new("1080P 高码率", "1080P 高码率"), new("1080P 高清", "1080P 高清"),
+        new("720P 准高清", "720P 准高清"), new("480P 标清", "480P 标清"), new("360P 流畅", "360P 流畅")
     ];
     public IReadOnlyList<string> EncodingOptions { get; } = ["HEVC", "AVC", "AV1"];
     public IReadOnlyList<string> DownloadModeOptions { get; } = ["视频+音频", "仅视频", "仅音频"];

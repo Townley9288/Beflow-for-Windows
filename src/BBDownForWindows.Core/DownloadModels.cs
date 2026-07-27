@@ -85,7 +85,7 @@ public sealed record VideoStreamSelection(
     int BitrateKbps,
     bool IsManual = false)
 {
-    [JsonIgnore] public string DisplayName => $"{Quality} · {Resolution} · {Codec} · {BitrateKbps} kbps";
+    [JsonIgnore] public string DisplayName => $"{StreamSelectionPolicy.NormalizeQualityRule(Quality)} · {Resolution} · {Codec} · {BitrateKbps} kbps";
 }
 
 public sealed record AudioStreamSelection(

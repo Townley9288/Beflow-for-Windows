@@ -59,6 +59,79 @@ public sealed class DownloadSelectionTests
         Assert.Equal("HDR 真彩", selected.Video!.Quality);
     }
 
+    [Theory]
+    [InlineData("HDR 真彩", "4K·HDR真彩")]
+    [InlineData("4K·HDR真彩", "4K·HDR真彩")]
+    [InlineData("4K 超清", "4K 超高清")]
+    [InlineData("4K 超高清", "4K 超高清")]
+    [InlineData("SDR增强", "4K·SDR增强")]
+    [InlineData("4K·SDR增强", "4K·SDR增强")]
+    [InlineData("4K 大视界", "4K·SDR增强")]
+    [InlineData("720P 高清", "720P 准高清")]
+    [InlineData("720P 准高清", "720P 准高清")]
+    [InlineData("480P 清晰", "480P 标清")]
+    [InlineData("480P 标清", "480P 标清")]
+    public void NormalizesOldAndNewBilibiliQualityNames(string value, string expected)
+    {
+        Assert.Equal(expected, StreamSelectionPolicy.NormalizeQualityRule(value));
+        Assert.True(StreamSelectionPolicy.IsKnownQualityRule(value));
+    }
+
+    [Fact]
+    public void SdrEnhanced4KRemainsDistinctFromRegular4K()
+    {
+        var episode = Episode(
+            [
+                new VideoStreamInfo(0, "4K·SDR增强", "3840x2160", 3840, 2160, "HEVC", "25", "11000 kbps", 11000, "1.6 GB"),
+                new VideoStreamInfo(1, "4K 超清", "3840x2160", 3840, 2160, "HEVC", "25", "8000 kbps", 8000, "1.2 GB")
+            ],
+            [new AudioStreamInfo(0, "M4A", "192 kbps", 192, "30 MB")]);
+
+        var enhanced = StreamSelectionPolicy.Select(episode, new StreamSelectionRule("4K 大视界", "HEVC", "auto", AudioBitratePriority.Highest), DownloadMode.VideoAndAudio);
+        var regular = StreamSelectionPolicy.Select(episode, new StreamSelectionRule("4K 超高清", "HEVC", "auto", AudioBitratePriority.Highest), DownloadMode.VideoAndAudio);
+
+        Assert.Equal(0, enhanced.Video!.Index);
+        Assert.Equal(1, regular.Video!.Index);
+        Assert.Empty(enhanced.FallbackReason);
+        Assert.Empty(regular.FallbackReason);
+    }
+
+    [Theory]
+    [InlineData("720P 准高清", "720P 高清", "1280x720")]
+    [InlineData("480P 标清", "480P 清晰", "852x480")]
+    public void CurrentQualityRuleSelectsLegacyNamedBBDownStream(string rule, string legacyName, string resolution)
+    {
+        var (width, height) = resolution == "1280x720" ? (1280, 720) : (852, 480);
+        var episode = Episode(
+            [new VideoStreamInfo(3, legacyName, resolution, width, height, "HEVC", "25", "500 kbps", 500, "80 MB")],
+            [new AudioStreamInfo(0, "M4A", "128 kbps", 128, "20 MB")]);
+
+        var selected = StreamSelectionPolicy.Select(episode,
+            new StreamSelectionRule(rule, "HEVC", "M4A", AudioBitratePriority.Highest), DownloadMode.VideoAndAudio);
+
+        Assert.Equal(legacyName, selected.Video!.Quality);
+        Assert.DoesNotContain("回退", selected.FallbackReason);
+    }
+
+    [Fact]
+    public void RestoredCurrentQualityNameResolvesAgainstLegacyNamedStream()
+    {
+        var episode = Episode(
+            [new VideoStreamInfo(3, "720P 高清", "1280x720", 1280, 720, "HEVC", "25", "500 kbps", 500, "80 MB")],
+            [new AudioStreamInfo(0, "M4A", "128 kbps", 128, "20 MB")]);
+        var desired = new EpisodeStreamSelection
+        {
+            PageNumber = 1,
+            Video = new VideoStreamSelection("720P 准高清", "1280x720", "HEVC", 500),
+            Audio = new AudioStreamSelection("M4A", 128)
+        };
+
+        var resolved = StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1" });
+
+        Assert.Equal(3, resolved.Video!.Index);
+        Assert.DoesNotContain("重新匹配", resolved.FallbackReason);
+    }
+
     [Fact]
     public void MissingCodecAndAudioFormatFallBackWithReason()
     {
@@ -70,7 +143,7 @@ public sealed class DownloadSelectionTests
 
         Assert.Equal("AVC", selected.Video!.Codec);
         Assert.Equal(192, selected.Audio!.BitrateKbps);
-        Assert.Contains("无 4K 超清", selected.FallbackReason);
+        Assert.Contains("无 4K 超高清", selected.FallbackReason);
         Assert.Contains("无 AV1", selected.FallbackReason);
         Assert.Contains("无 E-AC-3", selected.FallbackReason);
     }

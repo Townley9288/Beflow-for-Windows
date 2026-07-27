@@ -17,8 +17,8 @@ public sealed class DualAudioViewModel : ObservableObject
     private string _sourceModeText = "两个独立链接";
     private string _sourceAUrl = string.Empty;
     private string _sourceBUrl = string.Empty;
-    private string _sourceAQuality = "4K 超清";
-    private string _sourceBQuality = "4K 超清";
+    private string _sourceAQuality = "4K 超高清";
+    private string _sourceBQuality = "4K 超高清";
     private string _sourceAEncoding = "AVC";
     private string _sourceBEncoding = "AVC";
     private string _sourceAAudio = "auto";
@@ -78,9 +78,10 @@ public sealed class DualAudioViewModel : ObservableObject
     public IReadOnlyList<string> SourceModes { get; } = ["两个独立链接", "同一链接奇偶分P"];
     public IReadOnlyList<OptionItem> QualityOptions { get; } =
     [
-        new("杜比视界", "杜比视界"), new("HDR 真彩", "HDR 真彩"), new("4K 超清", "4K 超清"),
+        new("杜比视界", "杜比视界"), new("4K·HDR真彩", "4K·HDR真彩（大视界）"),
+        new("4K·SDR增强", "4K·SDR增强（大视界）"), new("4K 超高清", "4K 超高清"),
         new("1080P 高码率", "1080P 高码率"), new("1080P 高清", "1080P 高清"),
-        new("720P 高清", "720P 高清"), new("480P 清晰", "480P 清晰"), new("360P 流畅", "360P 流畅")
+        new("720P 准高清", "720P 准高清"), new("480P 标清", "480P 标清"), new("360P 流畅", "360P 流畅")
     ];
     public IReadOnlyList<string> EncodingOptions { get; } = ["HEVC", "AVC", "AV1"];
     public IReadOnlyList<OptionItem> AudioOptions { get; } =
@@ -525,8 +526,8 @@ public sealed class DualAudioViewModel : ObservableObject
         SourceModeText = request.SourceMode == DualAudioSourceMode.Interleaved ? "同一链接奇偶分P" : "两个独立链接";
         SourceAUrl = request.SourceAUrl;
         SourceBUrl = request.SourceBUrl;
-        SourceAQuality = request.Pairs.FirstOrDefault()?.SourceA.Video?.Quality ?? request.Options.Quality;
-        SourceBQuality = request.Pairs.FirstOrDefault()?.SourceB.Video?.Quality ?? request.Options.Quality;
+        SourceAQuality = StreamSelectionPolicy.NormalizeQualityRule(request.Pairs.FirstOrDefault()?.SourceA.Video?.Quality ?? request.Options.Quality);
+        SourceBQuality = StreamSelectionPolicy.NormalizeQualityRule(request.Pairs.FirstOrDefault()?.SourceB.Video?.Quality ?? request.Options.Quality);
         SourceAEncoding = request.Pairs.FirstOrDefault()?.SourceA.Video?.Codec ?? request.Options.Encoding;
         SourceBEncoding = request.Pairs.FirstOrDefault()?.SourceB.Video?.Codec ?? request.Options.Encoding;
         SourceAAudio = request.Pairs.FirstOrDefault()?.SourceA.Audio?.Codec ?? request.Options.AudioCodec;

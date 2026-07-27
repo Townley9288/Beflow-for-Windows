@@ -156,7 +156,7 @@ public static partial class BBDownParser
         {
             var selected = SelectResolutionFirst(streams, preferredEncoding);
             if (selected is null) continue;
-            var key = (selected.Quality, selected.Codec, selected.Resolution);
+            var key = (Quality: StreamSelectionPolicy.NormalizeQualityRule(selected.Quality), selected.Codec, selected.Resolution);
             if (!groups.TryGetValue(key, out var group)) groups[key] = group = new ResolutionGroup(key.Quality, key.Codec, key.Resolution, []);
             group.Pages.Add(page);
         }
