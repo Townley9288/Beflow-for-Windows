@@ -74,7 +74,7 @@ public sealed class DownloadNamingTests
 
             Assert.Contains("测试番剧.av100.BV1TEST.ss200.出品方.42.2026-01-02.2026-07-18.20-30-00.TV", plan.RelativePath);
             Assert.Contains(Path.Combine("02.300.ep400.2026-01-03",
-                "第二集.番剧.视频+音频.4K·HDR真彩.3840x2160.60fps.HEVC.12000kbps.E-AC-3.384kbps.TV"), plan.RelativePath);
+                "第二集.番剧.视频+音频.HDR 真彩.3840x2160.60fps.HEVC.12000kbps.E-AC-3.384kbps.TV"), plan.RelativePath);
             Assert.Empty(plan.Warnings);
         }
         finally { root.Delete(true); }

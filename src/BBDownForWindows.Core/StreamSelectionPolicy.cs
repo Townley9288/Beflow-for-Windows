@@ -13,7 +13,7 @@ public static partial class StreamSelectionPolicy
     public const string MuxedStreamReason = "旧式音视频合流分段";
 
     private static readonly HashSet<string> KnownQualityRules = new(StringComparer.OrdinalIgnoreCase)
-    { "杜比视界", "4K·HDR真彩", "4K·SDR增强", "4K 超高清", "1080P 高码率", "1080P 高清", "720P 准高清", "480P 标清", "360P 流畅" };
+    { "杜比视界", "HDR 真彩", "4K·SDR增强", "4K 超高清", "1080P 高码率", "1080P 高清", "720P 准高清", "480P 标清", "360P 流畅" };
 
     public static StreamSelectionDecision Select(
         DownloadEpisodeInfo episode,
@@ -93,7 +93,7 @@ public static partial class StreamSelectionPolicy
         return value.Trim() switch
         {
             "highest" or "自动" or "最高" or "最高可用" => "4K 超高清",
-            "HDR 真彩" or "HDR真彩" or "4K HDR 真彩" or "4K HDR真彩" or "4K·HDR真彩" => "4K·HDR真彩",
+            "HDR 真彩" or "HDR真彩" or "4K HDR 真彩" or "4K HDR真彩" or "4K·HDR真彩" => "HDR 真彩",
             "SDR增强" or "4K SDR增强" or "4K·SDR增强" => "4K·SDR增强",
             "4K" or "4K 超清" or "4K 超高清" or "4K 大视界" or "大视界" or "大视界4K" => "4K 超高清",
             "1080P" => "1080P 高清",

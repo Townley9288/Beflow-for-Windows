@@ -72,6 +72,7 @@ public sealed class AppViewModelTests
             State = DownloadEpisodeParseState.Ready,
             VideoStreams =
             [
+                new VideoStreamInfo(1, "HDR 真彩", "1920x1080", 1920, 1080, "HEVC", "25", "1954 kbps", 1954, "300 MB"),
                 new VideoStreamInfo(3, "720P 高清", "1280x720", 1280, 720, "HEVC", "25", "500 kbps", 500, "80 MB"),
                 new VideoStreamInfo(6, "480P 清晰", "852x480", 852, 480, "HEVC", "25", "300 kbps", 300, "50 MB")
             ],
@@ -83,6 +84,8 @@ public sealed class AppViewModelTests
 
         Assert.Contains(viewModel.QualityOptions, item => item.Label.StartsWith("720P 准高清", StringComparison.Ordinal));
         Assert.Contains(viewModel.QualityOptions, item => item.Label.StartsWith("480P 标清", StringComparison.Ordinal));
+        Assert.Contains(viewModel.QualityOptions, item => item.Label == "HDR 真彩 · 1920×1080 · 1954 kbps");
+        Assert.DoesNotContain(viewModel.QualityOptions, item => item.Label.Contains("4K·HDR", StringComparison.Ordinal));
         Assert.StartsWith("720P 准高清", viewModel.SelectedQualityLabel);
     }
 
@@ -94,21 +97,21 @@ public sealed class AppViewModelTests
         var settings = new SettingsViewModel(fixture.Services);
         var dualAudio = new DualAudioViewModel(fixture.Services);
 
-        Assert.Contains(download.QualityRuleOptions, item => item.Value == "4K·HDR真彩" && item.Label.Contains("大视界", StringComparison.Ordinal));
+        Assert.Contains(download.QualityRuleOptions, item => item.Value == "HDR 真彩" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(download.QualityRuleOptions, item => item.Value == "4K·SDR增强" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(download.QualityRuleOptions, item => item.Value == "4K 超高清" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(download.QualityRuleOptions, item => item.Value == "720P 准高清");
         Assert.Contains(download.QualityRuleOptions, item => item.Value == "480P 标清");
         Assert.DoesNotContain(download.QualityRuleOptions, item => item.Value is "720P 高清" or "480P 清晰");
 
-        Assert.Contains(settings.QualityOptions, item => item.Value == "4K·HDR真彩" && item.Label.Contains("大视界", StringComparison.Ordinal));
+        Assert.Contains(settings.QualityOptions, item => item.Value == "HDR 真彩" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(settings.QualityOptions, item => item.Value == "4K·SDR增强" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(settings.QualityOptions, item => item.Value == "4K 超高清" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(settings.QualityOptions, item => item.Value == "720P 准高清");
         Assert.Contains(settings.QualityOptions, item => item.Value == "480P 标清");
         Assert.DoesNotContain(settings.QualityOptions, item => item.Value is "720P 高清" or "480P 清晰");
 
-        Assert.Contains(dualAudio.QualityOptions, item => item.Value == "4K·HDR真彩" && item.Label.Contains("大视界", StringComparison.Ordinal));
+        Assert.Contains(dualAudio.QualityOptions, item => item.Value == "HDR 真彩" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(dualAudio.QualityOptions, item => item.Value == "4K·SDR增强" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(dualAudio.QualityOptions, item => item.Value == "4K 超高清" && item.Label.Contains("大视界", StringComparison.Ordinal));
         Assert.Contains(dualAudio.QualityOptions, item => item.Value == "720P 准高清");

@@ -60,8 +60,8 @@ public sealed class DownloadSelectionTests
     }
 
     [Theory]
-    [InlineData("HDR 真彩", "4K·HDR真彩")]
-    [InlineData("4K·HDR真彩", "4K·HDR真彩")]
+    [InlineData("HDR 真彩", "HDR 真彩")]
+    [InlineData("4K·HDR真彩", "HDR 真彩")]
     [InlineData("4K 超清", "4K 超高清")]
     [InlineData("4K 超高清", "4K 超高清")]
     [InlineData("SDR增强", "4K·SDR增强")]
@@ -291,7 +291,35 @@ public sealed class DownloadSelectionTests
         Assert.NotNull(catalog);
         Assert.Equal(2, catalog!.Episodes.Count);
         Assert.Equal(2, updates.Count(item => item.Episode is not null));
-        Assert.Contains("ALL", fixture.Runner.Requests[0].Arguments);
+        Assert.Equal(2, fixture.Runner.Requests.Count);
+        Assert.All(fixture.Runner.Requests, item => Assert.DoesNotContain("ALL", item.Arguments));
+        Assert.DoesNotContain("-p", fixture.Runner.Requests[0].Arguments);
+        Assert.Contains("2", fixture.Runner.Requests[1].Arguments);
+    }
+
+    [Fact]
+    public async Task AllPageParseUsesBoundedFourWayConcurrencyAndKeepsEpisodeOrder()
+    {
+        var runner = new ScriptedRunner { TotalPages = 9, ParseDelay = TimeSpan.FromMilliseconds(60) };
+        using var fixture = new ServiceFixture(runner);
+        DownloadCatalog? catalog = null;
+        var updates = new List<DownloadParseProgress>();
+        var manager = new TaskManager(fixture.Paths, fixture.Runner);
+
+        var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadParse, false, "parallel-parse", async (context, token) =>
+        {
+            catalog = await fixture.Service.ParseDownloadAsync(new DownloadParseRequest("BV1LONG", DownloadParseMode.All),
+                new SynchronousProgress<DownloadParseProgress>(updates.Add), context, token);
+        });
+
+        Assert.Equal(TaskState.Completed, snapshot.State);
+        Assert.NotNull(catalog);
+        Assert.Equal(Enumerable.Range(1, 9), catalog!.Episodes.Select(item => item.Page.Number));
+        Assert.Equal(9, updates.Count(item => item.Episode is not null));
+        Assert.Equal(5, runner.Requests.Count);
+        Assert.Equal(4, runner.MaximumActiveParses);
+        Assert.All(runner.Requests, item => Assert.DoesNotContain("ALL", item.Arguments));
+        Assert.Equal(4, runner.Requests.Count(item => item.Arguments.Any(argument => argument.Contains(','))));
     }
 
     [Fact]
@@ -606,16 +634,22 @@ public sealed class DownloadSelectionTests
 
     private sealed class ScriptedRunner : IProcessRunner
     {
+        private int _activeParses;
+        private int _maximumActiveParses;
         public List<ProcessRunRequest> Requests { get; } = [];
         public int FailDownloadPage { get; set; }
         public int ParseExitCode { get; set; }
         public string ParseFailureOutput { get; set; } = string.Empty;
         public HashSet<int> MuxedPages { get; } = [];
+        public int TotalPages { get; set; } = 2;
+        public TimeSpan ParseDelay { get; set; }
+        public int MaximumActiveParses => Volatile.Read(ref _maximumActiveParses);
 
-        public Task<ProcessResult> RunAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
+        public async Task<ProcessResult> RunAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
         {
-            Requests.Add(request);
-            var page = ReadPage(request.Arguments);
+            lock (Requests) Requests.Add(request);
+            var selectedPages = ReadPages(request.Arguments);
+            var page = selectedPages[0];
             if (request.Arguments.Contains("--interactive"))
             {
                 if (page != FailDownloadPage)
@@ -629,28 +663,44 @@ public sealed class DownloadSelectionTests
                     File.WriteAllText(target, "video");
                     onOutput?.Invoke("[#aaaa11 100MiB/100MiB(100%) CN:8 DL:10MiB ETA:0s]\n");
                 }
-                return Task.FromResult(new ProcessResult(page == FailDownloadPage ? 1 : 0, string.Empty, false));
+                return new ProcessResult(page == FailDownloadPage ? 1 : 0, string.Empty, false);
             }
 
             if (ParseExitCode != 0)
             {
                 foreach (var line in ParseFailureOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries)) onOutput?.Invoke(line + "\n");
-                return Task.FromResult(new ProcessResult(ParseExitCode, ParseFailureOutput, false));
+                return new ProcessResult(ParseExitCode, ParseFailureOutput, false);
+            }
+
+            if (ParseDelay > TimeSpan.Zero)
+            {
+                var active = Interlocked.Increment(ref _activeParses);
+                UpdateMaximum(ref _maximumActiveParses, active);
+                try { await Task.Delay(ParseDelay, cancellationToken); }
+                finally { Interlocked.Decrement(ref _activeParses); }
             }
 
             var output = request.Arguments.Contains("ALL")
                 ? InfoOutput(1) + InfoOutput(2, includeHeader: false) + "任务完成\n"
-                : (MuxedPages.Contains(page) ? MuxedInfoOutput(page) : InfoOutput(page)) + "任务完成\n";
+                : (MuxedPages.Contains(page) ? MuxedInfoOutput(page) : TotalPages == 2 ? InfoOutput(page) : CatalogInfoOutput(selectedPages, TotalPages)) + "任务完成\n";
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries)) onOutput?.Invoke(line + "\n");
-            return Task.FromResult(new ProcessResult(0, output, false));
+            return new ProcessResult(0, output, false);
         }
 
         public Task TerminateAllAsync() => Task.CompletedTask;
 
         private static int ReadPage(IReadOnlyList<string> arguments)
         {
+            return ReadPages(arguments)[0];
+        }
+
+        private static List<int> ReadPages(IReadOnlyList<string> arguments)
+        {
             var index = arguments.ToList().IndexOf("-p");
-            return index >= 0 && int.TryParse(arguments[index + 1], out var page) ? page : 1;
+            if (index < 0) return [1];
+            return arguments[index + 1].Equals("ALL", StringComparison.OrdinalIgnoreCase)
+                ? [1, 2]
+                : BBDownParser.ExpandPageExpression(arguments[index + 1]);
         }
 
         private static string InfoOutput(int page, bool includeHeader = true) => $"""
@@ -669,6 +719,35 @@ public sealed class DownloadSelectionTests
             共计1条流(共有3个分段).
               0. [1080P 高码率] [AVC] [~4109 kbps] [555.27 MB]
             """;
+
+        private static string CatalogInfoOutput(IReadOnlyList<int> selectedPages, int total)
+        {
+            var catalog = string.Join('\n', Enumerable.Range(1, total).Select(number => $"P{number}: [{number * 10}] [第{number}集] [24m]"));
+            var streams = string.Join('\n', selectedPages.Select(page => $"""
+                开始解析P{page}: 123... ({page} of {total})
+                共计1条视频流.
+                  1. [1080P 高清] [1920x1080] [HEVC] [25] [1000 kbps] [~100 MB]
+                共计1条音频流.
+                  2. [M4A] [192 kbps] [~20 MB]
+                """));
+            return $"""
+                视频标题: 长篇测试合集
+                共计 {total} 个分P, 已选择：P{string.Join(',', selectedPages)}
+                {catalog}
+                {streams}
+                """;
+        }
+
+        private static void UpdateMaximum(ref int target, int value)
+        {
+            var current = Volatile.Read(ref target);
+            while (value > current)
+            {
+                var observed = Interlocked.CompareExchange(ref target, value, current);
+                if (observed == current) return;
+                current = observed;
+            }
+        }
     }
 
     private sealed class FixedToolLocator(string bbDown) : IToolLocator

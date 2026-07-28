@@ -6,6 +6,7 @@ namespace BBDownForWindows.Core;
 public sealed class BBDownService(ApplicationPaths paths, IProcessRunner processRunner, IToolLocator toolLocator, ISettingsStore settingsStore,
     IBilibiliMetadataService? metadataService = null, IDownloadNamingService? downloadNamingService = null) : IBBDownService
 {
+    private const int MaximumConcurrentParses = 4;
     private readonly BBDownRuntimeManager _runtimeManager = new(paths);
     private readonly IDownloadNamingService _downloadNaming = downloadNamingService ?? new DownloadNamingService();
 
@@ -27,10 +28,14 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         if (!resolvedUrl.Equals(sourceUrl, StringComparison.OrdinalIgnoreCase))
             context.AppendLog($"检测到番剧播放地址，已按 {resolvedUrl} 解析完整清晰度。\n");
         var tools = await ResolveToolsAsync(cancellationToken);
+        if (request.Mode == DownloadParseMode.All)
+        {
+            return await ParseAllDownloadAsync(request, sourceUrl, resolvedUrl, metadata, tools, progress, context, cancellationToken);
+        }
+
         var infoRequest = new DownloadRequest
         {
             Url = resolvedUrl,
-            Season = request.Mode == DownloadParseMode.All && string.IsNullOrWhiteSpace(request.Pages),
             Pages = request.Pages,
             ApiMode = request.ApiMode
         };
@@ -55,6 +60,199 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             Episodes = parser.Episodes.OrderBy(item => item.Page.Number).ToList()
         };
     }
+
+    private async Task<DownloadCatalog> ParseAllDownloadAsync(DownloadParseRequest request, string sourceUrl, string resolvedUrl,
+        BilibiliVideoMetadata? metadata, ToolPaths tools, IProgress<DownloadParseProgress>? progress,
+        TaskExecutionContext context, CancellationToken cancellationToken)
+    {
+        var pages = new Dictionary<int, PageInfo>();
+        var episodes = new Dictionary<int, DownloadEpisodeInfo>();
+        var finalizedPages = new HashSet<int>();
+        var sync = new object();
+        var title = string.Empty;
+        var completed = 0;
+        var targetTotal = 0;
+
+        void MergeResult(PageParseResult parsed)
+        {
+            lock (sync)
+            {
+                foreach (var page in parsed.Pages) pages[page.Number] = page;
+                foreach (var episode in parsed.Episodes) episodes[episode.Page.Number] = episode;
+                if (string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(parsed.Title)) title = parsed.Title;
+            }
+        }
+
+        void CompleteEpisode(DownloadEpisodeInfo episode)
+        {
+            lock (sync)
+            {
+                if (!finalizedPages.Add(episode.Page.Number)) return;
+                episodes[episode.Page.Number] = episode;
+                pages.TryAdd(episode.Page.Number, episode.Page);
+                completed++;
+                progress?.Report(new DownloadParseProgress(completed, targetTotal, episode.Page.Number, episode.Page.Title, episode,
+                    episode.State == DownloadEpisodeParseState.Ready
+                        ? $"已解析 {completed}/{targetTotal}：P{episode.Page.Number} {episode.Page.Title}"
+                        : $"P{episode.Page.Number} 解析失败：{episode.Error}"));
+            }
+        }
+
+        DownloadEpisodeInfo CreateKnownFailedEpisode(int page, string error)
+        {
+            lock (sync) return CreateFailedEpisode(page, pages.Values.ToList(), error);
+        }
+
+        List<int> targetPages;
+        if (string.IsNullOrWhiteSpace(request.Pages))
+        {
+            progress?.Report(new DownloadParseProgress(0, 0, 0, string.Empty, null, "正在读取分集目录…"));
+            var discovery = await ParsePagesForCatalogAsync(tools, resolvedUrl, null, request.ApiMode,
+                context.WithPrefix("目录"), null, cancellationToken);
+            MergeResult(discovery);
+            var discoveredEpisode = discovery.Episodes.FirstOrDefault();
+            if (discovery.Cancelled || cancellationToken.IsCancellationRequested)
+            {
+                if (episodes.Count == 0) throw new OperationCanceledException(cancellationToken);
+                return BuildParsedCatalog(sourceUrl, resolvedUrl, metadata, title, pages, episodes);
+            }
+            if (discovery.ExitCode != 0 && discoveredEpisode is null)
+                throw new InvalidOperationException(discovery.Error);
+            if (pages.Count == 0 && discoveredEpisode is not null) pages[discoveredEpisode.Page.Number] = discoveredEpisode.Page;
+            targetPages = pages.Keys.Order().ToList();
+            if (targetPages.Count == 0) throw new InvalidOperationException("没有读取到可解析的分集目录");
+            targetTotal = targetPages.Count;
+
+            if (discoveredEpisode?.State == DownloadEpisodeParseState.Ready)
+            {
+                finalizedPages.Add(discoveredEpisode.Page.Number);
+                completed = 1;
+                progress?.Report(new DownloadParseProgress(completed, targetTotal, discoveredEpisode.Page.Number,
+                    discoveredEpisode.Page.Title, discoveredEpisode,
+                    $"已解析 {completed}/{targetTotal}：P{discoveredEpisode.Page.Number} {discoveredEpisode.Page.Title}"));
+            }
+        }
+        else
+        {
+            targetPages = BBDownParser.ExpandPageExpression(request.Pages).Distinct().Order().ToList();
+            if (targetPages.Count == 0) throw new InvalidOperationException("没有指定要解析的分集");
+            targetTotal = targetPages.Count;
+        }
+
+        var remainingPages = targetPages
+            .Where(page => !episodes.TryGetValue(page, out var episode) || episode.State != DownloadEpisodeParseState.Ready)
+            .ToList();
+        if (remainingPages.Count > 0)
+        {
+            var parallelism = Math.Min(MaximumConcurrentParses, remainingPages.Count);
+            var pageGroups = Enumerable.Range(0, parallelism).Select(_ => new List<int>()).ToList();
+            for (var index = 0; index < remainingPages.Count; index++) pageGroups[index % parallelism].Add(remainingPages[index]);
+            context.AppendLog($"\n共 {targetPages.Count} 集，正在使用 {parallelism} 路并发解析视频规格。\n");
+            progress?.Report(new DownloadParseProgress(completed, targetTotal, 0, string.Empty, null,
+                $"已启用 {parallelism} 路并发，等待分集解析完成…"));
+            var tasks = pageGroups.Select(async (group, workerIndex) =>
+            {
+                try
+                {
+                    var parsed = await ParsePagesForCatalogAsync(tools, resolvedUrl, group, request.ApiMode,
+                        context.WithPrefix($"并发{workerIndex + 1}"), CompleteEpisode, cancellationToken);
+                    MergeResult(parsed);
+                    if (parsed.Cancelled || cancellationToken.IsCancellationRequested) return;
+                    var returnedPages = parsed.Episodes.Select(item => item.Page.Number).ToHashSet();
+                    foreach (var missingPage in group.Where(page => !returnedPages.Contains(page)))
+                        CompleteEpisode(CreateFailedEpisode(missingPage, parsed.Pages, parsed.Error));
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // 已完成的分集会保留在页面中，任务状态由 TaskManager 标记为已取消。
+                }
+                catch (Exception exception)
+                {
+                    foreach (var page in group) CompleteEpisode(CreateKnownFailedEpisode(page, exception.Message));
+                }
+            }).ToList();
+            await Task.WhenAll(tasks);
+        }
+
+        if (episodes.Count == 0)
+        {
+            if (cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
+            throw new InvalidOperationException("没有解析到可下载的分集");
+        }
+        if (metadataService is not null && metadata is null)
+            context.AppendLog("B 站公开元数据暂不可用，命名规则中的账号、编号或发布时间字段可能留空。\n");
+        return BuildParsedCatalog(sourceUrl, resolvedUrl, metadata, title, pages, episodes);
+    }
+
+    private async Task<PageParseResult> ParsePagesForCatalogAsync(ToolPaths tools, string url, IReadOnlyList<int>? selectedPages,
+        string apiMode, TaskExecutionContext context, Action<DownloadEpisodeInfo>? onEpisode, CancellationToken cancellationToken)
+    {
+        var pagesExpression = selectedPages is null ? string.Empty : string.Join(',', selectedPages);
+        var infoRequest = new DownloadRequest { Url = url, Pages = pagesExpression, ApiMode = apiMode };
+        IProgress<DownloadParseProgress>? parserProgress = onEpisode is null
+            ? null
+            : new InlineProgress<DownloadParseProgress>(update =>
+            {
+                if (update.Episode is not null) onEpisode(update.Episode);
+            });
+        var parser = new StreamingDownloadParser(selectedPages is null ? DownloadParseMode.Current : DownloadParseMode.All,
+            parserProgress, selectedPages?.Count ?? 1);
+        Func<string, bool>? shouldLog = selectedPages is null ? null : ShouldLogParallelParseLine;
+        var result = await RunAsync(tools.BBDown, BBDownCommandBuilder.BuildInfoArguments(infoRequest, tools), context,
+            cancellationToken, observer: parser.Consume, shouldLog: shouldLog);
+        parser.Complete();
+        var error = string.Empty;
+        if (result.ExitCode != 0 && !result.Cancelled)
+        {
+            var label = selectedPages is null ? "分集目录读取失败" : "并发分集规格解析失败";
+            error = BuildProcessFailureMessage(label, result);
+            if (selectedPages is null && parser.Episodes.FirstOrDefault() is { } episode)
+            {
+                episode.State = DownloadEpisodeParseState.Failed;
+                episode.Error = error;
+            }
+        }
+        else if (parser.Episodes.Count == 0)
+        {
+            error = selectedPages is null ? "没有解析到可用的分集目录" : "没有解析到所选分集的可用规格";
+        }
+        return new PageParseResult(result.ExitCode, result.Cancelled, parser.Title, parser.Pages, parser.Episodes, error);
+    }
+
+    private static DownloadEpisodeInfo CreateFailedEpisode(int page, IEnumerable<PageInfo> knownPages, string error)
+    {
+        var pageInfo = knownPages.FirstOrDefault(item => item.Number == page)
+                       ?? new PageInfo(page, string.Empty, $"P{page}", string.Empty);
+        return new DownloadEpisodeInfo
+        {
+            Page = pageInfo,
+            State = DownloadEpisodeParseState.Failed,
+            Error = string.IsNullOrWhiteSpace(error) ? "没有解析到可用视频流" : error
+        };
+    }
+
+    private static DownloadCatalog BuildParsedCatalog(string sourceUrl, string resolvedUrl, BilibiliVideoMetadata? metadata,
+        string parsedTitle, IReadOnlyDictionary<int, PageInfo> pages, IReadOnlyDictionary<int, DownloadEpisodeInfo> episodes) => new()
+    {
+        SourceUrl = sourceUrl,
+        ResolvedUrl = resolvedUrl,
+        Title = !string.IsNullOrWhiteSpace(parsedTitle) ? parsedTitle : metadata?.Title ?? string.Empty,
+        Metadata = metadata,
+        ParsedAt = DateTimeOffset.Now,
+        AllPages = pages.Values.OrderBy(item => item.Number).ToList(),
+        Episodes = episodes.Values.OrderBy(item => item.Page.Number).ToList()
+    };
+
+    private static bool ShouldLogParallelParseLine(string line)
+    {
+        var value = line.TrimStart();
+        return !value.StartsWith("视频标题:", StringComparison.Ordinal)
+               && !value.Contains("个分P", StringComparison.Ordinal)
+               && !Regex.IsMatch(value, "^P\\d+:\\s*\\[");
+    }
+
+    private sealed record PageParseResult(int ExitCode, bool Cancelled, string Title,
+        IReadOnlyList<PageInfo> Pages, IReadOnlyList<DownloadEpisodeInfo> Episodes, string Error);
 
     public async Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken)
     {

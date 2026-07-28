@@ -66,7 +66,7 @@ public sealed class DownloadViewModel : ObservableObject
     public IReadOnlyList<OptionItem> QualityRuleOptions { get; } =
     [
         new("杜比视界", "杜比视界"),
-        new("4K·HDR真彩", "4K·HDR真彩（大视界）"),
+        new("HDR 真彩", "HDR 真彩（大视界）"),
         new("4K·SDR增强", "4K·SDR增强（大视界）"),
         new("4K 超高清", "4K 超高清（大视界）"),
         new("1080P 高码率", "1080P 高码率"),

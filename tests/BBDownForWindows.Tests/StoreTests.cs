@@ -72,7 +72,8 @@ public sealed class StoreTests
     }
 
     [Theory]
-    [InlineData("HDR 真彩", "4K·HDR真彩")]
+    [InlineData("HDR 真彩", "HDR 真彩")]
+    [InlineData("4K·HDR真彩", "HDR 真彩")]
     [InlineData("4K 超清", "4K 超高清")]
     [InlineData("SDR增强", "4K·SDR增强")]
     [InlineData("4K 大视界", "4K 超高清")]

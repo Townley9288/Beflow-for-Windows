@@ -78,7 +78,7 @@ public sealed class DualAudioViewModel : ObservableObject
     public IReadOnlyList<string> SourceModes { get; } = ["两个独立链接", "同一链接奇偶分P"];
     public IReadOnlyList<OptionItem> QualityOptions { get; } =
     [
-        new("杜比视界", "杜比视界"), new("4K·HDR真彩", "4K·HDR真彩（大视界）"),
+        new("杜比视界", "杜比视界"), new("HDR 真彩", "HDR 真彩（大视界）"),
         new("4K·SDR增强", "4K·SDR增强（大视界）"), new("4K 超高清", "4K 超高清（大视界）"),
         new("1080P 高码率", "1080P 高码率"), new("1080P 高清", "1080P 高清"),
         new("720P 准高清", "720P 准高清"), new("480P 标清", "480P 标清"), new("360P 流畅", "360P 流畅")
