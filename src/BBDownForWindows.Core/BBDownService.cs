@@ -311,7 +311,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 episodeResult.State = DownloadEpisodeResultState.Validating;
-                ReportProgress(progress, DownloadProgressPhase.Validating, completed, request.Episodes.Count, desired, 0, null, string.Empty, string.Empty, "正在确认所选规格");
+                ReportProgress(progress, DownloadProgressPhase.Validating, completed, request.Episodes.Count, desired, null, string.Empty, string.Empty, "正在确认所选规格");
                 var current = await ParseEpisodeAsync(request.Options.Url, desired.PageNumber, request.Options.ApiMode, context, cancellationToken);
                 var decision = StreamSelectionPolicy.Resolve(current, desired, request.Options);
                 episodeResult.Video = decision.Video is null ? null : new VideoStreamSelection(decision.Video.Quality, decision.Video.Resolution, decision.Video.Codec, decision.Video.BitrateKbps, desired.Video?.IsManual == true);
@@ -368,7 +368,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                         ? DownloadEpisodeResultState.Muxing
                         : DownloadEpisodeResultState.Downloading;
                     ReportProgress(progress, update.Phase, completed, request.Episodes.Count, desired,
-                        update.Percent ?? 100, update.Percent, update.Speed, update.Eta, update.Message);
+                        update.Percent, update.Speed, update.Eta, update.Message);
                 }), context, cancellationToken);
                 episodeResult.Video = exact.Video;
                 episodeResult.Audio = exact.Audio;
@@ -378,7 +378,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                 foreach (var file in episodeResult.OutputFiles) allFiles.Add(file);
                 episodeResult.State = DownloadEpisodeResultState.Completed;
                 completed++;
-                ReportProgress(progress, DownloadProgressPhase.Completed, completed, request.Episodes.Count, desired, 100, 100, string.Empty, string.Empty, $"P{desired.PageNumber} 下载完成");
+                ReportProgress(progress, DownloadProgressPhase.Completed, completed, request.Episodes.Count, desired, 100, string.Empty, string.Empty, $"P{desired.PageNumber} 下载完成");
             }
             catch (OperationCanceledException)
             {
@@ -398,7 +398,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                 episodeResult.Error = exception.Message;
                 completed++;
                 context.AppendLog($"\nP{desired.PageNumber} 下载失败：{exception.Message}\n");
-                ReportProgress(progress, DownloadProgressPhase.Failed, completed, request.Episodes.Count, desired, 100, null, string.Empty, string.Empty, $"P{desired.PageNumber} 下载失败，继续下一集");
+                ReportProgress(progress, DownloadProgressPhase.Failed, completed, request.Episodes.Count, desired, null, string.Empty, string.Empty, $"P{desired.PageNumber} 下载失败，继续下一集");
             }
         }
 
@@ -449,8 +449,11 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var arguments = BBDownCommandBuilder.BuildExactDownloadArguments(part, tools);
         var input = BuildExactInput(decision.Video, decision.Audio, part.DownloadMode, request.Episode.IsMuxedStream);
         var before = SnapshotDirectory(request.OutputDirectory);
-        var aria = new Aria2ProgressParser();
         var progressMode = request.Episode.IsMuxedStream ? DownloadMode.VideoOnly : part.DownloadMode;
+        var aria = new Aria2ProgressParser(
+            decision.Video?.EstimatedSizeBytes ?? 0,
+            decision.Audio?.EstimatedSizeBytes ?? 0,
+            progressMode);
         var internalProgress = new BBDownInternalProgressParser(
             decision.Video?.EstimatedSizeBytes ?? 0,
             decision.Audio?.EstimatedSizeBytes ?? 0,
@@ -716,9 +719,9 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
     }
 
     private static void ReportProgress(IProgress<DownloadProgressSnapshot>? progress, DownloadProgressPhase phase, int completed, int total,
-        EpisodeStreamSelection episode, double currentContribution, double? currentPercent, string speed, string eta, string message)
+        EpisodeStreamSelection episode, double? currentPercent, string speed, string eta, string message)
     {
-        var overall = total <= 0 ? 0 : Math.Clamp((completed + currentContribution / 100d) * 100d / total, 0, 100);
+        var overall = total <= 0 ? 0 : Math.Clamp(completed * 100d / total, 0, 100);
         progress?.Report(new DownloadProgressSnapshot(phase, completed, total, episode.PageNumber, episode.PageTitle, overall, currentPercent, speed, eta, message));
     }
 

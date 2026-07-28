@@ -18,6 +18,8 @@ public sealed class CommandBuilderTests
     [Theory]
     [InlineData("4K·HDR真彩", "HDR 真彩")]
     [InlineData("4K·SDR增强", "4K·SDR增强")]
+    [InlineData("智能修复", "智能修复")]
+    [InlineData("AI修复", "智能修复")]
     [InlineData("4K 大视界", "4K 超清")]
     [InlineData("大视界4K", "4K 超清")]
     [InlineData("4K 超高清", "4K 超清")]

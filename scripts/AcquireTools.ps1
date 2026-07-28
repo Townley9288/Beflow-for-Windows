@@ -66,6 +66,22 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $Replacement = '{"127","8K 超高清" }, {"126","杜比视界" }, {"125","HDR 真彩" }, {"122","4K·SDR增强" }, {"120","4K 超清" }'
     if (-not $ConfigContent.Contains($Needle)) { throw 'The pinned BBDown quality table changed; refusing to apply an unverified source patch.' }
     $ConfigContent = $ConfigContent.Replace($Needle, $Replacement)
+
+    $Quality100Needle = '{"112","1080P 高码率" }, {"80","1080P 高清" }'
+    $Quality100Replacement = '{"112","1080P 高码率" }, {"100","智能修复" }, {"80","1080P 高清" }'
+    if (-not $ConfigContent.Contains($Quality100Needle)) { throw 'The pinned BBDown 1080P quality table changed; refusing to add qn 100.' }
+    $ConfigContent = $ConfigContent.Replace($Quality100Needle, $Quality100Replacement)
+
+    $ConfigMethodNeedle = '        };'
+    if ([regex]::Matches($ConfigContent, [regex]::Escape($ConfigMethodNeedle)).Count -ne 1) { throw 'The pinned BBDown quality table terminator changed; refusing to add the safe quality lookup.' }
+    $ConfigMethodReplacement = $ConfigMethodNeedle + [Environment]::NewLine + [Environment]::NewLine +
+        '        public static string GetQualityName(string qualityId)' + [Environment]::NewLine +
+        '        {' + [Environment]::NewLine +
+        '            return qualitys.TryGetValue(qualityId, out var qualityName)' + [Environment]::NewLine +
+        '                ? qualityName' + [Environment]::NewLine +
+        '                : $"未知画质 {qualityId}";' + [Environment]::NewLine +
+        '        }'
+    $ConfigContent = $ConfigContent.Replace($ConfigMethodNeedle, $ConfigMethodReplacement)
     [IO.File]::WriteAllText($ConfigPath, $ConfigContent, [Text.UTF8Encoding]::new($false))
 
     $ParserPath = Join-Path $WorkingDirectory 'BBDown.Core\Parser.cs'
@@ -76,13 +92,86 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
         '                if (bangumi) apiBuilder.Append("&drm_tech_type=3");'
     if (-not $ParserContent.Contains($ParserNeedle)) { throw 'The pinned BBDown WEB playurl request changed; refusing to apply an unverified source patch.' }
     $ParserContent = $ParserContent.Replace($ParserNeedle, $ParserReplacement)
+
+    $IntlStreamNeedle = 'var videoId = stream.GetProperty("stream_info").GetProperty("quality").ToString();'
+    $IntlStreamReplacement = 'var streamInfo = stream.GetProperty("stream_info");' + [Environment]::NewLine +
+        '                            var videoId = streamInfo.GetProperty("quality").ToString();'
+    if (-not $ParserContent.Contains($IntlStreamNeedle)) { throw 'The pinned BBDown international stream metadata changed; refusing to apply the safe quality lookup.' }
+    $ParserContent = $ParserContent.Replace($IntlStreamNeedle, $IntlStreamReplacement)
+
+    $VideoQualityIndex = [regex]::new('dfn = Config\.qualitys\[videoId\],')
+    if ($VideoQualityIndex.Matches($ParserContent).Count -ne 2) { throw 'The pinned BBDown DASH quality lookups changed; refusing to apply the safe quality lookup.' }
+    $ParserContent = $VideoQualityIndex.Replace($ParserContent, 'dfn = ResolveQualityName(streamInfo, videoId),', 1)
+    $ParserContent = $VideoQualityIndex.Replace($ParserContent, 'dfn = ResolveQualityName(root, videoId),', 1)
+
+    $DurlQualityNeedle = 'dfn = Config.qualitys[quality],'
+    if (-not $ParserContent.Contains($DurlQualityNeedle)) { throw 'The pinned BBDown durl quality lookup changed; refusing to apply the safe quality lookup.' }
+    $ParserContent = $ParserContent.Replace($DurlQualityNeedle, 'dfn = ResolveQualityName(root, quality),')
+
+    $ResolverNeedle = '        private static string GetVideoCodec(string code)'
+    if (-not $ParserContent.Contains($ResolverNeedle)) { throw 'The pinned BBDown parser helper layout changed; refusing to add the safe quality lookup.' }
+    $ResolverReplacement = @'
+        private static string ResolveQualityName(JsonElement source, string qualityId)
+        {
+            if (source.ValueKind == JsonValueKind.Object)
+            {
+                if (TryReadQualityDescription(source, qualityId, out var description)) return description;
+                if (source.TryGetProperty("support_formats", out JsonElement formats) && formats.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var format in formats.EnumerateArray())
+                    {
+                        if (TryReadQualityDescription(format, qualityId, out description)) return description;
+                    }
+                }
+            }
+
+            return Config.GetQualityName(qualityId);
+        }
+
+        private static bool TryReadQualityDescription(JsonElement node, string qualityId, out string description)
+        {
+            description = "";
+            if (node.ValueKind != JsonValueKind.Object ||
+                !node.TryGetProperty("quality", out JsonElement quality) ||
+                quality.ToString() != qualityId)
+            {
+                return false;
+            }
+
+            foreach (var propertyName in new[] { "new_description", "display_desc", "description" })
+            {
+                if (node.TryGetProperty(propertyName, out JsonElement value) &&
+                    value.ValueKind == JsonValueKind.String &&
+                    !string.IsNullOrWhiteSpace(value.GetString()))
+                {
+                    description = value.GetString()!;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+'@
+    $ParserContent = $ParserContent.Replace($ResolverNeedle, $ResolverReplacement + $ResolverNeedle)
+    if ($ParserContent.Contains('Config.qualitys[')) { throw 'An unsafe BBDown parser quality lookup remains after patching.' }
     [IO.File]::WriteAllText($ParserPath, $ParserContent, [Text.UTF8Encoding]::new($false))
+
+    $ProgramPath = Join-Path $WorkingDirectory 'BBDown\Program.cs'
+    $ProgramContent = [IO.File]::ReadAllText($ProgramPath)
+    $DolbyNeedle = 'Config.qualitys["126"]'
+    $InteractiveNeedle = 'Config.qualitys[key]'
+    if (-not $ProgramContent.Contains($DolbyNeedle) -or -not $ProgramContent.Contains($InteractiveNeedle)) { throw 'The pinned BBDown program quality lookups changed; refusing to apply the safe quality lookup.' }
+    $ProgramContent = $ProgramContent.Replace($DolbyNeedle, 'Config.GetQualityName("126")')
+    $ProgramContent = $ProgramContent.Replace($InteractiveNeedle, 'Config.GetQualityName(key)')
+    if ($ProgramContent.Contains('Config.qualitys[')) { throw 'An unsafe BBDown program quality lookup remains after patching.' }
+    [IO.File]::WriteAllText($ProgramPath, $ProgramContent, [Text.UTF8Encoding]::new($false))
 
     $Project = Join-Path $WorkingDirectory 'BBDown\BBDown.csproj'
     & dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:ManagePackageVersionsCentrally=false -p:Version=$($Entry.version) -o $Publish | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patched BBDown build failed with exit code $LASTEXITCODE" }
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Patched BBDown build did not produce BBDown.exe.' }
-    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`nquality=100:智能修复`nquality_lookup=support_formats_then_safe_fallback`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`n", [Text.UTF8Encoding]::new($false))
     return $Publish
 }
 

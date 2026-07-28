@@ -71,6 +71,7 @@ public sealed class DownloadViewModel : ObservableObject
         new("4K 超高清", "4K 超高清（大视界）"),
         new("1080P 高码率", "1080P 高码率"),
         new("1080P 高清", "1080P 高清"),
+        new("智能修复", "智能修复"),
         new("720P 准高清", "720P 准高清"),
         new("480P 标清", "480P 标清"),
         new("360P 流畅", "360P 流畅")

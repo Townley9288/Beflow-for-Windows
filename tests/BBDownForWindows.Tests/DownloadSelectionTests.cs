@@ -66,6 +66,8 @@ public sealed class DownloadSelectionTests
     [InlineData("4K 超高清", "4K 超高清")]
     [InlineData("SDR增强", "4K·SDR增强")]
     [InlineData("4K·SDR增强", "4K·SDR增强")]
+    [InlineData("智能修复", "智能修复")]
+    [InlineData("AI修复", "智能修复")]
     [InlineData("4K 大视界", "4K 超高清")]
     [InlineData("大视界4K", "4K 超高清")]
     [InlineData("720P 高清", "720P 准高清")]
@@ -275,6 +277,18 @@ public sealed class DownloadSelectionTests
     }
 
     [Fact]
+    public void AriaProgressUsesPlannedVideoAndAudioSizesBeforeSecondTransferStarts()
+    {
+        var parser = new Aria2ProgressParser(100L * 1024 * 1024, 20L * 1024 * 1024, DownloadMode.VideoAndAudio);
+
+        Assert.True(parser.TryConsume("[#aaaa11 100MiB/100MiB(100%) CN:8 DL:10MiB ETA:0s]", out var video));
+        Assert.True(parser.TryConsume("[#bbbb22 10MiB/20MiB(50%) CN:8 DL:8MiB ETA:1s]", out var audio));
+
+        Assert.Equal(83.33, video.Percent, 2);
+        Assert.Equal(91.67, audio.Percent, 2);
+    }
+
+    [Fact]
     public async Task ServiceParsesAllPagesAndReportsIncrementalEpisodes()
     {
         using var fixture = new ServiceFixture(new ScriptedRunner());
@@ -402,6 +416,7 @@ public sealed class DownloadSelectionTests
         using var fixture = new ServiceFixture(runner);
         var output = Directory.CreateDirectory(Path.Combine(fixture.Root.FullName, "output"));
         DownloadBatchResult? batch = null;
+        var progress = new List<DownloadProgressSnapshot>();
         var manager = new TaskManager(fixture.Paths, runner);
         var request = new DownloadBatchRequest
         {
@@ -415,7 +430,7 @@ public sealed class DownloadSelectionTests
 
         var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadBatch, false, "batch", async (context, token) =>
         {
-            batch = await fixture.Service.DownloadBatchAsync(request, null, context, token);
+            batch = await fixture.Service.DownloadBatchAsync(request, new SynchronousProgress<DownloadProgressSnapshot>(progress.Add), context, token);
         });
 
         Assert.Equal(TaskState.Completed, snapshot.State);
@@ -429,6 +444,8 @@ public sealed class DownloadSelectionTests
         Assert.Contains(Path.Combine("测试合集", "[P02]第二集"), downloads[1].Arguments);
         Assert.Equal(Path.Combine(output.FullName, "测试合集"), batch.OutputDirectory);
         Assert.Contains(batch.OutputFiles, path => path.EndsWith(Path.Combine("测试合集", "[P01]第一集.mp4"), StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(progress, update => update.CompletedEpisodes == 1 && update.TotalEpisodes == 2 && Math.Abs(update.OverallPercent - 50) < 0.01);
+        Assert.DoesNotContain(progress, update => update.CompletedEpisodes < update.TotalEpisodes && update.OverallPercent >= 100);
     }
 
     [Fact]
