@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using BBDownForWindows.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -12,6 +13,7 @@ public sealed class DualAudioViewModel : ObservableObject
     public sealed record OptionItem(string Value, string Label);
 
     private readonly AppServices _services;
+    private readonly Action<Action> _deferCatalogRowsClear;
     private bool _initialized;
     private bool _active;
     private string _sourceModeText = "两个独立链接";
@@ -52,6 +54,7 @@ public sealed class DualAudioViewModel : ObservableObject
     private string _apiMode = "WEB";
     private bool _isParsing;
     private int _parseGeneration;
+    private int _catalogRowsClearGeneration;
     private bool _suppressSourceInvalidation;
     private bool _existingTaskCanRemux;
     private int _existingInspectionGeneration;
@@ -60,19 +63,22 @@ public sealed class DualAudioViewModel : ObservableObject
     private bool _manifestAudioMetadataModified;
     private bool _manifestDelayModified;
 
-    public DualAudioViewModel(AppServices services)
+    public DualAudioViewModel(AppServices services) : this(services, CreateCatalogRowsClearScheduler()) { }
+
+    internal DualAudioViewModel(AppServices services, Action<Action> deferCatalogRowsClear)
     {
         _services = services;
+        _deferCatalogRowsClear = deferCatalogRowsClear;
         Console = services.TaskConsole;
-        ParseCurrentCommand = new AsyncRelayCommand(() => ParseAsync(DownloadParseMode.Current), CanParse);
-        ParseAllCommand = new AsyncRelayCommand(() => ParseAsync(DownloadParseMode.All), CanParse);
-        RetrySourceACommand = new AsyncRelayCommand(() => RetrySourceAsync(DualAudioSource.A), () => CanRetrySource(DualAudioSource.A));
-        RetrySourceBCommand = new AsyncRelayCommand(() => RetrySourceAsync(DualAudioSource.B), () => CanRetrySource(DualAudioSource.B));
+        ParseCurrentCommand = new AsyncRelayCommand(() => RunCommandAsync("解析失败", () => ParseAsync(DownloadParseMode.Current)), CanParse);
+        ParseAllCommand = new AsyncRelayCommand(() => RunCommandAsync("解析失败", () => ParseAsync(DownloadParseMode.All)), CanParse);
+        RetrySourceACommand = new AsyncRelayCommand(() => RunCommandAsync("来源 A 重新解析失败", () => RetrySourceAsync(DualAudioSource.A)), () => CanRetrySource(DualAudioSource.A));
+        RetrySourceBCommand = new AsyncRelayCommand(() => RunCommandAsync("来源 B 重新解析失败", () => RetrySourceAsync(DualAudioSource.B)), () => CanRetrySource(DualAudioSource.B));
         ApplyAllCommand = new RelayCommand(ApplyAll, () => Pairs.Count > 0 && !Console.IsBusy);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true), () => Pairs.Count > 0 && !Console.IsBusy);
         InvertSelectionCommand = new RelayCommand(InvertSelection, () => Pairs.Count > 0 && !Console.IsBusy);
-        StartCommand = new AsyncRelayCommand(StartAsync, CanStart);
-        RemuxCommand = new AsyncRelayCommand(RemuxAsync, CanRemux);
+        StartCommand = new AsyncRelayCommand(() => RunCommandAsync("多音轨任务失败", StartAsync), CanStart);
+        RemuxCommand = new AsyncRelayCommand(() => RunCommandAsync("重新封装失败", RemuxAsync), CanRemux);
     }
 
     public IReadOnlyList<string> SourceModes { get; } = ["两个独立链接", "同一链接奇偶分P"];
@@ -286,6 +292,7 @@ public sealed class DualAudioViewModel : ObservableObject
 
     private void LoadCatalog(DualAudioCatalog catalog)
     {
+        ClearCatalogRows();
         _catalog = catalog;
         SourceATitle = catalog.SourceA?.Title ?? string.Empty;
         SourceBTitle = catalog.SourceB?.Title ?? string.Empty;
@@ -295,7 +302,6 @@ public sealed class DualAudioViewModel : ObservableObject
             .OrderBy(item => item.Page.Number)
             .Select(item => new DualAudioPairViewModel.EpisodeChoice(item.Page.Number, $"P{item.Page.Number} · {item.Page.Title}", item))
             .ToList();
-        Pairs.Clear();
         foreach (var pair in catalog.Pairs)
         {
             var row = new DualAudioPairViewModel(pair, sourceBChoices, SourceARule(), SourceBRule(), checked((int)SourceBDelay));
@@ -660,7 +666,13 @@ public sealed class DualAudioViewModel : ObservableObject
     private void InvalidateParsedCatalog()
     {
         _parseGeneration++;
-        ClearCatalogRows();
+        _catalog = null;
+        var clearGeneration = ++_catalogRowsClearGeneration;
+        _deferCatalogRowsClear(() =>
+        {
+            if (clearGeneration != _catalogRowsClearGeneration) return;
+            ClearCatalogRowsCore();
+        });
         SourceATitle = string.Empty;
         SourceBTitle = string.Empty;
         SourceAParseStatus = "尚未解析";
@@ -669,21 +681,67 @@ public sealed class DualAudioViewModel : ObservableObject
         OverallProgress = 0;
         CurrentProgress = 0;
         ProgressDetail = string.Empty;
-        NotifyRowsChanged();
     }
 
     private void ClearCatalogRows()
+    {
+        _catalogRowsClearGeneration++;
+        ClearCatalogRowsCore();
+    }
+
+    private void ClearCatalogRowsCore()
     {
         foreach (var row in Pairs)
         {
             row.SourceBReassignRequested -= Row_SourceBReassignRequested;
             row.PropertyChanged -= Row_PropertyChanged;
+            row.Dispose();
         }
         Pairs.Clear();
         _catalog = null;
         OnPropertyChanged(nameof(SourceARetryVisibility));
         OnPropertyChanged(nameof(SourceBRetryVisibility));
         NotifyRowsChanged();
+    }
+
+    private async Task RunCommandAsync(string failurePrefix, Func<Task> operation)
+    {
+        try
+        {
+            await operation();
+        }
+        catch (OperationCanceledException)
+        {
+            ShowMessage("操作已取消。", InfoBarSeverity.Warning);
+        }
+        catch (Exception exception)
+        {
+            ShowMessage($"{failurePrefix}：{exception.Message}", InfoBarSeverity.Error);
+        }
+        finally
+        {
+            NotifyCommands();
+        }
+    }
+
+    private static Action<Action> CreateCatalogRowsClearScheduler()
+    {
+        try
+        {
+            var dispatcher = DispatcherQueue.GetForCurrentThread();
+            if (dispatcher is not null)
+            {
+                return action =>
+                {
+                    if (!dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => action())) action();
+                };
+            }
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // Headless unit tests do not bootstrap the Windows App SDK dispatcher.
+        }
+        return action => action();
     }
 
     private bool CatalogMatchesCurrentInput()

@@ -203,6 +203,58 @@ public sealed class AppViewModelTests
     }
 
     [Fact]
+    public void ChangingDualAudioLinksDefersPopulatedRowTeardownUntilTheBindingUpdateReturns()
+    {
+        using var fixture = new AppFixture();
+        var deferred = new Queue<Action>();
+        var viewModel = new DualAudioViewModel(fixture.Services, deferred.Enqueue)
+        {
+            SourceAUrl = "https://www.bilibili.com/video/BV1oldA",
+            SourceBUrl = "https://www.bilibili.com/video/BV1oldB"
+        };
+        deferred.Clear();
+        viewModel.Pairs.Add(CreateDualAudioPairViewModel());
+
+        viewModel.SourceAUrl = "https://www.bilibili.com/video/BV1newA";
+        viewModel.SourceBUrl = "https://www.bilibili.com/video/BV1newB";
+
+        Assert.Single(viewModel.Pairs);
+        Assert.Equal(2, deferred.Count);
+        deferred.Dequeue().Invoke();
+        Assert.Single(viewModel.Pairs);
+        deferred.Dequeue().Invoke();
+        Assert.Empty(viewModel.Pairs);
+        Assert.False(viewModel.StartCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task DualAudioCommandSurfacesUnexpectedPostProcessingFailuresInsteadOfCrashingTheApp()
+    {
+        using var fixture = new AppFixture();
+        const string sourceAUrl = "https://www.bilibili.com/video/BV1sourceA";
+        const string sourceBUrl = "https://www.bilibili.com/video/BV1sourceB";
+        var viewModel = new DualAudioViewModel(fixture.Services)
+        {
+            SourceAUrl = sourceAUrl,
+            SourceBUrl = sourceBUrl,
+            SourceBDelay = double.NaN
+        };
+        viewModel.Pairs.Add(CreateDualAudioPairViewModel());
+        typeof(DualAudioViewModel).GetField("_catalog", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(viewModel, new DualAudioCatalog
+            {
+                SourceMode = DualAudioSourceMode.Separate,
+                SourceAUrl = sourceAUrl,
+                SourceBUrl = sourceBUrl
+            });
+
+        Assert.True(viewModel.StartCommand.CanExecute(null));
+        await viewModel.StartCommand.ExecuteAsync(null);
+
+        Assert.Contains("多音轨任务失败", viewModel.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TemplateEditorRejectsUnknownFieldsBeforeWritingSettings()
     {
         using var fixture = new AppFixture();
@@ -286,4 +338,25 @@ public sealed class AppViewModelTests
             _root.Delete(true);
         }
     }
+
+    private static DualAudioPairViewModel CreateDualAudioPairViewModel()
+    {
+        var sourceA = ReadyEpisode(1, "来源 A");
+        var sourceB = ReadyEpisode(1, "来源 B");
+        var rule = new StreamSelectionRule("1080P 高清", "HEVC", "M4A", AudioBitratePriority.Highest);
+        return new DualAudioPairViewModel(
+            new DualAudioEpisodePair { PairNumber = 1, SourceA = sourceA, SourceB = sourceB },
+            [new DualAudioPairViewModel.EpisodeChoice(1, "P1 · 来源 B", sourceB)],
+            rule,
+            rule,
+            0);
+    }
+
+    private static DownloadEpisodeInfo ReadyEpisode(int page, string title) => new()
+    {
+        Page = new PageInfo(page, page.ToString(), title, "24m"),
+        State = DownloadEpisodeParseState.Ready,
+        VideoStreams = [new VideoStreamInfo(0, "1080P 高清", "1920x1080", 1920, 1080, "HEVC", "24", "1000 kbps", 1000, "100 MB")],
+        AudioStreams = [new AudioStreamInfo(1, "M4A", "192 kbps", 192, "20 MB")]
+    };
 }

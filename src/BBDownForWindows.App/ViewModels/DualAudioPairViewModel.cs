@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace BBDownForWindows.App.ViewModels;
 
-public sealed class DualAudioPairViewModel : ObservableObject
+public sealed class DualAudioPairViewModel : ObservableObject, IDisposable
 {
     public sealed record EpisodeChoice(int PageNumber, string Label, DownloadEpisodeInfo Episode);
 
@@ -178,6 +178,13 @@ public sealed class DualAudioPairViewModel : ObservableObject
             DualAudioProgressPhase.Cancelled => "已取消",
             _ => update.Message
         };
+    }
+
+    public void Dispose()
+    {
+        if (SourceA is not null) SourceA.SelectionChanged -= Source_SelectionChanged;
+        if (SourceB is not null) SourceB.SelectionChanged -= Source_SelectionChanged;
+        SourceBReassignRequested = null;
     }
 
     private void Source_SelectionChanged(object? sender, EventArgs e) => UpdateRecommendation();
