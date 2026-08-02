@@ -11,6 +11,26 @@ namespace BBDownForWindows.App.ViewModels;
 public sealed class DualAudioViewModel : ObservableObject
 {
     public sealed record OptionItem(string Value, string Label);
+    public sealed record AudioTrackPreset(string TrackName, string Language, string DisplayName, bool IsCustom = false);
+
+    private static readonly IReadOnlyList<AudioTrackPreset> TrackPresetOptions =
+    [
+        new("国语", "zh", "国语（zh）"),
+        new("普通话", "cmn", "普通话（cmn）"),
+        new("台配国语", "cmn-TW", "台配国语（cmn-TW）"),
+        new("粤语", "yue", "粤语（yue）"),
+        new("闽南语", "nan", "闽南语（nan）"),
+        new("日语", "ja", "日语（ja）"),
+        new("英语", "en", "英语（en）"),
+        new("韩语", "ko", "韩语（ko）"),
+        new("法语", "fr", "法语（fr）"),
+        new("德语", "de", "德语（de）"),
+        new("西班牙语", "es", "西班牙语（es）"),
+        new("俄语", "ru", "俄语（ru）"),
+        new("泰语", "th", "泰语（th）"),
+        new("越南语", "vi", "越南语（vi）"),
+        new(string.Empty, string.Empty, "自定义（保留当前值）", true)
+    ];
 
     private readonly AppServices _services;
     private readonly Action<Action> _deferCatalogRowsClear;
@@ -31,6 +51,9 @@ public sealed class DualAudioViewModel : ObservableObject
     private string _sourceBLabel = "粤语";
     private string _sourceALanguage = "zh";
     private string _sourceBLanguage = "yue";
+    private AudioTrackPreset? _sourceAPreset = TrackPresetOptions[0];
+    private AudioTrackPreset? _sourceBPreset = TrackPresetOptions[3];
+    private bool _applyingAudioTrackPreset;
     private string _defaultAudio = "来源 A";
     private double _sourceBDelay;
     private bool _keepSourceFiles = true;
@@ -98,6 +121,7 @@ public sealed class DualAudioViewModel : ObservableObject
     public IReadOnlyList<OptionItem> AudioBitrateOptions { get; } = [new("highest", "最高码率"), new("lowest", "最低码率")];
     public IReadOnlyList<string> MainVideoModeOptions { get; } = ["推荐", "来源 A", "来源 B"];
     public IReadOnlyList<string> DefaultAudioOptions { get; } = ["来源 A", "来源 B"];
+    public IReadOnlyList<AudioTrackPreset> AudioTrackPresets => TrackPresetOptions;
     public ObservableCollection<DualAudioPairViewModel> Pairs { get; } = [];
     public TaskConsoleViewModel Console { get; }
 
@@ -113,10 +137,12 @@ public sealed class DualAudioViewModel : ObservableObject
     public string SourceBAudio { get => _sourceBAudio; set => SetProperty(ref _sourceBAudio, value); }
     public string AudioBitrate { get => _audioBitrate; set => SetProperty(ref _audioBitrate, value); }
     public string MainVideoMode { get => _mainVideoMode; set => SetProperty(ref _mainVideoMode, value); }
-    public string SourceALabel { get => _sourceALabel; set { if (SetProperty(ref _sourceALabel, value)) MarkManifestAudioMetadataModified(); } }
-    public string SourceBLabel { get => _sourceBLabel; set { if (SetProperty(ref _sourceBLabel, value)) MarkManifestAudioMetadataModified(); } }
-    public string SourceALanguage { get => _sourceALanguage; set { if (SetProperty(ref _sourceALanguage, value)) MarkManifestAudioMetadataModified(); } }
-    public string SourceBLanguage { get => _sourceBLanguage; set { if (SetProperty(ref _sourceBLanguage, value)) MarkManifestAudioMetadataModified(); } }
+    public AudioTrackPreset? SourceAPreset { get => _sourceAPreset; set => ApplyAudioTrackPreset(value, DualAudioSource.A); }
+    public AudioTrackPreset? SourceBPreset { get => _sourceBPreset; set => ApplyAudioTrackPreset(value, DualAudioSource.B); }
+    public string SourceALabel { get => _sourceALabel; set { if (SetProperty(ref _sourceALabel, value)) { MarkManifestAudioMetadataModified(); SyncAudioTrackPreset(DualAudioSource.A); } } }
+    public string SourceBLabel { get => _sourceBLabel; set { if (SetProperty(ref _sourceBLabel, value)) { MarkManifestAudioMetadataModified(); SyncAudioTrackPreset(DualAudioSource.B); } } }
+    public string SourceALanguage { get => _sourceALanguage; set { if (SetProperty(ref _sourceALanguage, value)) { MarkManifestAudioMetadataModified(); SyncAudioTrackPreset(DualAudioSource.A); } } }
+    public string SourceBLanguage { get => _sourceBLanguage; set { if (SetProperty(ref _sourceBLanguage, value)) { MarkManifestAudioMetadataModified(); SyncAudioTrackPreset(DualAudioSource.B); } } }
     public string DefaultAudio { get => _defaultAudio; set { if (SetProperty(ref _defaultAudio, value)) MarkManifestAudioMetadataModified(); } }
     public double SourceBDelay { get => _sourceBDelay; set { if (SetProperty(ref _sourceBDelay, Math.Clamp(value, -10000, 10000))) MarkManifestDelayModified(); } }
     public bool KeepSourceFiles { get => _keepSourceFiles; set => SetProperty(ref _keepSourceFiles, value); }
@@ -160,6 +186,69 @@ public sealed class DualAudioViewModel : ObservableObject
     public IAsyncRelayCommand RemuxCommand { get; }
     public Func<Task<bool>>? ConfirmMkvmergeAvailableAsync { get; set; }
     public void DismissMessage() => Message = string.Empty;
+
+    private void ApplyAudioTrackPreset(AudioTrackPreset? preset, DualAudioSource source)
+    {
+        if (preset is null) return;
+        var selectedPreset = source == DualAudioSource.A ? _sourceAPreset : _sourceBPreset;
+        if (Equals(selectedPreset, preset)) return;
+
+        if (source == DualAudioSource.A)
+        {
+            _sourceAPreset = preset;
+            OnPropertyChanged(nameof(SourceAPreset));
+        }
+        else
+        {
+            _sourceBPreset = preset;
+            OnPropertyChanged(nameof(SourceBPreset));
+        }
+
+        if (preset.IsCustom) return;
+        _applyingAudioTrackPreset = true;
+        try
+        {
+            if (source == DualAudioSource.A)
+            {
+                SourceALabel = preset.TrackName;
+                SourceALanguage = preset.Language;
+            }
+            else
+            {
+                SourceBLabel = preset.TrackName;
+                SourceBLanguage = preset.Language;
+            }
+        }
+        finally
+        {
+            _applyingAudioTrackPreset = false;
+        }
+    }
+
+    private void SyncAudioTrackPreset(DualAudioSource source)
+    {
+        if (_applyingAudioTrackPreset) return;
+        var trackName = source == DualAudioSource.A ? SourceALabel : SourceBLabel;
+        var language = source == DualAudioSource.A ? SourceALanguage : SourceBLanguage;
+        var preset = TrackPresetOptions.FirstOrDefault(item =>
+            !item.IsCustom &&
+            string.Equals(item.TrackName, trackName, StringComparison.Ordinal) &&
+            string.Equals(item.Language, language, StringComparison.OrdinalIgnoreCase)) ?? TrackPresetOptions[^1];
+
+        if (source == DualAudioSource.A)
+        {
+            if (Equals(_sourceAPreset, preset)) return;
+            _sourceAPreset = preset;
+            OnPropertyChanged(nameof(SourceAPreset));
+        }
+        else
+        {
+            if (Equals(_sourceBPreset, preset)) return;
+            _sourceBPreset = preset;
+            OnPropertyChanged(nameof(SourceBPreset));
+        }
+    }
+
     public async Task PrepareExistingRemuxAsync(string taskDirectory)
     {
         ExistingTaskDirectory = taskDirectory;

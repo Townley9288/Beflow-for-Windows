@@ -63,7 +63,7 @@
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
-        <ScrollViewer x:Name="SettingsScrollViewer" HorizontalScrollBarVisibility="Disabled" SizeChanged="SettingsScrollViewer_SizeChanged"><StackPanel x:Name="SettingsContent" Padding="24,16" Spacing="12" HorizontalAlignment="Left">
+        <ScrollViewer x:Name="SettingsScrollViewer" HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch"><StackPanel x:Name="SettingsContent" Padding="24,16" Spacing="12" HorizontalAlignment="Stretch">
         <StackPanel><TextBlock Text="设置" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock Text="默认下载参数、外部工具和任务日志" Opacity="0.65"/></StackPanel>
         <StackPanel Spacing="8">
         <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">

@@ -25,27 +25,23 @@
 - 批量下载进度、规格历史详情、失败集重试、持久日志和任务取消
 - 跟随系统、浅色与深色主题切换，并记忆上次选择
 - 剪贴板链接自动识别与解析、下载及多音轨页面链接拖放，并提供独立开关
-- 安装版与便携版在线更新
+- 安装版在线更新
 
 运行时不需要 Python、Node、Eel、Vue、WebView 或预先安装的 .NET Runtime。
 
 ## 下载与安装
 
-从 [GitHub Releases](https://github.com/Townley9288/Beflow-for-Windows/releases) 下载：
-
-- `Beflow-for-Windows-vX.Y.Z[.R]-win-x64-setup.exe`：安装版
-- `Beflow-for-Windows-vX.Y.Z[.R]-win-x64-portable.zip`：绿色便携版
+从 [GitHub Releases](https://github.com/Townley9288/Beflow-for-Windows/releases) 下载 `Beflow-for-Windows-vX.Y.Z[.R]-win-x64-setup.exe` 安装版。项目不再发布便携版。
 
 项目暂未购买代码签名证书，Windows SmartScreen 可能在首次运行时显示“未知发布者”。请只从本仓库 Release 下载，并可使用同名 `.sha256` 文件核对完整性。
 
-便携版请完整解压后运行 `Beflow.exe`，不要删除 `portable.flag`。便携数据保存在程序旁的 `Data` 目录；安装版数据保存在 `%LOCALAPPDATA%\Beflow`。
+安装版数据保存在 `%LOCALAPPDATA%\Beflow`，覆盖安装会保留现有配置和历史记录。
 
 ## 在线更新
 
 软件默认在启动时每天最多检查一次 GitHub 稳定版，不会自动下载安装。关于页可以手动检查并确认更新：
 
 - 安装版下载并校验新安装包，然后执行覆盖安装。
-- 便携版由独立更新助手替换程序文件，始终保留 `Data` 和 `portable.flag`，失败时自动回滚。
 
 更新检查直接读取 GitHub Releases 的最新稳定标签，不调用 GitHub API；五分钟内重复检查使用本地内存缓存。该功能可以在设置页关闭，GitHub 暂时不可访问不会影响下载、登录和封装功能。
 
@@ -66,10 +62,8 @@ dotnet build src\BBDownForWindows.App\BBDownForWindows.App.csproj -c Release -p:
 生成发行包：
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 1.1.1.1
+.\scripts\Build-Release.ps1 -Version 1.1.1.2
 ```
-
-正式 CI 使用 Native AOT 构建便携更新助手。本地 Native AOT 构建需要 Visual Studio 的 Desktop development with C++ 与 Windows 10/11 SDK；缺少时脚本会为本地测试回退到自包含单文件助手。
 
 BBDown 与 aria2 由脚本从官方 Release 下载。固定 FFmpeg 历史归档可通过 `-FfmpegArchiveUrl`、环境变量 `FFMPEG_ARCHIVE_URL` 或本地归档提供，所有工具下载均校验 SHA-256。
 

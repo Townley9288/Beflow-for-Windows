@@ -7,6 +7,8 @@ namespace BBDownForWindows.Core;
 
 public sealed class AccountStatusService : IAccountStatusService
 {
+    private const int FreshWebCredentialValidationAttempts = 6;
+    private static readonly TimeSpan FreshWebCredentialWindow = TimeSpan.FromSeconds(30);
     private const string WebStatusUrl = "https://api.bilibili.com/x/web-interface/nav";
     private const string TvStatusUrl = "https://app.bilibili.com/x/v2/account/myinfo";
     private const string TvAppKey = "4409e2ce8ffd12b8";
@@ -14,12 +16,18 @@ public sealed class AccountStatusService : IAccountStatusService
     private readonly ApplicationPaths _paths;
     private readonly HttpClient _httpClient;
     private readonly TimeProvider _timeProvider;
+    private readonly TimeSpan _freshWebCredentialRetryDelay;
 
-    public AccountStatusService(ApplicationPaths paths, HttpClient httpClient, TimeProvider? timeProvider = null)
+    public AccountStatusService(
+        ApplicationPaths paths,
+        HttpClient httpClient,
+        TimeProvider? timeProvider = null,
+        TimeSpan? freshWebCredentialRetryDelay = null)
     {
         _paths = paths;
         _httpClient = httpClient;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _freshWebCredentialRetryDelay = freshWebCredentialRetryDelay ?? TimeSpan.FromSeconds(1);
     }
 
     public async Task<AccountStatusSnapshot> GetStatusAsync(CancellationToken cancellationToken = default)
@@ -45,42 +53,63 @@ public sealed class AccountStatusService : IAccountStatusService
         if (unavailable is not null) return unavailable;
         if (credential is null) return Missing(AccountChannel.Web, checkedAt);
         var expiresAt = WebCredentialExpiresAt(credential);
+        var retryFreshCredential = IsRecentlyUpdated(CredentialUpdatedAt(_paths.WebCredentialFile), checkedAt);
 
-        try
+        for (var attempt = 1; ; attempt++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, WebStatusUrl);
-            request.Headers.TryAddWithoutValidation("Cookie", credential);
-            request.Headers.TryAddWithoutValidation("User-Agent", "Beflow-for-Windows/1.0");
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            if (!response.IsSuccessStatusCode) return WithExpiry(HttpUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile, response.StatusCode), expiresAt);
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            var root = document.RootElement;
-            var code = GetInt32(root, "code");
-            if (code != 0) return WithExpiry(ApiFailure(AccountChannel.Web, checkedAt, _paths.WebCredentialFile, code, GetString(root, "message")), expiresAt);
-            if (!TryGetObject(root, "data", out var data)) return WithExpiry(Incomplete(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
-            if (!GetBoolean(data, "isLogin")) return WithExpiry(Expired(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, WebStatusUrl);
+                request.Headers.TryAddWithoutValidation("Cookie", credential);
+                request.Headers.TryAddWithoutValidation("User-Agent", "Beflow-for-Windows/1.0");
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                if (!response.IsSuccessStatusCode) return WithExpiry(HttpUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile, response.StatusCode), expiresAt);
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                var root = document.RootElement;
+                var code = GetInt32(root, "code");
+                var message = GetString(root, "message");
+                if (code != 0)
+                {
+                    if (retryFreshCredential && IsAuthenticationFailure(code, message) && attempt < FreshWebCredentialValidationAttempts)
+                    {
+                        await Task.Delay(_freshWebCredentialRetryDelay, cancellationToken);
+                        continue;
+                    }
+                    return WithExpiry(ApiFailure(AccountChannel.Web, checkedAt, _paths.WebCredentialFile, code, message), expiresAt);
+                }
+                if (!TryGetObject(root, "data", out var data)) return WithExpiry(Incomplete(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
+                if (!GetBoolean(data, "isLogin"))
+                {
+                    if (retryFreshCredential && attempt < FreshWebCredentialValidationAttempts)
+                    {
+                        await Task.Delay(_freshWebCredentialRetryDelay, cancellationToken);
+                        continue;
+                    }
+                    return WithExpiry(Expired(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
+                }
 
-            var displayName = GetString(data, "uname");
-            var userId = GetScalarText(data, "mid");
-            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(userId)) return WithExpiry(Incomplete(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
-            var level = TryGetObject(data, "level_info", out var levelInfo) ? GetInt32(levelInfo, "current_level") : 0;
-            var vipLabel = TryGetObject(data, "vip_label", out var vip) ? GetString(vip, "text") : string.Empty;
-            if (string.IsNullOrWhiteSpace(vipLabel)) vipLabel = GetInt32(data, "vipStatus") == 1 ? "大会员" : "普通用户";
-            var profile = new AccountProfile(displayName, userId, NormalizeAvatar(GetString(data, "face")), level, vipLabel);
-            return WithExpiry(LoggedIn(AccountChannel.Web, profile, checkedAt, _paths.WebCredentialFile), expiresAt);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return WithExpiry(NetworkUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
-        }
-        catch (HttpRequestException)
-        {
-            return WithExpiry(NetworkUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
-        }
-        catch (JsonException)
-        {
-            return WithExpiry(new AccountChannelStatus(AccountChannel.Web, AccountLoginState.Unavailable, null, "账号接口返回了无法识别的数据", checkedAt, CredentialUpdatedAt(_paths.WebCredentialFile)), expiresAt);
+                var displayName = GetString(data, "uname");
+                var userId = GetScalarText(data, "mid");
+                if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(userId)) return WithExpiry(Incomplete(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
+                var level = TryGetObject(data, "level_info", out var levelInfo) ? GetInt32(levelInfo, "current_level") : 0;
+                var vipLabel = TryGetObject(data, "vip_label", out var vip) ? GetString(vip, "text") : string.Empty;
+                if (string.IsNullOrWhiteSpace(vipLabel)) vipLabel = GetInt32(data, "vipStatus") == 1 ? "大会员" : "普通用户";
+                var profile = new AccountProfile(displayName, userId, NormalizeAvatar(GetString(data, "face")), level, vipLabel);
+                return WithExpiry(LoggedIn(AccountChannel.Web, profile, checkedAt, _paths.WebCredentialFile), expiresAt);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return WithExpiry(NetworkUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
+            }
+            catch (HttpRequestException)
+            {
+                return WithExpiry(NetworkUnavailable(AccountChannel.Web, checkedAt, _paths.WebCredentialFile), expiresAt);
+            }
+            catch (JsonException)
+            {
+                return WithExpiry(new AccountChannelStatus(AccountChannel.Web, AccountLoginState.Unavailable, null, "账号接口返回了无法识别的数据", checkedAt, CredentialUpdatedAt(_paths.WebCredentialFile)), expiresAt);
+            }
         }
     }
 
@@ -192,11 +221,16 @@ public sealed class AccountStatusService : IAccountStatusService
 
     private static AccountChannelStatus ApiFailure(AccountChannel channel, DateTimeOffset checkedAt, string path, int code, string message)
     {
-        var expired = code == -101 || message.Contains("未登录", StringComparison.OrdinalIgnoreCase) || message.Contains("登录失效", StringComparison.OrdinalIgnoreCase) || message.Contains("token", StringComparison.OrdinalIgnoreCase);
-        return expired
+        return IsAuthenticationFailure(code, message)
             ? Expired(channel, checkedAt, path)
             : new AccountChannelStatus(channel, AccountLoginState.Unavailable, null, $"账号接口返回错误（{code}）", checkedAt, CredentialUpdatedAt(path));
     }
+
+    private static bool IsAuthenticationFailure(int code, string message) =>
+        code == -101 ||
+        message.Contains("未登录", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("登录失效", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("token", StringComparison.OrdinalIgnoreCase);
 
     private static DateTimeOffset? CredentialUpdatedAt(string path)
     {
@@ -218,6 +252,13 @@ public sealed class AccountStatusService : IAccountStatusService
             }
         }
         return null;
+    }
+
+    private static bool IsRecentlyUpdated(DateTimeOffset? updatedAt, DateTimeOffset checkedAt)
+    {
+        if (updatedAt is null) return false;
+        var age = checkedAt - updatedAt.Value;
+        return age >= TimeSpan.Zero && age <= FreshWebCredentialWindow;
     }
 
     private static AccountChannelStatus WithExpiry(AccountChannelStatus status, DateTimeOffset? expiresAt) => status with { CredentialExpiresAt = expiresAt };

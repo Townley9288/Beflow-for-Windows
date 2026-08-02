@@ -1,7 +1,6 @@
 param(
-    [string]$Version = '1.1.1.1',
-    [string]$FfmpegArchiveUrl = $env:FFMPEG_ARCHIVE_URL,
-    [switch]$RequireNativeUpdater
+    [string]$Version = '1.1.1.2',
+    [string]$FfmpegArchiveUrl = $env:FFMPEG_ARCHIVE_URL
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,8 +8,6 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Artifacts = Join-Path $Root 'artifacts'
 $BuildRoot = Join-Path $Artifacts "build-$Version-$PID"
 $Publish = Join-Path $BuildRoot 'publish'
-$Portable = Join-Path $BuildRoot 'portable'
-$UpdaterPublish = Join-Path $BuildRoot 'updater'
 $Release = Join-Path $Artifacts 'release'
 
 function Assert-ChildPath([string]$Path) {
@@ -19,10 +16,10 @@ function Assert-ChildPath([string]$Path) {
     if (-not $ResolvedPath.StartsWith($ResolvedRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "Refusing to modify path outside repository: $ResolvedPath" }
 }
 
-foreach ($Directory in @($Artifacts, $BuildRoot, $Publish, $Portable, $UpdaterPublish, $Release)) { Assert-ChildPath $Directory }
+foreach ($Directory in @($Artifacts, $BuildRoot, $Publish, $Release)) { Assert-ChildPath $Directory }
 if (Test-Path -LiteralPath $BuildRoot) { Remove-Item -LiteralPath $BuildRoot -Recurse -Force }
 if (Test-Path -LiteralPath $Release) { Remove-Item -LiteralPath $Release -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $Publish, $Portable, $UpdaterPublish, $Release | Out-Null
+New-Item -ItemType Directory -Force -Path $Publish, $Release | Out-Null
 
 function Invoke-Checked([scriptblock]$Command, [string]$Description) {
     & $Command
@@ -31,7 +28,6 @@ function Invoke-Checked([scriptblock]$Command, [string]$Description) {
 
 $Solution = Join-Path $Root 'BBDown-for-Windows.sln'
 $AppProject = Join-Path $Root 'src\BBDownForWindows.App\BBDownForWindows.App.csproj'
-$UpdaterProject = Join-Path $Root 'src\Beflow.Updater\Beflow.Updater.csproj'
 $SourceManifest = Join-Path $Root 'src\BBDownForWindows.App\app.manifest'
 $GeneratedManifest = Join-Path $BuildRoot 'app.manifest'
 $ParsedVersion = [Version]::Parse($Version)
@@ -41,23 +37,11 @@ $ManifestReplacement = '${1}' + $ManifestVersion + '${2}'
 [Regex]::Replace($ManifestContent, '(<assemblyIdentity\s+version=")[^"]+(")', $ManifestReplacement) | Set-Content -LiteralPath $GeneratedManifest -Encoding utf8
 Invoke-Checked { dotnet restore $Solution --locked-mode } 'Solution restore'
 Invoke-Checked { dotnet restore $AppProject -r win-x64 --locked-mode } 'Win-x64 runtime restore'
-Invoke-Checked { dotnet restore $UpdaterProject -r win-x64 --locked-mode } 'Updater restore'
 Invoke-Checked { dotnet test $Solution -c Release -p:Platform=x64 --no-restore } 'Tests'
 Invoke-Checked { dotnet publish $AppProject -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:Version=$Version -p:ApplicationManifest=$GeneratedManifest -o $Publish --no-restore } 'Publish'
 
-& dotnet publish $UpdaterProject -c Release -r win-x64 --self-contained true -p:Version=$Version -o $UpdaterPublish --no-restore
-if ($LASTEXITCODE -ne 0) {
-    if ($RequireNativeUpdater) { throw "Native AOT updater publish failed with exit code $LASTEXITCODE" }
-    Write-Warning 'Native AOT updater publish failed; creating a managed self-contained single-file updater for this local build.'
-    if (Test-Path -LiteralPath $UpdaterPublish) { Remove-Item -LiteralPath $UpdaterPublish -Recurse -Force }
-    New-Item -ItemType Directory -Force -Path $UpdaterPublish | Out-Null
-    Invoke-Checked { dotnet publish $UpdaterProject -c Release -r win-x64 --self-contained true -p:Version=$Version -p:PublishAot=false -p:PublishSingleFile=true -p:PublishTrimmed=true -o $UpdaterPublish --no-restore } 'Managed updater fallback publish'
-}
-Copy-Item -LiteralPath (Join-Path $UpdaterPublish 'Beflow.Updater.exe') -Destination (Join-Path $Publish 'Beflow.Updater.exe') -Force
-
 $RequiredPublishFiles = @(
     'Beflow.exe',
-    'Beflow.Updater.exe',
     'Beflow.pri',
     'App.xbf',
     'MainWindow.xbf',
@@ -114,19 +98,6 @@ if ($UnexpectedMuiLanguages) {
 & (Join-Path $PSScriptRoot 'AcquireTools.ps1') -OutputDirectory $Publish -FfmpegArchiveUrl $FfmpegArchiveUrl
 Copy-Item -LiteralPath (Join-Path $Root 'LICENSE'), (Join-Path $Root 'THIRD_PARTY_NOTICES.md'), (Join-Path $Root 'THIRD_PARTY_SOURCES.md'), (Join-Path $Root 'README.md') -Destination $Publish
 
-$PortableManifestName = 'Beflow.files.txt'
-$PortableManifestPath = Join-Path $Publish $PortableManifestName
-$PortableManifestFiles = Get-ChildItem -LiteralPath $Publish -Recurse -File |
-    ForEach-Object { [IO.Path]::GetRelativePath($Publish, $_.FullName) } |
-    Sort-Object -Unique
-$PortableManifestFiles += $PortableManifestName
-[IO.File]::WriteAllLines($PortableManifestPath, $PortableManifestFiles, [Text.UTF8Encoding]::new($false))
-
-Copy-Item -Path (Join-Path $Publish '*') -Destination $Portable -Recurse -Force
-New-Item -ItemType File -Force -Path (Join-Path $Portable 'portable.flag') | Out-Null
-$PortableZip = Join-Path $Release "Beflow-for-Windows-v$Version-win-x64-portable.zip"
-Compress-Archive -Path (Join-Path $Portable '*') -DestinationPath $PortableZip -CompressionLevel Optimal
-
 $IsccCommand = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 $IsccCandidates = @(
     $IsccCommand.Source,
@@ -136,18 +107,16 @@ $IsccCandidates = @(
     "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
 )
 $Iscc = $IsccCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
-if ($Iscc) {
-    $ChineseMessages = Join-Path $Artifacts 'ChineseSimplified.isl'
-    $AppIconFile = Join-Path $Root 'src\BBDownForWindows.App\Assets\AppIcon.ico'
-    Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl' -OutFile $ChineseMessages
-    Invoke-Checked { & $Iscc "/DMyAppVersion=$Version" "/DSourceDir=$Publish" "/DOutputDir=$Release" "/DChineseMessages=$ChineseMessages" "/DAppIconFile=$AppIconFile" (Join-Path $Root 'installer\BBDownForWindows.iss') } 'Inno Setup compile'
-} elseif ($RequireNativeUpdater) {
-    throw 'Inno Setup 6 was not found; official release builds require the setup installer.'
-} else {
-    Write-Warning 'Inno Setup 6 was not found; portable package was created but installer was skipped.'
-}
+if (-not $Iscc) { throw 'Inno Setup 6 was not found; release builds require the setup installer.' }
+$ChineseMessages = Join-Path $Artifacts 'ChineseSimplified.isl'
+$AppIconFile = Join-Path $Root 'src\BBDownForWindows.App\Assets\AppIcon.ico'
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl' -OutFile $ChineseMessages
+Invoke-Checked { & $Iscc "/DMyAppVersion=$Version" "/DSourceDir=$Publish" "/DOutputDir=$Release" "/DChineseMessages=$ChineseMessages" "/DAppIconFile=$AppIconFile" (Join-Path $Root 'installer\BBDownForWindows.iss') } 'Inno Setup compile'
 
-Get-ChildItem -LiteralPath $Release -File | Where-Object { $_.Extension -in @('.exe', '.zip') } | ForEach-Object {
+$Installers = @(Get-ChildItem -LiteralPath $Release -File -Filter '*-setup.exe')
+if ($Installers.Count -ne 1) { throw "Expected exactly one setup installer, found $($Installers.Count)." }
+if (Get-ChildItem -LiteralPath $Release -File -Filter '*.zip') { throw 'Portable release archives are no longer allowed.' }
+$Installers | ForEach-Object {
     $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash
     Set-Content -LiteralPath ($_.FullName + '.sha256') -Value "$Hash  $($_.Name)" -Encoding ascii
 }

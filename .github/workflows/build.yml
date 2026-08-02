@@ -45,12 +45,16 @@ jobs:
           FFMPEG_ARCHIVE_URL: ${{ vars.FFMPEG_ARCHIVE_URL }}
         run: |
           $version = '${{ github.ref_name }}'.TrimStart('v')
-          .\scripts\Build-Release.ps1 -Version $version -RequireNativeUpdater
+          .\scripts\Build-Release.ps1 -Version $version
       - uses: actions/upload-artifact@v4
         with:
           name: Beflow-for-Windows-${{ github.ref_name }}
-          path: artifacts/release/*
+          path: |
+            artifacts/release/*-setup.exe
+            artifacts/release/*-setup.exe.sha256
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/release/*
+          files: |
+            artifacts/release/*-setup.exe
+            artifacts/release/*-setup.exe.sha256
           body_path: RELEASE_NOTES.md

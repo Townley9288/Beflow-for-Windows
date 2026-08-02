@@ -74,12 +74,38 @@ public sealed class AccountStatusTests
         var handler = new StubHandler(request => request.RequestUri!.AbsolutePath.Contains("/nav", StringComparison.Ordinal)
             ? Json("""{"code":0,"data":{"isLogin":false}}""")
             : Json("""{"code":-101,"message":"账号未登录"}"""));
-        var service = new AccountStatusService(paths, new HttpClient(handler));
+        var service = new AccountStatusService(paths, new HttpClient(handler), freshWebCredentialRetryDelay: TimeSpan.Zero);
 
         var status = await service.GetStatusAsync();
 
         Assert.Equal(AccountLoginState.Expired, status.Web.State);
         Assert.Equal(AccountLoginState.Expired, status.Tv.State);
+    }
+
+    [Fact]
+    public async Task RecentlyWrittenWebCredentialRetriesTransientLoggedOutResponse()
+    {
+        using var temp = new TempDirectory();
+        var root = temp.Info;
+        var paths = CreatePaths(root);
+        File.WriteAllText(paths.WebCredentialFile, "SESSDATA=fresh-web-secret");
+        var now = DateTimeOffset.Parse("2026-08-02T10:58:41Z");
+        File.SetLastWriteTimeUtc(paths.WebCredentialFile, now.UtcDateTime);
+        var webCalls = 0;
+        var handler = new StubHandler(_ => ++webCalls switch
+        {
+            1 => Json("""{"code":-101,"message":"账号未登录"}"""),
+            2 => Json("""{"code":0,"data":{"isLogin":false}}"""),
+            _ => Json("""{"code":0,"data":{"isLogin":true,"uname":"续费用户","mid":789,"face":"","level_info":{"current_level":6},"vipStatus":1,"vip_label":{"text":"年度大会员"}}}""")
+        });
+        var service = new AccountStatusService(paths, new HttpClient(handler), new FixedTimeProvider(now), TimeSpan.Zero);
+
+        var status = await service.GetStatusAsync(AccountChannel.Web);
+
+        Assert.Equal(AccountLoginState.LoggedIn, status.State);
+        Assert.Equal("续费用户", status.Profile!.DisplayName);
+        Assert.Equal("年度大会员", status.Profile.VipLabel);
+        Assert.Equal(3, webCalls);
     }
 
     [Fact]

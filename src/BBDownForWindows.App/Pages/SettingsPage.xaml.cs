@@ -45,7 +45,6 @@ public sealed partial class SettingsPage : Page
         window.ConfigureClipboardMonitoring(ViewModel.Settings.MonitorClipboard);
         window.ConfigureDragLinkMonitoring(ViewModel.Settings.MonitorDragLinks);
     }
-    private void SettingsScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e) { SettingsContent.Width = Math.Max(0, e.NewSize.Width); }
     private void SettingsNotification_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
 
     private void QrTimer_Tick(object? sender, object e)

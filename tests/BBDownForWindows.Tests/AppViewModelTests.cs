@@ -125,6 +125,36 @@ public sealed class AppViewModelTests
         Assert.DoesNotContain(dualAudio.QualityOptions, item => item.Value is "720P 高清" or "480P 清晰");
     }
 
+    [Fact]
+    public void DualAudioTrackPresetsApplyNameAndMkvmergeLanguageAsAPair()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DualAudioViewModel(fixture.Services);
+
+        Assert.Equal("国语", viewModel.SourceALabel);
+        Assert.Equal("zh", viewModel.SourceALanguage);
+        Assert.Equal("国语（zh）", viewModel.SourceAPreset?.DisplayName);
+        Assert.Contains(viewModel.AudioTrackPresets, item => item.TrackName == "普通话" && item.Language == "cmn");
+        Assert.Contains(viewModel.AudioTrackPresets, item => item.TrackName == "台配国语" && item.Language == "cmn-TW");
+        Assert.Contains(viewModel.AudioTrackPresets, item => item.TrackName == "粤语" && item.Language == "yue");
+        Assert.Contains(viewModel.AudioTrackPresets, item => item.TrackName == "日语" && item.Language == "ja");
+        Assert.Contains(viewModel.AudioTrackPresets, item => item.TrackName == "英语" && item.Language == "en");
+        Assert.Contains(viewModel.AudioTrackPresets, item => item.TrackName == "韩语" && item.Language == "ko");
+
+        viewModel.SourceAPreset = viewModel.AudioTrackPresets.Single(item => item.TrackName == "台配国语");
+
+        Assert.Equal("台配国语", viewModel.SourceALabel);
+        Assert.Equal("cmn-TW", viewModel.SourceALanguage);
+
+        viewModel.SourceBLabel = "导演评论";
+        viewModel.SourceBLanguage = "en-US";
+
+        Assert.True(viewModel.SourceBPreset?.IsCustom);
+        viewModel.SourceBPreset = viewModel.AudioTrackPresets.Single(item => item.IsCustom);
+        Assert.Equal("导演评论", viewModel.SourceBLabel);
+        Assert.Equal("en-US", viewModel.SourceBLanguage);
+    }
+
     [Theory]
     [InlineData(DownloadMode.VideoAndAudio)]
     [InlineData(DownloadMode.VideoOnly)]

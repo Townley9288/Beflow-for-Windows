@@ -74,6 +74,8 @@ public sealed class DualAudioTests
         var arguments = DualAudioService.BuildMkvmergeArguments("main.mp4", "audio.m4a", "out.mkv", request);
         Assert.Contains("1:国语", arguments);
         Assert.Contains("0:粤语", arguments);
+        Assert.Contains("1:zh", arguments);
+        Assert.Contains("0:yue", arguments);
         Assert.Contains("0:350", arguments);
         Assert.Contains("0:0,1:0,0:1", arguments);
     }
