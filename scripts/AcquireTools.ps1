@@ -54,7 +54,9 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $Publish = Join-Path $BuildRoot 'publish'
     $Executable = Join-Path $Publish 'BBDown.exe'
     $Marker = Join-Path $BuildRoot 'beflow-patches.complete'
-    if ((Test-Path -LiteralPath $Executable -PathType Leaf) -and (Test-Path -LiteralPath $Marker -PathType Leaf)) { return $Publish }
+    $MarkerContent = if (Test-Path -LiteralPath $Marker -PathType Leaf) { [IO.File]::ReadAllText($Marker) } else { '' }
+    if ((Test-Path -LiteralPath $Executable -PathType Leaf) -and
+        $MarkerContent.IndexOf('web_cookie_export=v4', [StringComparison]::Ordinal) -ge 0) { return $Publish }
 
     $WorkingDirectory = Join-Path $CacheDirectory "work\bbdown-$($Entry.version)-$PID"
     New-Item -ItemType Directory -Force -Path $WorkingDirectory, $Publish | Out-Null
@@ -167,11 +169,194 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     if ($ProgramContent.Contains('Config.qualitys[')) { throw 'An unsafe BBDown program quality lookup remains after patching.' }
     [IO.File]::WriteAllText($ProgramPath, $ProgramContent, [Text.UTF8Encoding]::new($false))
 
+    $HttpUtilPath = Join-Path $WorkingDirectory 'BBDown.Core\Util\HTTPUtil.cs'
+    $HttpUtilContent = [IO.File]::ReadAllText($HttpUtilPath)
+    $CookieFieldNeedle = '        public static readonly HttpClient AppHttpClient = new(new HttpClientHandler'
+    $CookieFieldReplacement = '        public static readonly CookieContainer AppCookieContainer = new();' + [Environment]::NewLine + [Environment]::NewLine + $CookieFieldNeedle
+    if (-not $HttpUtilContent.Contains($CookieFieldNeedle)) { throw 'The pinned BBDown HTTP client declaration changed; refusing to apply the Web Cookie export patch.' }
+    $HttpUtilContent = $HttpUtilContent.Replace($CookieFieldNeedle, $CookieFieldReplacement)
+
+    $CookieHandlerNeedle = '            AutomaticDecompression = DecompressionMethods.All,'
+    $CookieHandlerReplacement = $CookieHandlerNeedle + [Environment]::NewLine + '            CookieContainer = AppCookieContainer,' + [Environment]::NewLine + '            UseCookies = true,'
+    if (-not $HttpUtilContent.Contains($CookieHandlerNeedle)) { throw 'The pinned BBDown HTTP handler options changed; refusing to apply the Web Cookie export patch.' }
+    $HttpUtilContent = $HttpUtilContent.Replace($CookieHandlerNeedle, $CookieHandlerReplacement)
+
+    $LoginClientNeedle = '        private static readonly Random random = new Random();'
+    $LoginClientLines = @(
+        '        private static readonly HttpClient WebLoginHttpClient = new(new HttpClientHandler'
+        '        {'
+        '            AllowAutoRedirect = false,'
+        '            AutomaticDecompression = DecompressionMethods.All,'
+        '            CookieContainer = AppCookieContainer,'
+        '            UseCookies = true,'
+        '        })'
+        '        {'
+        '            Timeout = TimeSpan.FromMinutes(2)'
+        '        };'
+        ''
+    )
+    $LoginClientReplacement = ($LoginClientLines -join [Environment]::NewLine) + $LoginClientNeedle
+    if (-not $HttpUtilContent.Contains($LoginClientNeedle)) { throw 'The pinned BBDown HTTP helper layout changed; refusing to add the login redirect client.' }
+    $HttpUtilContent = $HttpUtilContent.Replace($LoginClientNeedle, $LoginClientReplacement)
+
+    $HttpCookieMethodNeedle = '        public static async Task<string> GetWebSourceAsync(string url)'
+    $HttpCookieMethodLines = @(
+        '        public static string GetWebCookieHeader()'
+        '        {'
+        '            var cookies = new Dictionary<string, Cookie>(StringComparer.OrdinalIgnoreCase);'
+        '            foreach (var host in new[] { "https://passport.bilibili.com/", "https://account.bilibili.com/", "https://www.bilibili.com/", "https://api.bilibili.com/", "https://bilibili.com/" })'
+        '            {'
+        '                foreach (Cookie cookie in AppCookieContainer.GetCookies(new Uri(host)))'
+        '                {'
+        '                    if (cookie.Name != "DedeUserID" &&'
+        '                        cookie.Name != "DedeUserID__ckMd5" &&'
+        '                        cookie.Name != "SESSDATA" &&'
+        '                        cookie.Name != "bili_jct" &&'
+        '                        cookie.Name != "sid")'
+        '                    {'
+        '                        continue;'
+        '                    }'
+        ''
+        '                    if (!string.IsNullOrWhiteSpace(cookie.Value)) cookies[cookie.Name] = cookie;'
+        '                }'
+        '            }'
+        ''
+        '            var names = new[] { "DedeUserID", "DedeUserID__ckMd5", "SESSDATA", "bili_jct", "sid" };'
+        '            var values = names'
+        '                .Where(name => cookies.TryGetValue(name, out var cookie) && !string.IsNullOrWhiteSpace(cookie.Value))'
+        '                .Select(name => $"{name}={cookies[name].Value.Replace(",", "%2C", StringComparison.Ordinal)}")'
+        '                .ToList();'
+        '            if (cookies.TryGetValue("SESSDATA", out var sessdata) && sessdata.Expires > DateTime.MinValue)'
+        '            {'
+        '                var expires = new DateTimeOffset(sessdata.Expires.ToUniversalTime()).ToUnixTimeSeconds();'
+        '                if (expires > 0) values.Add($"Expires={expires}");'
+        '            }'
+        ''
+        '            return string.Join(";", values);'
+        '        }'
+        ''
+        '        public static async Task FollowWebLoginRedirectsAsync(string url)'
+        '        {'
+        '            var current = new Uri(url);'
+        '            for (var redirect = 0; redirect <= 8; redirect++)'
+        '            {'
+        '                if (!IsTrustedWebLoginUri(current)) throw new InvalidOperationException("登录跳转到了不受信任的地址.");'
+        '                using var request = new HttpRequestMessage(HttpMethod.Get, current);'
+        '                request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);'
+        '                request.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate");'
+        '                using var response = await WebLoginHttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);'
+        '                if (GetWebCookieHeader().Contains("SESSDATA=", StringComparison.OrdinalIgnoreCase)) return;'
+        '                if (response.StatusCode is HttpStatusCode.MovedPermanently or HttpStatusCode.Found or HttpStatusCode.SeeOther or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect)'
+        '                {'
+        '                    if (response.Headers.Location is null) throw new InvalidOperationException("登录跳转地址无效.");'
+        '                    current = response.Headers.Location.IsAbsoluteUri ? response.Headers.Location : new Uri(current, response.Headers.Location);'
+        '                    continue;'
+        '                }'
+        ''
+        '                response.EnsureSuccessStatusCode();'
+        '                return;'
+        '            }'
+        ''
+        '            throw new InvalidOperationException("登录跳转次数过多.");'
+        '        }'
+        ''
+        '        private static bool IsTrustedWebLoginUri(Uri uri)'
+        '        {'
+        '            if (uri.Scheme != Uri.UriSchemeHttps) return false;'
+        '            return uri.Host.Equals("bilibili.com", StringComparison.OrdinalIgnoreCase) ||'
+        '                   uri.Host.EndsWith(".bilibili.com", StringComparison.OrdinalIgnoreCase) ||'
+        '                   uri.Host.Equals("biligame.com", StringComparison.OrdinalIgnoreCase) ||'
+        '                   uri.Host.EndsWith(".biligame.com", StringComparison.OrdinalIgnoreCase);'
+        '        }'
+        ''
+    )
+    $HttpCookieMethodReplacement = ($HttpCookieMethodLines -join [Environment]::NewLine) + $HttpCookieMethodNeedle
+    if (-not $HttpUtilContent.Contains($HttpCookieMethodNeedle)) { throw 'The pinned BBDown HTTP source method layout changed; refusing to add the Web Cookie exporter.' }
+    $HttpUtilContent = $HttpUtilContent.Replace($HttpCookieMethodNeedle, $HttpCookieMethodReplacement)
+    [IO.File]::WriteAllText($HttpUtilPath, $HttpUtilContent, [Text.UTF8Encoding]::new($false))
+
+    $LoginPath = Join-Path $WorkingDirectory 'BBDown\BBDownLoginUtil.cs'
+    $LoginContent = [IO.File]::ReadAllText($LoginPath)
+    $LoginUsingNeedle = 'using System.Net.Http;'
+    $LoginUsingReplacement = $LoginUsingNeedle + [Environment]::NewLine + 'using System.Linq;'
+    if (-not $LoginContent.Contains($LoginUsingNeedle)) { throw 'The pinned BBDown login imports changed; refusing to add the Cookie export dependency.' }
+    $LoginContent = $LoginContent.Replace($LoginUsingNeedle, $LoginUsingReplacement)
+
+    $LoginUrlNeedle = '                        string cc = JsonDocument.Parse(w).RootElement.GetProperty("data").GetProperty("url").ToString();'
+    $LoginUrlReplacement = $LoginUrlNeedle + [Environment]::NewLine +
+        '                        if (!IsTrustedWebLoginRedirect(cc))' + [Environment]::NewLine +
+        '                        {' + [Environment]::NewLine +
+        '                            LogError("登录跳转到了不受信任的地址, 请重新扫码.");' + [Environment]::NewLine +
+        '                            File.Delete("qrcode.png");' + [Environment]::NewLine +
+        '                            break;' + [Environment]::NewLine +
+        '                        }' + [Environment]::NewLine +
+        '                        string cookie = HTTPUtil.GetWebCookieHeader();' + [Environment]::NewLine +
+        '                        if (!cookie.Contains("SESSDATA=", StringComparison.OrdinalIgnoreCase))' + [Environment]::NewLine +
+        '                            cookie = BuildWebCookieHeaderFromUrl(cc);' + [Environment]::NewLine +
+        '                        if (!cookie.Contains("SESSDATA=", StringComparison.OrdinalIgnoreCase))' + [Environment]::NewLine +
+        '                        {' + [Environment]::NewLine +
+        '                            await HTTPUtil.FollowWebLoginRedirectsAsync(cc);' + [Environment]::NewLine +
+        '                            cookie = HTTPUtil.GetWebCookieHeader();' + [Environment]::NewLine +
+        '                        }' + [Environment]::NewLine +
+        ''
+    if (-not $LoginContent.Contains($LoginUrlNeedle)) { throw 'The pinned BBDown Web login result parsing changed; refusing to apply the Cookie export patch.' }
+    $LoginContent = $LoginContent.Replace($LoginUrlNeedle, $LoginUrlReplacement)
+
+    $LoginLogNeedle = '                        Log("登录成功: SESSDATA=" + GetQueryString("SESSDATA", cc));'
+    $LoginLogLines = @(
+        '                        if (string.IsNullOrWhiteSpace(cookie) ||'
+        '                            !cookie.Contains("SESSDATA=", StringComparison.OrdinalIgnoreCase))'
+        '                        {'
+        '                            LogError("登录成功但未取得有效的 Web Cookie, 请重新扫码.");'
+        '                            File.Delete("qrcode.png");'
+        '                            break;'
+        '                        }'
+        ''
+        '                        Log("登录成功: SESSDATA=[已隐藏]");'
+    )
+    if (-not $LoginContent.Contains($LoginLogNeedle)) { throw 'The pinned BBDown Web login logging changed; refusing to apply the Cookie export patch.' }
+    $LoginContent = $LoginContent.Replace($LoginLogNeedle, $LoginLogLines -join [Environment]::NewLine)
+
+    $LoginWriteNeedle = '                        File.WriteAllText(Path.Combine(Program.APP_DIR, "BBDown.data"), cc[(cc.IndexOf(''?'') + 1)..].Replace("&", ";").Replace(",", "%2C"));'
+    $LoginWriteReplacement = '                        File.WriteAllText(Path.Combine(Program.APP_DIR, "BBDown.data"), cookie);'
+    if (-not $LoginContent.Contains($LoginWriteNeedle)) { throw 'The pinned BBDown credential write changed; refusing to apply the Cookie export patch.' }
+    $LoginContent = $LoginContent.Replace($LoginWriteNeedle, $LoginWriteReplacement)
+
+    $LoginHelperNeedle = '        public static async Task LoginTV()'
+    $LoginHelperLines = @(
+        '        private static bool IsTrustedWebLoginRedirect(string url)'
+        '        {'
+        '            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return false;'
+        '            return uri.Host.Equals("bilibili.com", StringComparison.OrdinalIgnoreCase) ||'
+        '                   uri.Host.EndsWith(".bilibili.com", StringComparison.OrdinalIgnoreCase) ||'
+        '                   uri.Host.Equals("biligame.com", StringComparison.OrdinalIgnoreCase) ||'
+        '                   uri.Host.EndsWith(".biligame.com", StringComparison.OrdinalIgnoreCase);'
+        '        }'
+        ''
+        '        private static string BuildWebCookieHeaderFromUrl(string url)'
+        '        {'
+        '            var names = new[] { "DedeUserID", "DedeUserID__ckMd5", "SESSDATA", "bili_jct", "sid" };'
+        '            var values = names'
+        '                .Select(name => (Name: name, Value: GetQueryString(name, url)))'
+        '                .Where(pair => !string.IsNullOrWhiteSpace(pair.Value))'
+        '                .Select(pair => $"{pair.Name}={Uri.UnescapeDataString(pair.Value).Replace(",", "%2C", StringComparison.Ordinal)}")'
+        '                .ToList();'
+        '            var expires = GetQueryString("Expires", url);'
+        '            if (long.TryParse(expires, out var expiresAt) && expiresAt > 0) values.Add($"Expires={expiresAt}");'
+        '            return string.Join(";", values);'
+        '        }'
+        ''
+    )
+    $LoginHelperReplacement = ($LoginHelperLines -join [Environment]::NewLine) + $LoginHelperNeedle
+    if (-not $LoginContent.Contains($LoginHelperNeedle)) { throw 'The pinned BBDown login helper layout changed; refusing to add URL Cookie compatibility.' }
+    $LoginContent = $LoginContent.Replace($LoginHelperNeedle, $LoginHelperReplacement)
+    [IO.File]::WriteAllText($LoginPath, $LoginContent, [Text.UTF8Encoding]::new($false))
+
     $Project = Join-Path $WorkingDirectory 'BBDown\BBDown.csproj'
     & dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:ManagePackageVersionsCentrally=false -p:Version=$($Entry.version) -o $Publish | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patched BBDown build failed with exit code $LASTEXITCODE" }
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Patched BBDown build did not produce BBDown.exe.' }
-    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`nquality=100:智能修复`nquality_lookup=support_formats_then_safe_fallback`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`nquality=100:智能修复`nquality_lookup=support_formats_then_safe_fallback`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`nweb_cookie_export=v4`n", [Text.UTF8Encoding]::new($false))
     return $Publish
 }
 

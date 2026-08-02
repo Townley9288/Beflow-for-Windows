@@ -63,6 +63,38 @@ public sealed class BBDownRuntimeTests
         finally { root.Delete(true); }
     }
 
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(true, 0)]
+    public async Task LoginNormalizesOnlyWebCredential(bool tv, int expectedCalls)
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "app"));
+            var paths = new ApplicationPaths(app.FullName, Path.Combine(root.FullName, "local"));
+            paths.EnsureCreated();
+            var source = Path.Combine(app.FullName, "BBDown.exe");
+            File.WriteAllText(source, "binary");
+            var runner = new RecordingProcessRunner();
+            var normalizer = new RecordingCredentialNormalizer();
+            var service = new BBDownService(paths, runner, new FixedToolLocator(source), new FixedSettingsStore(),
+                webCredentialNormalizer: normalizer);
+            var manager = new TaskManager(paths, runner);
+
+            var snapshot = await manager.RunExclusiveAsync(
+                tv ? TaskKind.LoginTv : TaskKind.LoginWeb,
+                false,
+                "login",
+                (context, token) => service.LoginAsync(tv, context, token));
+
+            Assert.Equal(TaskState.Completed, snapshot.State);
+            Assert.Equal(expectedCalls, normalizer.Calls);
+            if (!tv) Assert.Equal(paths.WebCredentialFile, normalizer.LastPath);
+        }
+        finally { root.Delete(true); }
+    }
+
     [Fact]
     public async Task DownloadReturnsTitleAlreadyParsedByBBDown()
     {
@@ -182,5 +214,19 @@ public sealed class BBDownRuntimeTests
 
         public Task<AppSettings> UpdateAsync(Func<AppSettings, AppSettings> update, CancellationToken cancellationToken = default) =>
             Task.FromResult(update(new AppSettings()));
+    }
+
+    private sealed class RecordingCredentialNormalizer : IWebCredentialNormalizer
+    {
+        public int Calls { get; private set; }
+        public string LastPath { get; private set; } = string.Empty;
+
+        public Task NormalizeAsync(string credentialPath, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Calls++;
+            LastPath = credentialPath;
+            return Task.CompletedTask;
+        }
     }
 }

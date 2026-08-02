@@ -76,6 +76,11 @@ public sealed class ToolLocator(ApplicationPaths paths) : IToolLocator
                 TryKill(process);
                 return "检测超时";
             }
+            catch (OperationCanceledException)
+            {
+                TryKill(process);
+                throw;
+            }
         }
         catch (OperationCanceledException)
         {

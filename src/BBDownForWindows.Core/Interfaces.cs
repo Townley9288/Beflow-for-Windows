@@ -64,6 +64,11 @@ public interface IAccountStatusService
     Task<AccountChannelStatus> GetStatusAsync(AccountChannel channel, CancellationToken cancellationToken = default);
 }
 
+public interface IWebCredentialNormalizer
+{
+    Task NormalizeAsync(string credentialPath, CancellationToken cancellationToken = default);
+}
+
 public interface IBilibiliMetadataService
 {
     Task<BilibiliVideoMetadata?> GetAsync(string url, CancellationToken cancellationToken = default);

@@ -52,6 +52,9 @@ public sealed class AccountStatusService : IAccountStatusService
         var credential = ReadCredential(_paths.WebCredentialFile, AccountChannel.Web, checkedAt, out var unavailable);
         if (unavailable is not null) return unavailable;
         if (credential is null) return Missing(AccountChannel.Web, checkedAt);
+        if (!BilibiliWebCredentialNormalizer.IsCanonicalCredential(credential))
+            return new AccountChannelStatus(AccountChannel.Web, AccountLoginState.Unavailable, null,
+                "本地 WEB 登录数据格式无效，请重新扫码", checkedAt, CredentialUpdatedAt(_paths.WebCredentialFile));
         var expiresAt = WebCredentialExpiresAt(credential);
         var retryFreshCredential = IsRecentlyUpdated(CredentialUpdatedAt(_paths.WebCredentialFile), checkedAt);
 

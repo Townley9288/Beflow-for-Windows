@@ -34,6 +34,25 @@ public sealed class AccountStatusTests
     }
 
     [Fact]
+    public async Task LegacyWebTicketIsNotSentAsCookie()
+    {
+        using var temp = new TempDirectory();
+        var paths = CreatePaths(temp.Info);
+        File.WriteAllText(paths.WebCredentialFile,
+            "ticket=0123456789abcdef0123456789abcdef;" +
+            "gourl=https%3A%2F%2Fwww.bilibili.com%2F;" +
+            "first_domain=.bilibili.com");
+        var handler = new StubHandler(_ => throw new InvalidOperationException("不应发起网络请求"));
+        var service = new AccountStatusService(paths, new HttpClient(handler));
+
+        var status = await service.GetStatusAsync(AccountChannel.Web);
+
+        Assert.Equal(AccountLoginState.Unavailable, status.State);
+        Assert.Contains("格式无效", status.Message, StringComparison.Ordinal);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task ParsesWebAndTvProfilesAndSignsTvRequest()
     {
         using var temp = new TempDirectory();

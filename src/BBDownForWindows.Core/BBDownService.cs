@@ -4,11 +4,13 @@ using System.Text.RegularExpressions;
 namespace BBDownForWindows.Core;
 
 public sealed class BBDownService(ApplicationPaths paths, IProcessRunner processRunner, IToolLocator toolLocator, ISettingsStore settingsStore,
-    IBilibiliMetadataService? metadataService = null, IDownloadNamingService? downloadNamingService = null) : IBBDownService
+    IBilibiliMetadataService? metadataService = null, IDownloadNamingService? downloadNamingService = null,
+    IWebCredentialNormalizer? webCredentialNormalizer = null) : IBBDownService
 {
     private const int MaximumConcurrentParses = 4;
     private readonly BBDownRuntimeManager _runtimeManager = new(paths);
     private readonly IDownloadNamingService _downloadNaming = downloadNamingService ?? new DownloadNamingService();
+    private readonly IWebCredentialNormalizer _webCredentialNormalizer = webCredentialNormalizer ?? new BilibiliWebCredentialNormalizer();
 
     public async Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken)
     {
@@ -551,6 +553,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         context.AppendLog($"\n$ {Path.GetFileName(tools.BBDown)} {arguments[0]}\n");
         var result = await processRunner.RunAsync(new ProcessRunRequest(tools.BBDown, arguments, paths.RuntimeDirectory), line => context.AppendLog(SanitizeLoginOutput(line)), cancellationToken);
         if (result.ExitCode != 0 && !result.Cancelled) throw new InvalidOperationException($"登录流程失败，退出码 {result.ExitCode}");
+        if (!tv && !result.Cancelled) await _webCredentialNormalizer.NormalizeAsync(paths.WebCredentialFile, cancellationToken);
     }
 
     internal static string SanitizeLoginOutput(string line) => SanitizeDiagnosticOutput(line);
