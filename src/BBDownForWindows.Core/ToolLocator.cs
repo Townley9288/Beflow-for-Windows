@@ -1,48 +1,84 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 
 namespace BBDownForWindows.Core;
 
-public sealed class ToolLocator(ApplicationPaths paths) : IToolLocator
+public sealed class ToolLocator : IToolLocator
 {
-    public ToolPaths Locate(AppSettings settings)
+    private const string LegacyFolderName = "BBDown_1.6.3_20240814_win-x64";
+    private readonly ApplicationPaths _paths;
+    private readonly Func<IEnumerable<string>> _fixedDriveRootProvider;
+    private readonly Func<string, CancellationToken, Task<string>> _versionReader;
+    private readonly ConcurrentDictionary<VersionCacheKey, Lazy<Task<string>>> _versionCache = new();
+
+    public ToolLocator(
+        ApplicationPaths paths,
+        Func<IEnumerable<string>>? fixedDriveRootProvider = null,
+        Func<string, CancellationToken, Task<string>>? versionReader = null)
     {
-        var legacyRoots = DriveInfo.GetDrives()
-            .Where(drive => drive.DriveType == DriveType.Fixed && drive.IsReady)
-            .Select(drive => Path.Combine(drive.RootDirectory.FullName, "Software", "BBDown_1.6.3_20240814_win-x64"))
-            .ToArray();
+        _paths = paths;
+        _fixedDriveRootProvider = fixedDriveRootProvider ?? DiscoverFixedDriveRoots;
+        _versionReader = versionReader ?? ReadVersionAsync;
+    }
+
+    public ToolPaths Locate(AppSettings settings) => LocateCore(settings, includeLegacyDrives: true);
+
+    public ToolPaths LocateFast(AppSettings settings) => LocateCore(settings, includeLegacyDrives: false);
+
+    private ToolPaths LocateCore(AppSettings settings, bool includeLegacyDrives)
+    {
+        var driveRoots = includeLegacyDrives ? _fixedDriveRootProvider().ToArray() : [];
+        var legacyRoots = driveRoots.Select(root => Path.Combine(root, "Software", LegacyFolderName)).ToArray();
         var bbDownCandidates = new List<string?>
         {
-            Path.Combine(paths.ToolsDirectory, "BBDown", "BBDown.exe"),
-            Path.Combine(paths.ApplicationDirectory, "BBDown.exe")
+            Path.Combine(_paths.ToolsDirectory, "BBDown", "BBDown.exe"),
+            Path.Combine(_paths.ApplicationDirectory, "BBDown.exe")
         };
-        bbDownCandidates.AddRange(legacyRoots.Select(root => Path.Combine(root, "BBDown.exe")));
-        bbDownCandidates.Add(FindOnPath("BBDown.exe"));
+        if (includeLegacyDrives)
+        {
+            bbDownCandidates.AddRange(legacyRoots.Select(root => Path.Combine(root, "BBDown.exe")));
+            bbDownCandidates.Add(FindOnPath("BBDown.exe"));
+        }
 
         var aria2Candidates = new List<string?>
         {
             settings.Aria2cPath,
-            Path.Combine(paths.ToolsDirectory, "aria2", "aria2c.exe")
+            Path.Combine(_paths.ToolsDirectory, "aria2", "aria2c.exe")
         };
-        aria2Candidates.AddRange(legacyRoots.Select(root => Path.Combine(root, "tools", "aria2", "aria2-1.37.0-win-64bit-build1", "aria2c.exe")));
-        aria2Candidates.Add(FindOnPath("aria2c.exe"));
+        if (includeLegacyDrives)
+        {
+            aria2Candidates.AddRange(legacyRoots.Select(root => Path.Combine(root, "tools", "aria2", "aria2-1.37.0-win-64bit-build1", "aria2c.exe")));
+            aria2Candidates.Add(FindOnPath("aria2c.exe"));
+        }
 
         return new ToolPaths
         {
             BBDown = FirstExisting(bbDownCandidates.ToArray()),
             Aria2c = FirstExisting(aria2Candidates.ToArray()),
             Ffmpeg = FirstExisting(
-                Path.Combine(paths.ToolsDirectory, "ffmpeg", "ffmpeg.exe"),
-                FindOnPath("ffmpeg.exe")),
+                Path.Combine(_paths.ToolsDirectory, "ffmpeg", "ffmpeg.exe"),
+                includeLegacyDrives ? FindOnPath("ffmpeg.exe") : null),
             Ffprobe = FirstExisting(
-                Path.Combine(paths.ToolsDirectory, "ffmpeg", "ffprobe.exe"),
-                FindOnPath("ffprobe.exe")),
-            Mkvmerge = FindMkvmerge(settings.MkvmergePath)
+                Path.Combine(_paths.ToolsDirectory, "ffmpeg", "ffprobe.exe"),
+                includeLegacyDrives ? FindOnPath("ffprobe.exe") : null),
+            Mkvmerge = FindMkvmerge(settings.MkvmergePath, driveRoots)
         };
     }
 
-    public async Task<string> GetVersionAsync(string executable, CancellationToken cancellationToken = default)
+    public Task<string> GetVersionAsync(string executable, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable)) return "未找到";
+        if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable)) return Task.FromResult("未找到");
+        var file = new FileInfo(Path.GetFullPath(executable));
+        var key = new VersionCacheKey(file.FullName.ToUpperInvariant(), file.Length, file.LastWriteTimeUtc.Ticks);
+        var versionTask = _versionCache.GetOrAdd(key,
+            _ => new Lazy<Task<string>>(
+                () => Task.Run(() => _versionReader(file.FullName, CancellationToken.None), CancellationToken.None),
+                LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+        return cancellationToken.CanBeCanceled ? versionTask.WaitAsync(cancellationToken) : versionTask;
+    }
+
+    private static async Task<string> ReadVersionAsync(string executable, CancellationToken cancellationToken)
+    {
         var startInfo = new ProcessStartInfo(executable)
         {
             UseShellExecute = false,
@@ -87,7 +123,7 @@ public sealed class ToolLocator(ApplicationPaths paths) : IToolLocator
         }
     }
 
-    private static string FindMkvmerge(string configured)
+    private static string FindMkvmerge(string configured, IReadOnlyList<string> driveRoots)
     {
         var candidates = new List<string?>
         {
@@ -96,10 +132,15 @@ public sealed class ToolLocator(ApplicationPaths paths) : IToolLocator
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "MKVToolNix", "mkvmerge.exe"),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "MKVToolNix", "mkvmerge.exe")
         };
-        foreach (var drive in DriveInfo.GetDrives().Where(drive => drive.DriveType == DriveType.Fixed && drive.IsReady))
-            candidates.Add(Path.Combine(drive.RootDirectory.FullName, "Software", "MKVToolNix", "mkvmerge.exe"));
+        foreach (var root in driveRoots)
+            candidates.Add(Path.Combine(root, "Software", "MKVToolNix", "mkvmerge.exe"));
         return FirstExisting(candidates.ToArray());
     }
+
+    private static IEnumerable<string> DiscoverFixedDriveRoots() =>
+        DriveInfo.GetDrives()
+            .Where(drive => drive.DriveType == DriveType.Fixed && drive.IsReady)
+            .Select(drive => drive.RootDirectory.FullName);
 
     private static string FirstExisting(params string?[] candidates) =>
         candidates.FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate)) ?? string.Empty;
@@ -127,4 +168,6 @@ public sealed class ToolLocator(ApplicationPaths paths) : IToolLocator
         }
         return string.Empty;
     }
+
+    private readonly record struct VersionCacheKey(string Path, long Length, long LastWriteTicks);
 }

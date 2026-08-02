@@ -264,7 +264,20 @@ public sealed class SettingsViewModel : ObservableObject
 
     private async Task DetectToolsAsync()
     {
-        var tools = _services.ToolLocator.Locate(Settings);
+        var settingsSnapshot = Settings.Clone();
+        var detection = await Task.Run(async () =>
+        {
+            var tools = _services.ToolLocator.LocateFast(settingsSnapshot);
+            var versions = await Task.WhenAll(
+                _services.ToolLocator.GetVersionAsync(tools.BBDown),
+                _services.ToolLocator.GetVersionAsync(tools.Aria2c),
+                _services.ToolLocator.GetVersionAsync(tools.Ffmpeg),
+                _services.ToolLocator.GetVersionAsync(tools.Ffprobe),
+                _services.ToolLocator.GetVersionAsync(tools.Mkvmerge)).ConfigureAwait(false);
+            return (Tools: tools, Versions: versions);
+        });
+
+        var tools = detection.Tools;
         var settingsChanged = false;
         if (string.IsNullOrWhiteSpace(Settings.Aria2cPath) && !string.IsNullOrWhiteSpace(tools.Aria2c))
         {
@@ -277,13 +290,7 @@ public sealed class SettingsViewModel : ObservableObject
             settingsChanged = true;
         }
         if (settingsChanged) Settings = Settings.Clone();
-
-        var versions = await Task.WhenAll(
-            _services.ToolLocator.GetVersionAsync(tools.BBDown),
-            _services.ToolLocator.GetVersionAsync(tools.Aria2c),
-            _services.ToolLocator.GetVersionAsync(tools.Ffmpeg),
-            _services.ToolLocator.GetVersionAsync(tools.Ffprobe),
-            _services.ToolLocator.GetVersionAsync(tools.Mkvmerge));
+        var versions = detection.Versions;
         ToolStatus = $"BBDown: {versions[0]}\naria2c: {versions[1]}\nFFmpeg: {versions[2]}\nffprobe: {versions[3]}\nmkvmerge: {versions[4]}";
     }
 

@@ -62,7 +62,7 @@ dotnet build src\BBDownForWindows.App\BBDownForWindows.App.csproj -c Release -p:
 生成发行包：
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 1.1.1.2
+.\scripts\Build-Release.ps1 -Version 1.1.1.3
 ```
 
 BBDown 与 aria2 由脚本从官方 Release 下载。固定 FFmpeg 历史归档可通过 `-FfmpegArchiveUrl`、环境变量 `FFMPEG_ARCHIVE_URL` 或本地归档提供，所有工具下载均校验 SHA-256。

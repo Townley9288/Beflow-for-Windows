@@ -561,11 +561,11 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var sanitized = Regex.Replace(text, "(?i)(cookie\\s*[:=]\\s*)[^\\r\\n]+", "$1[已隐藏]");
         sanitized = Regex.Replace(
             sanitized,
-            "(?i)(SESSDATA|bili_jct|DedeUserID(?:__ckMd5)?|AccessToken|access_token|refresh_token)\\s*=\\s*[^\\s;&]+",
+            "(?i)(SESSDATA|bili_jct|DedeUserID(?:__ckMd5)?|AccessToken|access_token|refresh_token|ticket|qrcode_key)\\s*=\\s*[^\\s;&]+",
             "$1=[已隐藏]");
         sanitized = Regex.Replace(
             sanitized,
-            "(?i)([?&](?:SESSDATA|bili_jct|access_token|refresh_token|token)=)[^&#\\s]+",
+            "(?i)([?&](?:SESSDATA|bili_jct|access_token|refresh_token|token|ticket|qrcode_key)=)[^&#\\s]+",
             "$1[已隐藏]");
         return Regex.Replace(
             sanitized,

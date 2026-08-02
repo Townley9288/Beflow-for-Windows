@@ -13,6 +13,9 @@ public sealed class AccountStatusTests
     [InlineData("access_token=secret-value", "access_token=[已隐藏]")]
     [InlineData("Cookie: SESSDATA=secret-value;bili_jct=csrf-secret", "Cookie: [已隐藏]")]
     [InlineData("refresh_token=refresh-secret", "refresh_token=[已隐藏]")]
+    [InlineData("ticket=login-ticket-secret;gourl=https://passport.bilibili.com", "ticket=[已隐藏];gourl=https://passport.bilibili.com")]
+    [InlineData("https://passport.biligame.com/crossDomain?ticket=login-ticket-secret&first_domain=.bilibili.com", "https://passport.biligame.com/crossDomain?ticket=[已隐藏]&first_domain=.bilibili.com")]
+    [InlineData("qrcode_key=qrcode-secret", "qrcode_key=[已隐藏]")]
     public void LoginOutputIsSanitized(string source, string expected)
     {
         Assert.Equal(expected, BBDownService.SanitizeLoginOutput(source));

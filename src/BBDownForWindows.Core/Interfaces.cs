@@ -55,6 +55,7 @@ public interface IUpdateService
 public interface IToolLocator
 {
     ToolPaths Locate(AppSettings settings);
+    ToolPaths LocateFast(AppSettings settings) => Locate(settings);
     Task<string> GetVersionAsync(string executable, CancellationToken cancellationToken = default);
 }
 

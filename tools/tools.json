@@ -6,7 +6,7 @@
     "sha256": "40F1E2AF0D4E74DF765C6F93D2E931F9BEA201D5168D0BC62DC35A54B7E0EC02"
   },
   "bbdownSource": {
-    "version": "1.6.3-beflow.6",
+    "version": "1.6.3-beflow.10",
     "commit": "45622f79cd766e0fc6f5cbd49fcf4960340f35c3",
     "archive": "BBDown_1.6.3_source_45622f7.zip",
     "url": "https://codeload.github.com/nilaoda/BBDown/zip/45622f79cd766e0fc6f5cbd49fcf4960340f35c3",
