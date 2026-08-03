@@ -12,6 +12,9 @@ public sealed partial class SettingsPage : Page
     private readonly DispatcherTimer _qrTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private DateTime _qrTimestamp;
     private bool _inputSettingsReady;
+    private bool _qrDialogShowing;
+    private Guid _qrTaskId;
+    private bool _qrCancelRequested;
 
     public SettingsPage()
     {
@@ -20,8 +23,23 @@ public sealed partial class SettingsPage : Page
         _qrTimer.Tick += QrTimer_Tick;
     }
     public SettingsViewModel ViewModel { get; }
-    protected override async void OnNavigatedTo(NavigationEventArgs e) { base.OnNavigatedTo(e); _inputSettingsReady = false; ViewModel.Activate(); _qrTimer.Start(); await ViewModel.InitializeAsync(); _inputSettingsReady = true; }
-    protected override void OnNavigatedFrom(NavigationEventArgs e) { _inputSettingsReady = false; _qrTimer.Stop(); ViewModel.Deactivate(); base.OnNavigatedFrom(e); }
+    protected override async void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        _inputSettingsReady = false;
+        ViewModel.Activate();
+        _qrTimer.Start();
+        await ViewModel.InitializeAsync();
+        _inputSettingsReady = ViewModel.IsActive && ViewModel.IsInitialized;
+    }
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        _inputSettingsReady = false;
+        _qrTimer.Stop();
+        HideQrDialog();
+        ViewModel.Deactivate();
+        base.OnNavigatedFrom(e);
+    }
     private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetWorkDirectory(value); }
     private async void BrowseAria_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetAria2cPath(value); }
     private async void BrowseMkv_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetMkvmergePath(value); }
@@ -53,13 +71,21 @@ public sealed partial class SettingsPage : Page
         var task = services.TaskManager.ActiveTask;
         if (task is null || task.Kind is not (TaskKind.LoginWeb or TaskKind.LoginTv))
         {
-            QrPanel.Visibility = Visibility.Collapsed;
+            _qrTaskId = Guid.Empty;
+            _qrCancelRequested = false;
+            HideQrDialog();
             return;
+        }
+        if (_qrTaskId != task.Id)
+        {
+            _qrTaskId = task.Id;
+            _qrCancelRequested = false;
+            _qrTimestamp = DateTime.MinValue;
         }
 
         if (task.State == TaskState.Running)
         {
-            QrPanel.Visibility = Visibility.Visible;
+            if (!_qrCancelRequested) ShowQrDialog();
             if (!File.Exists(services.Paths.QrCodeFile))
             {
                 QrImage.Source = null;
@@ -84,6 +110,32 @@ public sealed partial class SettingsPage : Page
             TaskState.Cancelled => "登录已取消",
             _ => "登录流程已完成，正在刷新账号状态…"
         };
-        QrPanel.Visibility = task.State is TaskState.Failed or TaskState.Cancelled ? Visibility.Visible : Visibility.Collapsed;
+        HideQrDialog();
+    }
+
+    private void ShowQrDialog()
+    {
+        if (_qrDialogShowing || XamlRoot is null) return;
+        QrDialog.XamlRoot = XamlRoot;
+        _qrDialogShowing = true;
+        _ = ShowQrDialogAsync();
+    }
+
+    private async Task ShowQrDialogAsync()
+    {
+        try { await QrDialog.ShowAsync(); }
+        finally { _qrDialogShowing = false; }
+    }
+
+    private void HideQrDialog()
+    {
+        if (!_qrDialogShowing) return;
+        QrDialog.Hide();
+    }
+
+    private void QrDialog_CloseButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+    {
+        _qrCancelRequested = true;
+        _ = ((App)Application.Current).Services.TaskManager.CancelActiveAsync();
     }
 }

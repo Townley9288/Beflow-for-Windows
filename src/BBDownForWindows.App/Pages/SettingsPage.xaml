@@ -121,11 +121,6 @@
                     </Border>
                 </Grid>
 
-                <StackPanel x:Name="QrPanel" Visibility="Collapsed" HorizontalAlignment="Center" Spacing="8">
-                    <Image x:Name="QrImage" Width="180" Height="180" Stretch="Uniform"/>
-                    <TextBlock x:Name="QrStatus" Text="等待二维码生成…" HorizontalAlignment="Center" TextWrapping="Wrap"/>
-                    <Button Content="取消登录" Command="{Binding Console.CancelCommand}" HorizontalAlignment="Center"/>
-                </StackPanel>
                 <InfoBar IsOpen="{Binding HasLoginMessage}" Visibility="{Binding LoginMessageVisibility}" IsClosable="False" Severity="{Binding LoginMessageSeverity}" Message="{Binding LoginMessage}"/>
             </StackPanel>
         </Border>
@@ -238,6 +233,17 @@
         </Border>
         </StackPanel>
         </StackPanel></ScrollViewer>
+        <ContentDialog x:Name="QrDialog"
+                       Title="扫码登录"
+                       CloseButtonText="取消登录"
+                       DefaultButton="Close"
+                       CloseButtonClick="QrDialog_CloseButtonClick">
+            <StackPanel MinWidth="300" Spacing="10" HorizontalAlignment="Center">
+                <Image x:Name="QrImage" Width="240" Height="240" Stretch="Uniform"/>
+                <TextBlock x:Name="QrStatus" Text="等待二维码生成…" HorizontalAlignment="Center" TextWrapping="Wrap"/>
+                <TextBlock Text="请使用哔哩哔哩客户端扫描并确认" Opacity="0.65" HorizontalAlignment="Center" TextWrapping="Wrap"/>
+            </StackPanel>
+        </ContentDialog>
         <InfoBar x:Name="SettingsNotification"
                  IsOpen="{Binding HasMessage}"
                  Visibility="{Binding MessageVisibility}"

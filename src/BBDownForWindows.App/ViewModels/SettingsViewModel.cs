@@ -20,6 +20,12 @@ public sealed class SettingsViewModel : ObservableObject
     private string _lastAccountCheckText = "尚未检测";
     private InfoBarSeverity _loginMessageSeverity = InfoBarSeverity.Informational;
     private bool _active;
+    private bool _initialized;
+    private readonly SemaphoreSlim _toolDetectionGate = new(1, 1);
+    private readonly SemaphoreSlim _accountRefreshGate = new(1, 1);
+    private CancellationTokenSource? _activationCancellation;
+
+    internal sealed record ToolDetectionResult(ToolPaths Tools, IReadOnlyList<string> Versions);
 
     public SettingsViewModel(AppServices services)
     {
@@ -30,7 +36,7 @@ public sealed class SettingsViewModel : ObservableObject
         SaveAriaCommand = new AsyncRelayCommand(SaveAriaSettingsAsync);
         SaveMkvCommand = new AsyncRelayCommand(SaveMkvSettingsAsync);
         SaveUpdateCommand = new AsyncRelayCommand(SaveUpdateSettingsAsync);
-        DetectToolsCommand = new AsyncRelayCommand(DetectToolsAsync);
+        DetectToolsCommand = new AsyncRelayCommand(DetectToolsCommandAsync);
         CleanupCommand = new AsyncRelayCommand(CleanupAsync);
         RefreshAccountsCommand = new AsyncRelayCommand(RefreshAccountsAsync);
         LoginWebCommand = new AsyncRelayCommand(() => LoginAsync(AccountChannel.Web), CanStartLogin);
@@ -66,6 +72,8 @@ public sealed class SettingsViewModel : ObservableObject
     public TaskConsoleViewModel Console { get; }
     public AccountChannelViewModel WebAccount { get; }
     public AccountChannelViewModel TvAccount { get; }
+    public bool IsActive => _active;
+    public bool IsInitialized => _initialized;
     public string ToolStatus { get => _toolStatus; private set => SetProperty(ref _toolStatus, value); }
     public string LastAccountCheckText { get => _lastAccountCheckText; private set => SetProperty(ref _lastAccountCheckText, value); }
     public string LoginMessage
@@ -125,12 +133,19 @@ public sealed class SettingsViewModel : ObservableObject
     public void Activate()
     {
         if (_active) return;
+        _activationCancellation?.Dispose();
+        _activationCancellation = new CancellationTokenSource();
         _active = true;
         Console.PropertyChanged += Console_PropertyChanged;
     }
 
     public void Deactivate()
     {
+        var activationCancellation = _activationCancellation;
+        _activationCancellation = null;
+        activationCancellation?.Cancel();
+        activationCancellation?.Dispose();
+        _initialized = false;
         if (!_active) return;
         _active = false;
         Console.PropertyChanged -= Console_PropertyChanged;
@@ -138,29 +153,134 @@ public sealed class SettingsViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
-        Settings = await _services.Settings.LoadAsync();
-        RenameSettings = await _services.RenameSettings.LoadAsync();
-        Settings.ThemeMode = _services.Theme.CurrentMode;
-        await Task.WhenAll(DetectToolsAsync(), RefreshAccountsAsync());
+        var cancellationToken = GetCurrentOperationToken();
+        _initialized = false;
+
+        try
+        {
+            var settingsTask = _services.Settings.LoadAsync(cancellationToken);
+            var renameSettingsTask = _services.RenameSettings.LoadAsync(cancellationToken);
+            await Task.WhenAll(settingsTask, renameSettingsTask);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            Settings = await settingsTask;
+            RenameSettings = await renameSettingsTask;
+            Settings.ThemeMode = _services.Theme.CurrentMode;
+            _initialized = true;
+
+            // Let the first settings frame render before probing executables or contacting account APIs.
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (CanApply(cancellationToken)) _ = RunBackgroundInitializationAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Navigation away from the page cancels initialization silently.
+            _initialized = false;
+        }
+        catch (Exception exception)
+        {
+            _initialized = false;
+            if (CanApply(cancellationToken))
+                SetMessage($"设置页初始化失败：{exception.Message}", InfoBarSeverity.Error);
+        }
+    }
+
+    private async Task RunBackgroundInitializationAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.WhenAll(DetectToolsAsync(cancellationToken), RefreshAccountsCoreAsync(cancellationToken));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            if (CanApply(cancellationToken))
+                SetMessage($"设置页后台初始化失败：{exception.Message}", InfoBarSeverity.Error);
+        }
     }
 
     public async Task RefreshAccountsAsync()
     {
-        WebAccount.SetChecking();
-        TvAccount.SetChecking();
-        var snapshot = await _services.AccountStatus.GetStatusAsync();
-        WebAccount.Apply(snapshot.Web);
-        TvAccount.Apply(snapshot.Tv);
-        LastAccountCheckText = $"最近检测：{snapshot.CheckedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
+        var cancellationToken = GetCurrentOperationToken();
+        try
+        {
+            await RefreshAccountsCoreAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
-    public async Task RefreshAccountAsync(AccountChannel channel)
+    private async Task RefreshAccountsCoreAsync(CancellationToken cancellationToken)
     {
-        var account = channel == AccountChannel.Web ? WebAccount : TvAccount;
-        account.SetChecking();
-        var status = await _services.AccountStatus.GetStatusAsync(channel);
-        account.Apply(status);
-        LastAccountCheckText = $"最近检测：{status.CheckedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
+        try
+        {
+            await _accountRefreshGate.WaitAsync(cancellationToken);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!CanApply(cancellationToken)) return;
+                WebAccount.SetChecking();
+                TvAccount.SetChecking();
+                var snapshot = await Task.Run(
+                    () => _services.AccountStatus.GetStatusAsync(cancellationToken),
+                    cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!CanApply(cancellationToken)) return;
+                WebAccount.Apply(snapshot.Web);
+                TvAccount.Apply(snapshot.Tv);
+                LastAccountCheckText = $"最近检测：{snapshot.CheckedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
+            }
+            finally
+            {
+                _accountRefreshGate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            if (!CanApply(cancellationToken)) return;
+            LastAccountCheckText = "最近检测：失败";
+            SetMessage($"账号状态检测失败：{exception.Message}", InfoBarSeverity.Error);
+        }
+    }
+
+    public Task RefreshAccountAsync(AccountChannel channel) =>
+        RefreshAccountAsync(channel, GetCurrentOperationToken());
+
+    private async Task RefreshAccountAsync(AccountChannel channel, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _accountRefreshGate.WaitAsync(cancellationToken);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!CanApply(cancellationToken)) return;
+                var account = channel == AccountChannel.Web ? WebAccount : TvAccount;
+                account.SetChecking();
+                var status = await Task.Run(
+                    () => _services.AccountStatus.GetStatusAsync(channel, cancellationToken),
+                    cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!CanApply(cancellationToken)) return;
+                account.Apply(status);
+                LastAccountCheckText = $"最近检测：{status.CheckedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
+            }
+            finally
+            {
+                _accountRefreshGate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
     public async Task SaveDownloadSettingsAsync()
@@ -262,36 +382,101 @@ public sealed class SettingsViewModel : ObservableObject
         target.Aria2MinSplitSize = source.Aria2MinSplitSize;
     }
 
-    private async Task DetectToolsAsync()
+    private async Task DetectToolsCommandAsync()
+    {
+        var cancellationToken = GetCurrentOperationToken();
+        try
+        {
+            await DetectToolsAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task DetectToolsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _toolDetectionGate.WaitAsync(cancellationToken);
+            try
+            {
+                await DetectToolsCoreAsync(cancellationToken);
+            }
+            finally
+            {
+                _toolDetectionGate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            if (CanApply(cancellationToken)) ToolStatus = $"工具检测失败：{exception.Message}";
+        }
+    }
+
+    private async Task DetectToolsCoreAsync(CancellationToken cancellationToken)
     {
         var settingsSnapshot = Settings.Clone();
-        var detection = await Task.Run(async () =>
-        {
-            var tools = _services.ToolLocator.LocateFast(settingsSnapshot);
-            var versions = await Task.WhenAll(
-                _services.ToolLocator.GetVersionAsync(tools.BBDown),
-                _services.ToolLocator.GetVersionAsync(tools.Aria2c),
-                _services.ToolLocator.GetVersionAsync(tools.Ffmpeg),
-                _services.ToolLocator.GetVersionAsync(tools.Ffprobe),
-                _services.ToolLocator.GetVersionAsync(tools.Mkvmerge)).ConfigureAwait(false);
-            return (Tools: tools, Versions: versions);
-        });
+        var result = await ProbeToolsAsync(_services.ToolLocator, settingsSnapshot, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!CanApply(cancellationToken)) return;
 
-        var tools = detection.Tools;
+        var tools = result.Tools;
+        var currentSettings = Settings.Clone();
         var settingsChanged = false;
-        if (string.IsNullOrWhiteSpace(Settings.Aria2cPath) && !string.IsNullOrWhiteSpace(tools.Aria2c))
+        if (string.IsNullOrWhiteSpace(settingsSnapshot.Aria2cPath)
+            && string.IsNullOrWhiteSpace(currentSettings.Aria2cPath)
+            && !string.IsNullOrWhiteSpace(tools.Aria2c))
         {
-            Settings.Aria2cPath = tools.Aria2c;
+            currentSettings.Aria2cPath = tools.Aria2c;
             settingsChanged = true;
         }
-        if (string.IsNullOrWhiteSpace(Settings.MkvmergePath) && !string.IsNullOrWhiteSpace(tools.Mkvmerge))
+        if (string.IsNullOrWhiteSpace(settingsSnapshot.MkvmergePath)
+            && string.IsNullOrWhiteSpace(currentSettings.MkvmergePath)
+            && !string.IsNullOrWhiteSpace(tools.Mkvmerge))
         {
-            Settings.MkvmergePath = tools.Mkvmerge;
+            currentSettings.MkvmergePath = tools.Mkvmerge;
             settingsChanged = true;
         }
-        if (settingsChanged) Settings = Settings.Clone();
-        var versions = detection.Versions;
-        ToolStatus = $"BBDown: {versions[0]}\naria2c: {versions[1]}\nFFmpeg: {versions[2]}\nffprobe: {versions[3]}\nmkvmerge: {versions[4]}";
+        if (settingsChanged) Settings = currentSettings;
+        ToolStatus = $"BBDown: {result.Versions[0]}\naria2c: {result.Versions[1]}\nFFmpeg: {result.Versions[2]}\nffprobe: {result.Versions[3]}\nmkvmerge: {result.Versions[4]}";
+    }
+
+    internal static async Task<ToolDetectionResult> ProbeToolsAsync(
+        IToolLocator toolLocator,
+        AppSettings settings,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(toolLocator);
+        ArgumentNullException.ThrowIfNull(settings);
+        var settingsSnapshot = settings.Clone();
+
+        return await Task.Run(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var tools = toolLocator.LocateFast(settingsSnapshot);
+            cancellationToken.ThrowIfCancellationRequested();
+            var versions = await Task.WhenAll(
+                toolLocator.GetVersionAsync(tools.BBDown, cancellationToken),
+                toolLocator.GetVersionAsync(tools.Aria2c, cancellationToken),
+                toolLocator.GetVersionAsync(tools.Ffmpeg, cancellationToken),
+                toolLocator.GetVersionAsync(tools.Ffprobe, cancellationToken),
+                toolLocator.GetVersionAsync(tools.Mkvmerge, cancellationToken));
+            cancellationToken.ThrowIfCancellationRequested();
+            return new ToolDetectionResult(tools, versions);
+        }, cancellationToken);
+    }
+
+    private CancellationToken GetCurrentOperationToken() => _activationCancellation?.Token ?? CancellationToken.None;
+
+    private bool CanApply(CancellationToken cancellationToken)
+    {
+        if (!_active || cancellationToken.IsCancellationRequested) return false;
+        return _activationCancellation is { } activation && cancellationToken == activation.Token;
     }
 
     private async Task CleanupAsync()
@@ -302,19 +487,32 @@ public sealed class SettingsViewModel : ObservableObject
 
     private async Task LoginAsync(AccountChannel channel)
     {
+        var activationToken = GetCurrentOperationToken();
+        if (!CanApply(activationToken)) return;
         LoginMessage = string.Empty;
         var tv = channel == AccountChannel.Tv;
         var credentialPath = tv ? _services.Paths.TvCredentialFile : _services.Paths.WebCredentialFile;
         var credentialTimestamp = File.Exists(credentialPath) ? File.GetLastWriteTimeUtc(credentialPath) : DateTime.MinValue;
-        var snapshot = await _services.TaskManager.RunExclusiveAsync(
-            tv ? TaskKind.LoginTv : TaskKind.LoginWeb,
-            false,
-            tv ? "login_tv" : "login_web",
-            (context, token) => _services.BBDown.LoginAsync(tv, context, token));
+        TaskSnapshot snapshot;
+        try
+        {
+            snapshot = await _services.TaskManager.RunExclusiveAsync(
+                tv ? TaskKind.LoginTv : TaskKind.LoginWeb,
+                false,
+                tv ? "login_tv" : "login_web",
+                (context, token) => _services.BBDown.LoginAsync(tv, context, token),
+                activationToken);
+        }
+        catch (OperationCanceledException) when (activationToken.IsCancellationRequested)
+        {
+            return;
+        }
 
+        if (!CanApply(activationToken)) return;
         if (snapshot.State == TaskState.Completed)
         {
-            await RefreshAccountAsync(channel);
+            await RefreshAccountAsync(channel, activationToken);
+            if (!CanApply(activationToken)) return;
             var account = channel == AccountChannel.Web ? WebAccount : TvAccount;
             var credentialUpdated = File.Exists(credentialPath) && File.GetLastWriteTimeUtc(credentialPath) > credentialTimestamp;
             LoginMessageSeverity = credentialUpdated && account.IsLoggedIn ? InfoBarSeverity.Success : InfoBarSeverity.Warning;

@@ -58,8 +58,14 @@ public sealed partial class DownloadPage : Page
         ((App)Application.Current).MainWindow.Navigate("rename", new RenameNavigationContext(result.RenameDirectory, result.OutputFiles, result.Title));
     }
 
-    private void ManageNamingRules_Click(object sender, RoutedEventArgs e) =>
-        ((App)Application.Current).MainWindow.Navigate("rename-templates", new DownloadNamingNavigationContext(ViewModel.ActiveNamingProfileKind));
+    private void ManageNamingRules_Click(object sender, RoutedEventArgs e)
+    {
+        // This button lives inside a modal ContentDialog. Finish the dialog first;
+        // navigating while ShowAsync is still pending can leave the window blocked.
+        DownloadSettingsDialog.Hide();
+        DispatcherQueue.TryEnqueue(() =>
+            ((App)Application.Current).MainWindow.Navigate("rename-templates", new DownloadNamingNavigationContext(ViewModel.ActiveNamingProfileKind)));
+    }
 
     private void DownloadNotification_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
 
