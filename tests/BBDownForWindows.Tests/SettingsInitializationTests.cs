@@ -1,4 +1,5 @@
 using BBDownForWindows.App;
+using BBDownForWindows.App.Pages;
 using BBDownForWindows.App.ViewModels;
 using BBDownForWindows.Core;
 using Xunit;
@@ -90,6 +91,34 @@ public sealed class SettingsInitializationTests
             services?.UpdateHttpClient.Dispose();
             root.Delete(true);
         }
+    }
+
+    [Fact]
+    public void QrCancellationRequiresTheSameRunningLoginTask()
+    {
+        var loginTaskId = Guid.NewGuid();
+        var matching = new TaskSnapshot
+        {
+            Id = loginTaskId,
+            Kind = TaskKind.LoginWeb,
+            State = TaskState.Running
+        };
+
+        Assert.True(SettingsPage.CanCancelQrTask(matching, loginTaskId));
+        Assert.False(SettingsPage.CanCancelQrTask(matching, Guid.NewGuid()));
+        Assert.False(SettingsPage.CanCancelQrTask(new TaskSnapshot
+        {
+            Id = loginTaskId,
+            Kind = TaskKind.LoginTv,
+            State = TaskState.Completed
+        }, loginTaskId));
+        Assert.False(SettingsPage.CanCancelQrTask(new TaskSnapshot
+        {
+            Id = loginTaskId,
+            Kind = TaskKind.DownloadParse,
+            State = TaskState.Running
+        }, loginTaskId));
+        Assert.False(SettingsPage.CanCancelQrTask(null, loginTaskId));
     }
 
     private sealed class RecordingToolLocator : IToolLocator

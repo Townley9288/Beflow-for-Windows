@@ -302,11 +302,15 @@ public sealed partial class MainWindow : Window
             args.Cancel = true;
             if (_closingDialogOpen) return;
             _closingDialogOpen = true;
+            Pages.SettingsPage? suspendedSettingsPage = null;
             try
             {
                 if (hasUnsavedTemplate && !await templatePage!.ConfirmDiscardChangesAsync()) return;
                 if (hasRunningTask)
                 {
+                    suspendedSettingsPage = ContentFrame.Content as Pages.SettingsPage;
+                    if (suspendedSettingsPage is not null)
+                        await suspendedSettingsPage.SuspendQrDialogAsync();
                     var dialog = new ContentDialog
                     {
                         XamlRoot = WindowRoot.XamlRoot,
@@ -324,6 +328,7 @@ public sealed partial class MainWindow : Window
             }
             finally
             {
+                if (!_forceClosing) suspendedSettingsPage?.ResumeQrDialog();
                 _closingDialogOpen = false;
             }
         }

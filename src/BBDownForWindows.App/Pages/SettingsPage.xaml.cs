@@ -13,6 +13,8 @@ public sealed partial class SettingsPage : Page
     private DateTime _qrTimestamp;
     private bool _inputSettingsReady;
     private bool _qrDialogShowing;
+    private bool _qrDialogSuppressed;
+    private Task? _qrDialogTask;
     private Guid _qrTaskId;
     private bool _qrCancelRequested;
 
@@ -115,15 +117,22 @@ public sealed partial class SettingsPage : Page
 
     private void ShowQrDialog()
     {
-        if (_qrDialogShowing || XamlRoot is null) return;
+        if (_qrDialogSuppressed || _qrDialogShowing || XamlRoot is null) return;
         QrDialog.XamlRoot = XamlRoot;
         _qrDialogShowing = true;
-        _ = ShowQrDialogAsync();
+        _qrDialogTask = ShowQrDialogAsync();
     }
 
     private async Task ShowQrDialogAsync()
     {
-        try { await QrDialog.ShowAsync(); }
+        try
+        {
+            await QrDialog.ShowAsync();
+        }
+        catch (Exception)
+        {
+            // Another window-level dialog can briefly own this XamlRoot. The timer retries later.
+        }
         finally { _qrDialogShowing = false; }
     }
 
@@ -133,9 +142,26 @@ public sealed partial class SettingsPage : Page
         QrDialog.Hide();
     }
 
+    internal async Task SuspendQrDialogAsync()
+    {
+        _qrDialogSuppressed = true;
+        var dialogTask = _qrDialogTask;
+        HideQrDialog();
+        if (dialogTask is not null) await dialogTask;
+    }
+
+    internal void ResumeQrDialog() => _qrDialogSuppressed = false;
+
     private void QrDialog_CloseButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
+        var manager = ((App)Application.Current).Services.TaskManager;
+        if (!CanCancelQrTask(manager.ActiveTask, _qrTaskId)) return;
         _qrCancelRequested = true;
-        _ = ((App)Application.Current).Services.TaskManager.CancelActiveAsync();
+        _ = manager.CancelActiveAsync();
     }
+
+    internal static bool CanCancelQrTask(TaskSnapshot? task, Guid qrTaskId) =>
+        task is { State: TaskState.Running }
+        && task.Id == qrTaskId
+        && task.Kind is TaskKind.LoginWeb or TaskKind.LoginTv;
 }

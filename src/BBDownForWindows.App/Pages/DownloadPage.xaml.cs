@@ -12,6 +12,8 @@ public sealed record DownloadInputNavigationContext(string Input, bool ParseAuto
 
 public sealed partial class DownloadPage : Page
 {
+    private DownloadNamingNavigationContext? _pendingNamingNavigation;
+
     public DownloadPage()
     {
         ViewModel = new DownloadViewModel(((App)Application.Current).Services);
@@ -60,11 +62,8 @@ public sealed partial class DownloadPage : Page
 
     private void ManageNamingRules_Click(object sender, RoutedEventArgs e)
     {
-        // This button lives inside a modal ContentDialog. Finish the dialog first;
-        // navigating while ShowAsync is still pending can leave the window blocked.
+        _pendingNamingNavigation = new DownloadNamingNavigationContext(ViewModel.ActiveNamingProfileKind);
         DownloadSettingsDialog.Hide();
-        DispatcherQueue.TryEnqueue(() =>
-            ((App)Application.Current).MainWindow.Navigate("rename-templates", new DownloadNamingNavigationContext(ViewModel.ActiveNamingProfileKind)));
     }
 
     private void DownloadNotification_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
@@ -80,8 +79,13 @@ public sealed partial class DownloadPage : Page
 
     private async void ShowDownloadSettings_Click(object sender, RoutedEventArgs e)
     {
+        _pendingNamingNavigation = null;
         DownloadSettingsDialog.XamlRoot = XamlRoot;
         await DownloadSettingsDialog.ShowAsync();
+        var navigation = _pendingNamingNavigation;
+        _pendingNamingNavigation = null;
+        if (navigation is not null)
+            ((App)Application.Current).MainWindow.Navigate("rename-templates", navigation);
     }
 
     private void BilibiliInput_DragOver(object sender, DragEventArgs e)
