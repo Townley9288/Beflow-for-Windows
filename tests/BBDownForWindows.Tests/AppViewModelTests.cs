@@ -350,6 +350,28 @@ public sealed class AppViewModelTests
         Assert.NotEqual(string.Empty, viewModel.Message);
     }
 
+    [Fact]
+    public async Task TmdbSeasonMappingAndCustomEpisodeModesAreMutuallyExclusive()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new RenameViewModel(fixture.Services);
+        await viewModel.InitializeAsync(null);
+
+        viewModel.UseCustomEpisodes = true;
+        viewModel.UseTmdbSeasonMapping = true;
+
+        Assert.True(viewModel.UseTmdbSeasonMapping);
+        Assert.False(viewModel.UseCustomEpisodes);
+        Assert.False(viewModel.CanEditSeason);
+        Assert.False(viewModel.CanToggleCustomEpisodes);
+
+        viewModel.UseCustomEpisodes = true;
+
+        Assert.True(viewModel.UseCustomEpisodes);
+        Assert.False(viewModel.UseTmdbSeasonMapping);
+        Assert.True(viewModel.CanEditSeason);
+    }
+
     private sealed class AppFixture : IDisposable
     {
         private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory();

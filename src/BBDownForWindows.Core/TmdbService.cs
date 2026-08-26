@@ -117,6 +117,63 @@ public sealed class TmdbService : ITmdbService
         return episodes;
     }
 
+    public async Task<IReadOnlyDictionary<int, TmdbEpisodeTarget>> GetContinuousEpisodeMapAsync(int tmdbId, CancellationToken cancellationToken = default)
+    {
+        if (tmdbId <= 0) throw new ArgumentOutOfRangeException(nameof(tmdbId));
+        var settings = await LoadConfiguredSettingsAsync(cancellationToken);
+        var cacheKey = BuildCacheKey("continuous-episodes", settings, tmdbId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (TryGetCache(cacheKey, out IReadOnlyDictionary<int, TmdbEpisodeTarget>? cached) && cached is not null)
+            return new Dictionary<int, TmdbEpisodeTarget>(cached);
+
+        using var detail = await GetJsonAsync(settings, $"/3/tv/{tmdbId}", new Dictionary<string, string> { ["language"] = "zh-CN" }, cancellationToken);
+        if (!detail.RootElement.TryGetProperty("seasons", out var seasonItems) || seasonItems.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("TMDB 未返回季信息，无法按季映射连续集号");
+
+        var seasons = seasonItems.EnumerateArray()
+            .Select(item => new
+            {
+                Number = ReadInt(item, "season_number"),
+                EpisodeCount = ReadInt(item, "episode_count")
+            })
+            .Where(item => item.Number > 0 && item.EpisodeCount > 0)
+            .GroupBy(item => item.Number)
+            .Select(group => group.First())
+            .OrderBy(item => item.Number)
+            .ToList();
+        if (seasons.Count == 0) throw new InvalidOperationException("TMDB 没有可用于连续集号映射的正片季");
+
+        var result = new Dictionary<int, TmdbEpisodeTarget>();
+        var sourceEpisode = 0;
+        foreach (var season in seasons)
+        {
+            using var seasonDocument = await GetJsonAsync(settings, $"/3/tv/{tmdbId}/season/{season.Number}",
+                new Dictionary<string, string> { ["language"] = "zh-CN" }, cancellationToken);
+            if (!seasonDocument.RootElement.TryGetProperty("episodes", out var episodesElement) || episodesElement.ValueKind != JsonValueKind.Array)
+                throw new InvalidOperationException($"TMDB 第 {season.Number} 季未返回剧集列表，无法安全映射");
+
+            var episodes = new Dictionary<int, string>();
+            foreach (var item in episodesElement.EnumerateArray())
+            {
+                var episodeNumber = ReadInt(item, "episode_number");
+                if (episodeNumber > 0) episodes[episodeNumber] = ReadString(item, "name");
+            }
+            if (episodes.Count != season.EpisodeCount)
+                throw new InvalidOperationException($"TMDB 第 {season.Number} 季剧集数据不完整（季信息 {season.EpisodeCount} 集，实际返回 {episodes.Count} 集）");
+
+            for (var episodeNumber = 1; episodeNumber <= season.EpisodeCount; episodeNumber++)
+            {
+                if (!episodes.TryGetValue(episodeNumber, out var name))
+                    throw new InvalidOperationException($"TMDB 第 {season.Number} 季缺少 E{episodeNumber:00}，无法安全映射");
+                sourceEpisode++;
+                result[sourceEpisode] = new TmdbEpisodeTarget(season.Number, episodeNumber, name);
+            }
+        }
+
+        if (result.Count == 0) throw new InvalidOperationException("TMDB 没有可用于连续集号映射的剧集");
+        SetCache(cacheKey, new Dictionary<int, TmdbEpisodeTarget>(result), TimeSpan.FromHours(6));
+        return result;
+    }
+
     private async Task<RenameSettings> LoadConfiguredSettingsAsync(CancellationToken cancellationToken)
     {
         var settings = await _settingsStore.LoadAsync(cancellationToken);
@@ -209,6 +266,9 @@ public sealed class TmdbService : ITmdbService
 
     private static string ReadString(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
+
+    private static int ReadInt(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.TryGetInt32(out var result) ? result : 0;
 
     private static string FirstNonEmpty(params string[] values) => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
 

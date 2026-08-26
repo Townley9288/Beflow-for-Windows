@@ -35,11 +35,11 @@
 
                 <StackPanel Grid.Row="1" Spacing="3"><TextBlock Text="年份" Opacity="0.55"/><TextBlock Text="{Binding YearText}"/></StackPanel>
                 <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3"><TextBlock Text="季数" Opacity="0.55"/><TextBlock Text="{Binding SeasonText}"/></StackPanel>
-                <StackPanel Grid.Row="1" Grid.Column="2" Spacing="3"><TextBlock Text="命名模板" Opacity="0.55"/><TextBlock Text="{Binding TemplateText}" TextTrimming="CharacterEllipsis"/></StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="2" Spacing="3"><TextBlock Text="集数模式" Opacity="0.55"/><TextBlock Text="{Binding EpisodeModeText}" TextTrimming="CharacterEllipsis"/></StackPanel>
 
                 <StackPanel Grid.Row="2" Spacing="3"><TextBlock Text="执行时间" Opacity="0.55"/><TextBlock Text="{Binding CreatedAtText}"/></StackPanel>
                 <StackPanel Grid.Row="2" Grid.Column="1" Spacing="3"><TextBlock Text="撤销时间" Opacity="0.55"/><TextBlock Text="{Binding UndoneAtText}"/></StackPanel>
-                <StackPanel Grid.Row="2" Grid.Column="2" Spacing="3"><TextBlock Text="变更数量" Opacity="0.55"/><TextBlock Text="{Binding OperationCountText}"/></StackPanel>
+                <StackPanel Grid.Row="2" Grid.Column="2" Spacing="3"><TextBlock Text="命名模板 / 变更" Opacity="0.55"/><TextBlock Text="{Binding TemplateText}" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding OperationCountText}" Opacity="0.7"/></StackPanel>
             </Grid>
         </Border>
 

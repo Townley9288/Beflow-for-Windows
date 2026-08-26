@@ -61,4 +61,26 @@ public sealed class RenameHistoryDetailViewModelTests
         Assert.Equal("1 个媒体文件", viewModel.OperationSummary);
         Assert.Equal("—", viewModel.UndoneAtText);
     }
+
+    [Fact]
+    public void DescribesContinuousTmdbSeasonMappingInHistory()
+    {
+        var record = new RenameHistoryRecord
+        {
+            ChineseTitle = "有兽焉",
+            DirectoryPath = @"D:\视频\有兽焉",
+            MediaType = RenameMediaType.Series,
+            Year = "2023",
+            Season = 1,
+            UsedTmdbSeasonMapping = true,
+            MappedSeasons = [1, 2, 3, 4, 5, 6],
+            Operations = [new RenameFileOperation("E13.mp4", "有兽焉.2023.S02E01.mp4")]
+        };
+
+        var viewModel = new RenameHistoryDetailViewModel(record);
+
+        Assert.Equal("TMDB 第 1–6 季", viewModel.SeasonText);
+        Assert.Equal("连续集号按 TMDB 分季", viewModel.EpisodeModeText);
+        Assert.Equal("剧集 · 2023 · TMDB 第 1–6 季", viewModel.HeaderMetadata);
+    }
 }

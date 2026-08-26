@@ -8,11 +8,13 @@
     <Page.Resources>
         <DataTemplate x:Key="TmdbResultTemplate" x:DataType="core:TmdbSearchResult">
             <Grid Padding="8" ColumnSpacing="12">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="70"/><ColumnDefinition Width="2*"/><ColumnDefinition Width="100"/><ColumnDefinition Width="90"/></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="70"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <Border Width="54" Height="76" CornerRadius="4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"><Image Source="{x:Bind PosterUrl}" Stretch="UniformToFill"/></Border>
-                <StackPanel Grid.Column="1" Spacing="2"><TextBlock Text="{x:Bind ChineseTitle}" FontWeight="SemiBold"/><TextBlock Text="{x:Bind OriginalTitle}" Opacity="0.65"/><TextBlock Text="{x:Bind Overview}" Opacity="0.55" TextTrimming="CharacterEllipsis" MaxLines="2"/></StackPanel>
-                <TextBlock Grid.Column="2" Text="{x:Bind MediaType}" VerticalAlignment="Center" Opacity="0.65"/>
-                <TextBlock Grid.Column="3" Text="{x:Bind Year}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                <StackPanel Grid.Column="1" Spacing="2"><TextBlock Text="{x:Bind ChineseTitle}" FontWeight="SemiBold"/><TextBlock Text="{x:Bind SecondaryTitle}" Opacity="0.65"/><TextBlock Text="{x:Bind Overview}" Opacity="0.55" TextTrimming="CharacterEllipsis" MaxLines="2"/></StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Right">
+                    <TextBlock Text="{x:Bind Year}" Opacity="0.65"/>
+                    <TextBlock Text="{x:Bind MediaType}" Opacity="0.65"/>
+                </StackPanel>
             </Grid>
         </DataTemplate>
     </Page.Resources>
@@ -98,7 +100,7 @@
                         <TextBox Header="TMDB 片名" Text="{Binding TmdbQuery, Mode=TwoWay}" PlaceholderText="默认使用文件夹名或下载标题" VerticalAlignment="Bottom"/>
                         <Button x:Name="SearchTmdbButton" Grid.Column="1" Content="搜索 TMDB" Click="SearchTmdb_Click" VerticalAlignment="Bottom"/>
                         <TextBox Grid.Column="2" Header="年份" Text="{Binding Year}" IsReadOnly="True" PlaceholderText="自动获取" VerticalAlignment="Bottom"/>
-                        <TextBox x:Name="SeasonTextBox" Grid.Column="3" Header="季数" Text="{Binding SeasonText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsSeries}" InputScope="Number" LostFocus="NumericTextBox_LostFocus" VerticalAlignment="Bottom"/>
+                        <TextBox x:Name="SeasonTextBox" Grid.Column="3" Header="季数" Text="{Binding SeasonText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditSeason}" InputScope="Number" LostFocus="NumericTextBox_LostFocus" VerticalAlignment="Bottom"/>
                         <TextBox x:Name="FilenameSuffixBox" Grid.Column="4" Header="文件名后缀" Text="{Binding FilenameSuffix, Mode=TwoWay}" PlaceholderText="例如 -Beflow" VerticalAlignment="Bottom"/>
                     </Grid>
                     <Border Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" Visibility="{Binding TmdbMatchVisibility}">
@@ -113,13 +115,23 @@
                             CornerRadius="8"
                             Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                             Visibility="Collapsed">
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="96"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                            <ToggleSwitch IsOn="{Binding UseCustomEpisodes, Mode=TwoWay}" OnContent="自定义集数" OffContent="自动识别" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" Text="起始集数" VerticalAlignment="Center"/>
-                            <TextBox x:Name="StartEpisodeTextBox" Grid.Column="2" Height="32" Text="{Binding StartEpisodeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditCustomEpisodes}" InputScope="Number" LostFocus="NumericTextBox_LostFocus" VerticalContentAlignment="Center" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="3" Text="启用后按当前排序从指定集数连续编号。" Opacity="0.6" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                        </Grid>
+                        <StackPanel Spacing="10">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="96"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <ToggleSwitch IsOn="{Binding UseCustomEpisodes, Mode=TwoWay}" IsEnabled="{Binding CanToggleCustomEpisodes}" OnContent="自定义集数" OffContent="自动识别" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="起始集数" VerticalAlignment="Center"/>
+                                <TextBox x:Name="StartEpisodeTextBox" Grid.Column="2" Height="32" Text="{Binding StartEpisodeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditCustomEpisodes}" InputScope="Number" LostFocus="NumericTextBox_LostFocus" VerticalContentAlignment="Center" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="3" Text="启用后按当前排序从指定集数连续编号。" Opacity="0.6" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            </Grid>
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <ToggleSwitch IsOn="{Binding UseTmdbSeasonMapping, Mode=TwoWay}" IsEnabled="{Binding IsSeries}" OnContent="按 TMDB 分季" OffContent="单季命名" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="连续集号按 TMDB 分季" FontWeight="SemiBold"/>
+                                    <TextBlock Text="手动开启后，将源文件的连续 E01、E13 等按 TMDB 正片季映射为 S01E01、S02E01；缺集或超出范围时禁止执行。" Opacity="0.6" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
                     </Border>
                     <Grid ColumnSpacing="10" Margin="0,2,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="250"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -174,6 +186,7 @@
                                     <StackPanel Padding="6" Spacing="2">
                                         <TextBlock Text="{x:Bind SourceName}" FontFamily="Consolas" Opacity="0.6" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind SourceName}"/>
                                         <TextBlock Text="{x:Bind TargetName}" FontFamily="Consolas" FontWeight="SemiBold" TextWrapping="Wrap" ToolTipService.ToolTip="{x:Bind TargetName}"/>
+                                        <TextBlock Text="{x:Bind EpisodeMappingText}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontSize="12"/>
                                         <TextBlock Text="{x:Bind DetailText}" Opacity="0.55" FontSize="12" TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </DataTemplate>

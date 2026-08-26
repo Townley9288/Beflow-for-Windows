@@ -6,6 +6,16 @@ namespace BBDownForWindows.Tests;
 public sealed class RenameTests
 {
     [Fact]
+    public void TmdbResultHidesDuplicateOriginalTitleButKeepsDifferentTitle()
+    {
+        var duplicate = new TmdbSearchResult(1, RenameMediaType.Series, "记忆管理局", "记忆管理局", "2025", "", "");
+        var different = new TmdbSearchResult(2, RenameMediaType.Movie, "沙丘", "Dune", "2021", "", "");
+
+        Assert.Equal(string.Empty, duplicate.SecondaryTitle);
+        Assert.Equal("Dune", different.SecondaryTitle);
+    }
+
+    [Fact]
     public void TemplateValidationRejectsUnknownFieldsBeforePreview()
     {
         var error = Assert.Throws<InvalidOperationException>(() => RenameService.ValidateTemplatePattern("{中文名}.{未知字段}{扩展名}"));
@@ -169,6 +179,115 @@ public sealed class RenameTests
             Assert.True(File.Exists(video));
             Assert.True(File.Exists(subtitle));
             Assert.NotNull((await harness.History.LoadAsync()).Single().UndoneAt);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task PreviewUsesFullWidthColonForEnglishTitleOnWindows()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "movie.mp4"), "video");
+            var harness = CreateHarness(root.FullName);
+            var files = await harness.Service.ScanAsync(root.FullName);
+            RenamePreview? preview = null;
+            await harness.TaskManager.RunExclusiveAsync(TaskKind.RenamePreview, false, "preview", async (context, token) =>
+            {
+                preview = await harness.Service.BuildPreviewAsync(new RenamePreviewRequest
+                {
+                    DirectoryPath = root.FullName,
+                    MediaType = RenameMediaType.Movie,
+                    EnglishTitle = "Raised by Demons: Panda Li",
+                    TemplateName = "english-title",
+                    TemplatePattern = "{英文名}{扩展名}",
+                    Files = files
+                }, context, token);
+            });
+
+            var item = Assert.Single(preview!.Items);
+            Assert.Equal("Raised by Demons： Panda Li.mp4", Path.GetFileName(item.TargetPath));
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task PreviewMapsContinuousSourceEpisodesAcrossTmdbSeasons()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            foreach (var episode in new[] { 1, 13, 61, 65 }) File.WriteAllText(Path.Combine(root.FullName, $"E{episode:00}.mp4"), "video");
+            var harness = CreateHarness(root.FullName);
+            var files = await harness.Service.ScanAsync(root.FullName);
+            var map = new Dictionary<int, TmdbEpisodeTarget>
+            {
+                [1] = new(1, 1, "貔貅驾到"),
+                [13] = new(2, 1, "洞中的秘密"),
+                [61] = new(6, 1, "寻母之路"),
+                [65] = new(6, 5, "野蛟拜师")
+            };
+
+            RenamePreview? preview = null;
+            await harness.TaskManager.RunExclusiveAsync(TaskKind.RenamePreview, false, "preview", async (context, token) =>
+            {
+                preview = await harness.Service.BuildPreviewAsync(new RenamePreviewRequest
+                {
+                    DirectoryPath = root.FullName,
+                    ChineseTitle = "有兽焉",
+                    EnglishTitle = "You Shou Yan",
+                    Year = "2023",
+                    Season = 1,
+                    UseTmdbSeasonMapping = true,
+                    TemplateName = "tmdb-seasons",
+                    TemplatePattern = "{中文名}.{年份}.{季}{集}.{集名}{扩展名}",
+                    Files = files,
+                    TmdbEpisodeMap = map
+                }, context, token);
+            });
+
+            Assert.True(preview!.CanExecute);
+            Assert.Collection(preview.Items,
+                item => { Assert.Equal("有兽焉.2023.S01E01.貔貅驾到.mp4", item.TargetName); Assert.Equal("原 E01 → TMDB S01E01", item.EpisodeMappingText); },
+                item => { Assert.Equal("有兽焉.2023.S02E01.洞中的秘密.mp4", item.TargetName); Assert.Equal("原 E13 → TMDB S02E01", item.EpisodeMappingText); },
+                item => Assert.Equal("有兽焉.2023.S06E01.寻母之路.mp4", item.TargetName),
+                item => { Assert.Equal("有兽焉.2023.S06E05.野蛟拜师.mp4", item.TargetName); Assert.Equal(6, item.SeasonNumber); Assert.Equal(5, item.EpisodeNumber); });
+
+            await harness.TaskManager.RunExclusiveAsync(TaskKind.RenameExecute, false, "rename", async (context, token) =>
+            {
+                await harness.Service.ExecuteAsync(preview, context, token);
+            });
+            var history = Assert.Single(await harness.History.LoadAsync());
+            Assert.True(history.UsedTmdbSeasonMapping);
+            Assert.Equal([1, 2, 6], history.MappedSeasons);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task TmdbSeasonMappingRejectsUnrecognizedOrOutOfRangeSourceEpisodesWithoutFallback()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "片头.mp4"), "video");
+            File.WriteAllText(Path.Combine(root.FullName, "E66.mp4"), "video");
+            var harness = CreateHarness(root.FullName);
+            var files = await harness.Service.ScanAsync(root.FullName);
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Service.BuildPreviewAsync(new RenamePreviewRequest
+            {
+                DirectoryPath = root.FullName,
+                ChineseTitle = "有兽焉",
+                UseTmdbSeasonMapping = true,
+                TemplateName = "tmdb-seasons",
+                TemplatePattern = "{中文名}.{季}{集}{扩展名}",
+                Files = files,
+                TmdbEpisodeMap = new Dictionary<int, TmdbEpisodeTarget> { [65] = new(6, 5, "野蛟拜师") }
+            }, new TaskExecutionContext(_ => { }), CancellationToken.None));
+
+            Assert.Contains("未识别源集号", error.Message, StringComparison.Ordinal);
+            Assert.Contains("E66", error.Message, StringComparison.Ordinal);
         }
         finally { root.Delete(true); }
     }

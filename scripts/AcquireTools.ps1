@@ -54,7 +54,10 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $Publish = Join-Path $BuildRoot 'publish'
     $Executable = Join-Path $Publish 'BBDown.exe'
     $Marker = Join-Path $BuildRoot 'beflow-patches.complete'
-    if ((Test-Path -LiteralPath $Executable -PathType Leaf) -and (Test-Path -LiteralPath $Marker -PathType Leaf)) { return $Publish }
+    $PatchSignature = 'interactive_selection=preserve_across_retry'
+    if ((Test-Path -LiteralPath $Executable -PathType Leaf) -and
+        (Test-Path -LiteralPath $Marker -PathType Leaf) -and
+        [IO.File]::ReadAllText($Marker).Contains($PatchSignature)) { return $Publish }
 
     $WorkingDirectory = Join-Path $CacheDirectory "work\bbdown-$($Entry.version)-$PID"
     New-Item -ItemType Directory -Force -Path $WorkingDirectory, $Publish | Out-Null
@@ -165,6 +168,38 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $ProgramContent = $ProgramContent.Replace($DolbyNeedle, 'Config.GetQualityName("126")')
     $ProgramContent = $ProgramContent.Replace($InteractiveNeedle, 'Config.GetQualityName(key)')
     if ($ProgramContent.Contains('Config.qualitys[')) { throw 'An unsafe BBDown program quality lookup remains after patching.' }
+
+    $SelectionStateNeedle = '            bool selected = false; //用户是否已经手动选择过了轨道' + [Environment]::NewLine +
+        '            int retryCount = 0;'
+    $SelectionStateReplacement = '            bool selected = false; //用户是否已经手动选择过了轨道' + [Environment]::NewLine +
+        '            int selectedVideoIndex = 0;' + [Environment]::NewLine +
+        '            int selectedAudioIndex = 0;' + [Environment]::NewLine +
+        '            int retryCount = 0;'
+    if (-not $ProgramContent.Contains($SelectionStateNeedle)) { throw 'The pinned BBDown interactive selection state changed; refusing to apply an unverified retry patch.' }
+    $ProgramContent = $ProgramContent.Replace($SelectionStateNeedle, $SelectionStateReplacement)
+
+    $SelectionRetryNeedle = '                    int vIndex = 0; //用户手动选择的视频序号' + [Environment]::NewLine +
+        '                    int aIndex = 0; //用户手动选择的音频序号' + [Environment]::NewLine +
+        [Environment]::NewLine +
+        '                    //选择轨道' + [Environment]::NewLine +
+        '                    if (myOption.Interactive && !selected)' + [Environment]::NewLine +
+        '                    {' + [Environment]::NewLine +
+        '                        SelectTrackManually(parsedResult, ref vIndex, ref aIndex);' + [Environment]::NewLine +
+        '                        selected = true;' + [Environment]::NewLine +
+        '                    }'
+    $SelectionRetryReplacement = '                    int vIndex = selectedVideoIndex; //用户手动选择的视频序号' + [Environment]::NewLine +
+        '                    int aIndex = selectedAudioIndex; //用户手动选择的音频序号' + [Environment]::NewLine +
+        [Environment]::NewLine +
+        '                    //选择轨道' + [Environment]::NewLine +
+        '                    if (myOption.Interactive && !selected)' + [Environment]::NewLine +
+        '                    {' + [Environment]::NewLine +
+        '                        SelectTrackManually(parsedResult, ref vIndex, ref aIndex);' + [Environment]::NewLine +
+        '                        selectedVideoIndex = vIndex;' + [Environment]::NewLine +
+        '                        selectedAudioIndex = aIndex;' + [Environment]::NewLine +
+        '                        selected = true;' + [Environment]::NewLine +
+        '                    }'
+    if (-not $ProgramContent.Contains($SelectionRetryNeedle)) { throw 'The pinned BBDown interactive selection block changed; refusing to apply an unverified retry patch.' }
+    $ProgramContent = $ProgramContent.Replace($SelectionRetryNeedle, $SelectionRetryReplacement)
     [IO.File]::WriteAllText($ProgramPath, $ProgramContent, [Text.UTF8Encoding]::new($false))
 
     $LoginPath = Join-Path $WorkingDirectory 'BBDown\BBDownLoginUtil.cs'
@@ -333,7 +368,7 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     & dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:ManagePackageVersionsCentrally=false -p:Version=$($Entry.version) -o $Publish | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patched BBDown build failed with exit code $LASTEXITCODE" }
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Patched BBDown build did not produce BBDown.exe.' }
-    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`nquality=100:智能修复`nquality_lookup=support_formats_then_safe_fallback`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`nweb_login=cookie_container_with_trusted_callback_fallback`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`nquality=100:智能修复`nquality_lookup=support_formats_then_safe_fallback`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`nweb_login=cookie_container_with_trusted_callback_fallback`n$PatchSignature`n", [Text.UTF8Encoding]::new($false))
     return $Publish
 }
 

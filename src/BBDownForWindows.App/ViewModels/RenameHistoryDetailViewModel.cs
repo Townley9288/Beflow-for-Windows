@@ -26,7 +26,7 @@ public sealed class RenameHistoryDetailViewModel
         ? Record.EnglishTitle
         : HeaderMetadata;
     public string HeaderMetadata => Record.MediaType == RenameMediaType.Series
-        ? $"剧集 · {ValueOrUnknown(Record.Year)} · 第 {Math.Max(1, Record.Season)} 季"
+        ? $"剧集 · {ValueOrUnknown(Record.Year)} · {SeasonText}"
         : $"电影 · {ValueOrUnknown(Record.Year)}";
     public string ChineseTitleText => ValueOrUnknown(Record.ChineseTitle);
     public string EnglishTitleText => !string.IsNullOrWhiteSpace(Record.EnglishTitle) &&
@@ -35,7 +35,21 @@ public sealed class RenameHistoryDetailViewModel
         : ValueOrUnknown(Record.EnglishTitle);
     public string MediaTypeText => Record.MediaType == RenameMediaType.Series ? "剧集" : "电影";
     public string YearText => ValueOrUnknown(Record.Year);
-    public string SeasonText => Record.MediaType == RenameMediaType.Series ? $"第 {Math.Max(1, Record.Season)} 季" : "不适用";
+    public string SeasonText
+    {
+        get
+        {
+            if (Record.MediaType != RenameMediaType.Series) return "不适用";
+            var mappedSeasons = Record.MappedSeasons?.Distinct().Order().ToList() ?? [];
+            if (!Record.UsedTmdbSeasonMapping || mappedSeasons.Count == 0) return $"第 {Math.Max(1, Record.Season)} 季";
+            return mappedSeasons.Count == 1
+                ? $"TMDB 第 {mappedSeasons[0]} 季"
+                : $"TMDB 第 {mappedSeasons[0]}–{mappedSeasons[^1]} 季";
+        }
+    }
+    public string EpisodeModeText => Record.MediaType != RenameMediaType.Series
+        ? "不适用"
+        : Record.UsedTmdbSeasonMapping ? "连续集号按 TMDB 分季" : "单季命名";
     public string TemplateText => ValueOrUnknown(Record.TemplateName);
     public string CreatedAtText => Record.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
     public string UndoneAtText => Record.UndoneAt is null ? "—" : Record.UndoneAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");

@@ -70,6 +70,7 @@ public sealed class RenameService(
         ValidatePreviewRequest(request);
         var selected = request.Files.Where(file => file.IsSelected).ToList();
         if (selected.Count == 0) throw new InvalidOperationException("请至少选择一个视频文件");
+        ValidateTmdbSeasonMapping(request, selected);
 
         var settings = await settingsStore.LoadAsync(cancellationToken);
         var tools = toolLocator.Locate(settings);
@@ -84,18 +85,27 @@ public sealed class RenameService(
         {
             cancellationToken.ThrowIfCancellationRequested();
             episodeIndex++;
-            var episode = request.MediaType == RenameMediaType.Series
+            var sourceEpisode = request.MediaType == RenameMediaType.Series
                 ? request.UseCustomEpisodes ? request.StartEpisode + episodeIndex - 1 : file.DetectedEpisode ?? episodeIndex
                 : (int?)null;
+            TmdbEpisodeTarget? mappedEpisode = null;
+            if (request.UseTmdbSeasonMapping && file.DetectedEpisode is int detectedEpisode)
+                mappedEpisode = request.TmdbEpisodeMap[detectedEpisode];
+            var season = mappedEpisode?.SeasonNumber ?? request.Season;
+            var episode = mappedEpisode?.EpisodeNumber ?? sourceEpisode;
             var media = await ProbeMediaAsync(tools.Ffprobe, file.SourcePath, cancellationToken);
-            var episodeName = episode is not null && request.EpisodeNames.TryGetValue(episode.Value, out var value) ? value : string.Empty;
-            var targetName = RenderFileName(request, file.SourcePath, media, episode, episodeName);
+            var episodeName = mappedEpisode?.Name
+                ?? (episode is not null && request.EpisodeNames.TryGetValue(episode.Value, out var value) ? value : string.Empty);
+            var targetName = RenderFileName(request, file.SourcePath, media, season, episode, episodeName);
             var targetPath = Path.Combine(request.DirectoryPath, targetName);
             var item = new RenamePreviewItem
             {
                 SourcePath = Path.GetFullPath(file.SourcePath),
                 TargetPath = Path.GetFullPath(targetPath),
+                SourceEpisodeNumber = request.UseTmdbSeasonMapping ? file.DetectedEpisode : sourceEpisode,
+                SeasonNumber = request.MediaType == RenameMediaType.Series ? season : null,
                 EpisodeNumber = episode,
+                UsedTmdbSeasonMapping = request.UseTmdbSeasonMapping,
                 Media = media
             };
             item.Operations.Add(new RenameFileOperation(item.SourcePath, item.TargetPath));
@@ -137,6 +147,13 @@ public sealed class RenameService(
             EnglishTitle = request.EnglishTitle,
             Year = request.Year,
             Season = request.Season,
+            UsedTmdbSeasonMapping = request.UseTmdbSeasonMapping,
+            MappedSeasons = preview.Items
+                .Where(item => item.SeasonNumber is not null)
+                .Select(item => item.SeasonNumber!.Value)
+                .Distinct()
+                .Order()
+                .ToList(),
             TemplateName = request.TemplateName,
             Operations = operations
         };
@@ -252,7 +269,7 @@ public sealed class RenameService(
         return ParseMediaMetadata(result.Output);
     }
 
-    private static string RenderFileName(RenamePreviewRequest request, string sourcePath, MediaMetadata media, int? episode, string episodeName)
+    private static string RenderFileName(RenamePreviewRequest request, string sourcePath, MediaMetadata media, int season, int? episode, string episodeName)
     {
         var extension = Path.GetExtension(sourcePath);
         var result = request.TemplatePattern;
@@ -261,7 +278,7 @@ public sealed class RenameService(
             ["{中文名}"] = request.ChineseTitle.Trim(),
             ["{英文名}"] = request.EnglishTitle.Trim(),
             ["{年份}"] = request.Year.Trim(),
-            ["{季}"] = request.MediaType == RenameMediaType.Series ? $"S{request.Season:00}" : string.Empty,
+            ["{季}"] = request.MediaType == RenameMediaType.Series ? $"S{season:00}" : string.Empty,
             ["{集}"] = request.MediaType == RenameMediaType.Series && episode is not null ? $"E{episode:00}" : string.Empty,
             ["{集名}"] = episodeName,
             ["{分辨率}"] = media.Resolution,
@@ -284,6 +301,7 @@ public sealed class RenameService(
             result = stem.TrimEnd('.', ' ', '_', '-') + request.FilenameSuffix.Trim() + currentExtension;
         }
         result = result.Trim().Trim('.', ' ');
+        result = result.Replace(':', '：');
         return SanitizeFileComponent(result, Path.GetFileName(sourcePath), 200);
     }
 
@@ -306,6 +324,31 @@ public sealed class RenameService(
         ValidateTemplatePattern(request.TemplatePattern);
         if (request.Season < 0) throw new InvalidOperationException("季数不能小于 0");
         if (request.StartEpisode < 1) throw new InvalidOperationException("起始集数必须大于 0");
+    }
+
+    private static void ValidateTmdbSeasonMapping(RenamePreviewRequest request, IReadOnlyList<RenameFileEntry> selected)
+    {
+        if (!request.UseTmdbSeasonMapping) return;
+        if (request.MediaType != RenameMediaType.Series)
+            throw new InvalidOperationException("只有剧集可以启用“连续集号按 TMDB 分季”");
+        if (request.UseCustomEpisodes)
+            throw new InvalidOperationException("“连续集号按 TMDB 分季”不能与“自定义集数”同时启用");
+        if (request.TmdbEpisodeMap.Count == 0)
+            throw new InvalidOperationException("TMDB 连续集号映射为空，无法生成安全预览");
+
+        var errors = new List<string>();
+        foreach (var file in selected)
+        {
+            if (file.DetectedEpisode is not int detectedEpisode)
+            {
+                errors.Add($"未识别源集号：{file.Name}");
+                continue;
+            }
+            if (!request.TmdbEpisodeMap.ContainsKey(detectedEpisode))
+                errors.Add($"源 E{detectedEpisode:00} 超出 TMDB 正片季集数：{file.Name}");
+        }
+        if (errors.Count > 0)
+            throw new InvalidOperationException(string.Join('；', errors.Take(8)));
     }
 
     private static void ValidateOperations(RenamePreview preview)

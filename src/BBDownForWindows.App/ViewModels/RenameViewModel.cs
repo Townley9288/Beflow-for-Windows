@@ -38,6 +38,7 @@ public sealed class RenameViewModel : ObservableObject
     private int _season = 1;
     private string _filenameSuffix = string.Empty;
     private bool _useCustomEpisodes;
+    private bool _useTmdbSeasonMapping;
     private int _startEpisode = 1;
     private RenameTemplate? _selectedTemplate;
     private string _templatePattern = string.Empty;
@@ -101,7 +102,11 @@ public sealed class RenameViewModel : ObservableObject
         private set
         {
             if (!SetProperty(ref _mediaType, value)) return;
+            if (value != RenameMediaType.Series) _useTmdbSeasonMapping = false;
             OnPropertyChanged(nameof(IsSeries));
+            OnPropertyChanged(nameof(UseTmdbSeasonMapping));
+            OnPropertyChanged(nameof(CanEditSeason));
+            OnPropertyChanged(nameof(CanToggleCustomEpisodes));
             OnPropertyChanged(nameof(CanEditCustomEpisodes));
             OnPropertyChanged(nameof(EpisodeSettingsSummary));
             OnPropertyChanged(nameof(TmdbInfoText));
@@ -128,6 +133,7 @@ public sealed class RenameViewModel : ObservableObject
             ClearPreview();
         }
     }
+    public bool CanEditSeason => IsSeries && !UseTmdbSeasonMapping;
     public string SeasonText
     {
         get => Season.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -143,13 +149,41 @@ public sealed class RenameViewModel : ObservableObject
         set
         {
             if (!SetProperty(ref _useCustomEpisodes, value)) return;
+            if (value && _useTmdbSeasonMapping)
+            {
+                _useTmdbSeasonMapping = false;
+                OnPropertyChanged(nameof(UseTmdbSeasonMapping));
+                OnPropertyChanged(nameof(CanEditSeason));
+            }
+            OnPropertyChanged(nameof(CanEditCustomEpisodes));
+            OnPropertyChanged(nameof(CanToggleCustomEpisodes));
+            OnPropertyChanged(nameof(EpisodeSettingsSummary));
+            ClearPreview();
+        }
+    }
+    public bool UseTmdbSeasonMapping
+    {
+        get => _useTmdbSeasonMapping;
+        set
+        {
+            if (!SetProperty(ref _useTmdbSeasonMapping, value)) return;
+            if (value && _useCustomEpisodes)
+            {
+                _useCustomEpisodes = false;
+                OnPropertyChanged(nameof(UseCustomEpisodes));
+            }
+            OnPropertyChanged(nameof(CanEditSeason));
+            OnPropertyChanged(nameof(CanToggleCustomEpisodes));
             OnPropertyChanged(nameof(CanEditCustomEpisodes));
             OnPropertyChanged(nameof(EpisodeSettingsSummary));
             ClearPreview();
         }
     }
-    public bool CanEditCustomEpisodes => IsSeries && UseCustomEpisodes;
-    public string EpisodeSettingsSummary => UseCustomEpisodes ? "高级设置 · 自定义集数" : "高级设置 · 自动识别集数";
+    public bool CanToggleCustomEpisodes => IsSeries && !UseTmdbSeasonMapping;
+    public bool CanEditCustomEpisodes => CanToggleCustomEpisodes && UseCustomEpisodes;
+    public string EpisodeSettingsSummary => UseTmdbSeasonMapping
+        ? "高级设置 · TMDB 自动分季"
+        : UseCustomEpisodes ? "高级设置 · 自定义集数" : "高级设置 · 自动识别集数";
     public int StartEpisode
     {
         get => _startEpisode;
@@ -381,10 +415,16 @@ public sealed class RenameViewModel : ObservableObject
                 snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.RenamePreview, false, "rename_preview", async (taskContext, token) =>
                 {
                     IReadOnlyDictionary<int, string> episodeNames = new Dictionary<int, string>();
+                    IReadOnlyDictionary<int, TmdbEpisodeTarget> tmdbEpisodeMap = new Dictionary<int, TmdbEpisodeTarget>();
                     if (MediaType == RenameMediaType.Series && _tmdbId is int tmdbId)
                     {
-                        try { episodeNames = await _services.Tmdb.GetEpisodeNamesAsync(tmdbId, Season, token); }
-                        catch (InvalidOperationException) { }
+                        if (UseTmdbSeasonMapping)
+                            tmdbEpisodeMap = await _services.Tmdb.GetContinuousEpisodeMapAsync(tmdbId, token);
+                        else
+                        {
+                            try { episodeNames = await _services.Tmdb.GetEpisodeNamesAsync(tmdbId, Season, token); }
+                            catch (InvalidOperationException) { }
+                        }
                     }
                     var request = new RenamePreviewRequest
                     {
@@ -398,9 +438,11 @@ public sealed class RenameViewModel : ObservableObject
                         TemplatePattern = TemplatePattern,
                         FilenameSuffix = FilenameSuffix,
                         UseCustomEpisodes = UseCustomEpisodes,
+                        UseTmdbSeasonMapping = UseTmdbSeasonMapping,
                         StartEpisode = StartEpisode,
                         Files = Files.Select(file => file.ToModel()).ToList(),
-                        EpisodeNames = episodeNames
+                        EpisodeNames = episodeNames,
+                        TmdbEpisodeMap = tmdbEpisodeMap
                     };
                     generated = await _services.Rename.BuildPreviewAsync(request, taskContext, token);
                 });
@@ -662,11 +704,15 @@ public sealed class RenameViewModel : ObservableObject
         _season = 1;
         _filenameSuffix = string.Empty;
         _useCustomEpisodes = false;
+        _useTmdbSeasonMapping = false;
         _startEpisode = 1;
         OnPropertyChanged(nameof(Season));
         OnPropertyChanged(nameof(SeasonText));
         OnPropertyChanged(nameof(FilenameSuffix));
         OnPropertyChanged(nameof(UseCustomEpisodes));
+        OnPropertyChanged(nameof(UseTmdbSeasonMapping));
+        OnPropertyChanged(nameof(CanEditSeason));
+        OnPropertyChanged(nameof(CanToggleCustomEpisodes));
         OnPropertyChanged(nameof(CanEditCustomEpisodes));
         OnPropertyChanged(nameof(StartEpisode));
         OnPropertyChanged(nameof(StartEpisodeText));

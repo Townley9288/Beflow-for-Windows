@@ -123,9 +123,11 @@ public sealed class RenamePreviewRequest
     public string TemplatePattern { get; init; } = string.Empty;
     public string FilenameSuffix { get; init; } = string.Empty;
     public bool UseCustomEpisodes { get; init; }
+    public bool UseTmdbSeasonMapping { get; init; }
     public int StartEpisode { get; init; } = 1;
     public IReadOnlyList<RenameFileEntry> Files { get; init; } = [];
     public IReadOnlyDictionary<int, string> EpisodeNames { get; init; } = new Dictionary<int, string>();
+    public IReadOnlyDictionary<int, TmdbEpisodeTarget> TmdbEpisodeMap { get; init; } = new Dictionary<int, TmdbEpisodeTarget>();
 }
 
 public sealed record RenameFileOperation(string SourcePath, string TargetPath, bool IsSidecar = false);
@@ -134,7 +136,10 @@ public sealed class RenamePreviewItem
 {
     public required string SourcePath { get; init; }
     public required string TargetPath { get; init; }
+    public int? SourceEpisodeNumber { get; init; }
+    public int? SeasonNumber { get; init; }
     public int? EpisodeNumber { get; init; }
+    public bool UsedTmdbSeasonMapping { get; init; }
     public MediaMetadata Media { get; init; } = MediaMetadata.Default;
     public List<RenameFileOperation> Operations { get; init; } = [];
     public List<string> Warnings { get; init; } = [];
@@ -142,6 +147,11 @@ public sealed class RenamePreviewItem
     public string SourceName => Path.GetFileName(SourcePath);
     public string TargetName => Path.GetFileName(TargetPath);
     public bool IsValid => Errors.Count == 0;
+    public string EpisodeMappingText => SeasonNumber is null || EpisodeNumber is null
+        ? string.Empty
+        : UsedTmdbSeasonMapping && SourceEpisodeNumber is not null
+            ? $"原 E{SourceEpisodeNumber:00} → TMDB S{SeasonNumber:00}E{EpisodeNumber:00}"
+            : $"TMDB S{SeasonNumber:00}E{EpisodeNumber:00}";
     public string DetailText => string.Join(" · ", new[] { Media.Resolution, Media.DynamicRange, Media.VideoCodec, Media.Audio, Media.FrameRate }.Where(value => !string.IsNullOrWhiteSpace(value)));
 }
 
@@ -166,6 +176,8 @@ public sealed class RenameHistoryRecord
     public string EnglishTitle { get; set; } = string.Empty;
     public string Year { get; set; } = string.Empty;
     public int Season { get; set; } = 1;
+    public bool UsedTmdbSeasonMapping { get; set; }
+    public List<int> MappedSeasons { get; set; } = [];
     public string TemplateName { get; set; } = string.Empty;
     public List<RenameFileOperation> Operations { get; set; } = [];
     [JsonIgnore] public string DisplayTitle => string.Join(" / ", new[] { ChineseTitle, EnglishTitle }.Where(value => !string.IsNullOrWhiteSpace(value)));
@@ -187,7 +199,13 @@ public sealed record TmdbSearchResult(
     string OriginalTitle,
     string Year,
     string Overview,
-    string PosterUrl);
+    string PosterUrl)
+{
+    public string SecondaryTitle =>
+        string.Equals(ChineseTitle.Trim(), OriginalTitle.Trim(), StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : OriginalTitle;
+}
 
 public sealed record TmdbTitleDetail(
     int Id,
@@ -195,3 +213,8 @@ public sealed record TmdbTitleDetail(
     string ChineseTitle,
     string EnglishTitle,
     string Year);
+
+public sealed record TmdbEpisodeTarget(
+    int SeasonNumber,
+    int EpisodeNumber,
+    string Name);

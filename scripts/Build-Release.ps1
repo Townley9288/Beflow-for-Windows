@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.1.1.4',
+    [string]$Version = '1.1.1.5',
     [string]$FfmpegArchiveUrl = $env:FFMPEG_ARCHIVE_URL
 )
 

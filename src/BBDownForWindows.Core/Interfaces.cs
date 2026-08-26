@@ -86,6 +86,7 @@ public interface ITmdbService
     Task<IReadOnlyList<TmdbSearchResult>> SearchAsync(string query, CancellationToken cancellationToken = default);
     Task<TmdbTitleDetail> GetDetailAsync(TmdbSearchResult result, CancellationToken cancellationToken = default);
     Task<IReadOnlyDictionary<int, string>> GetEpisodeNamesAsync(int tmdbId, int season, CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<int, TmdbEpisodeTarget>> GetContinuousEpisodeMapAsync(int tmdbId, CancellationToken cancellationToken = default);
 }
 
 public interface IRenameService

@@ -51,6 +51,50 @@ public sealed class TmdbServiceTests
     }
 
     [Fact]
+    public async Task ContinuousEpisodeMapSkipsSpecialsAndConcatenatesTmdbSeasons()
+    {
+        var calls = new List<string>();
+        var service = CreateService(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            calls.Add(path);
+            return path switch
+            {
+                "/3/tv/139168" => Json("""{"seasons":[{"season_number":0,"episode_count":3},{"season_number":1,"episode_count":2},{"season_number":2,"episode_count":2}]}"""),
+                "/3/tv/139168/season/1" => Json("""{"episodes":[{"episode_number":1,"name":"貔貅驾到"},{"episode_number":2,"name":"四不像下凡"}]}"""),
+                "/3/tv/139168/season/2" => Json("""{"episodes":[{"episode_number":1,"name":"洞中的秘密"},{"episode_number":2,"name":"鹿山真面目"}]}"""),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+            };
+        });
+
+        var map = await service.GetContinuousEpisodeMapAsync(139168);
+        var cached = await service.GetContinuousEpisodeMapAsync(139168);
+
+        Assert.Equal(new TmdbEpisodeTarget(1, 1, "貔貅驾到"), map[1]);
+        Assert.Equal(new TmdbEpisodeTarget(1, 2, "四不像下凡"), map[2]);
+        Assert.Equal(new TmdbEpisodeTarget(2, 1, "洞中的秘密"), map[3]);
+        Assert.Equal(new TmdbEpisodeTarget(2, 2, "鹿山真面目"), map[4]);
+        Assert.Equal(4, cached.Count);
+        Assert.Equal(3, calls.Count);
+        Assert.DoesNotContain("/3/tv/139168/season/0", calls);
+    }
+
+    [Fact]
+    public async Task ContinuousEpisodeMapRejectsIncompleteTmdbSeasonData()
+    {
+        var service = CreateService(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/3/tv/9" => Json("""{"seasons":[{"season_number":1,"episode_count":2}]}"""),
+            "/3/tv/9/season/1" => Json("""{"episodes":[{"episode_number":1,"name":"第一集"}]}"""),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetContinuousEpisodeMapAsync(9));
+
+        Assert.Contains("数据不完整", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AuthenticationErrorNeverExposesApiKey()
     {
         const string secret = "super-secret-key";
