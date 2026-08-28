@@ -249,7 +249,7 @@ public sealed record TmdbSearchResult(
     string OriginalTitle,
     string Year,
     string Overview,
-    string PosterUrl)
+    string? PosterUrl)
 {
     public string MediaTypeText => MediaType == RenameMediaType.Series ? "剧集" : "电影";
     public string MetadataText => $"{Year} · {MediaTypeText} · TMDB {Id}";

@@ -65,7 +65,7 @@ public sealed class TmdbService : ITmdbService
                     originalTitle,
                     date.Length >= 4 ? date[..4] : string.Empty,
                     ReadString(item, "overview").Trim(),
-                    string.IsNullOrWhiteSpace(poster) ? string.Empty : $"https://image.tmdb.org/t/p/w185{poster}"));
+                    string.IsNullOrWhiteSpace(poster) ? null : $"https://image.tmdb.org/t/p/w185{poster}"));
             }
         }
         SetCache(cacheKey, results.ToArray(), TimeSpan.FromMinutes(10));

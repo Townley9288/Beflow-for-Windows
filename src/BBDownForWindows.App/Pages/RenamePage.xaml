@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:core="using:BBDownForWindows.Core"
+    xmlns:pages="using:BBDownForWindows.App.Pages"
     xmlns:vm="using:BBDownForWindows.App.ViewModels"
     DataContext="{x:Bind ViewModel, Mode=OneWay}">
     <Page.Resources>
@@ -12,7 +13,7 @@
         <DataTemplate x:Key="TmdbResultTemplate" x:DataType="core:TmdbSearchResult">
             <Grid Padding="8" ColumnSpacing="12">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="70"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                <Border Width="54" Height="76" CornerRadius="4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"><Image Source="{x:Bind PosterUrl}" Stretch="UniformToFill"/></Border>
+                <Border Width="54" Height="76" CornerRadius="4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"><Image pages:TmdbPosterImage.Source="{x:Bind PosterUrl}" Stretch="UniformToFill"/></Border>
                 <StackPanel Grid.Column="1" Spacing="2">
                     <TextBlock Text="{x:Bind ChineseTitle}" FontWeight="SemiBold"/>
                     <TextBlock Text="{x:Bind MetadataText}" FontSize="12" Opacity="0.65"/>

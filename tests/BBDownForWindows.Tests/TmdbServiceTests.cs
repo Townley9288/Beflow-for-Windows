@@ -52,6 +52,23 @@ public sealed class TmdbServiceTests
     }
 
     [Fact]
+    public async Task SearchRepresentsMissingPostersAsNull()
+    {
+        var service = CreateService(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/3/search/multi" => Json("""{"results":[{"id":1,"media_type":"tv","name":"无海报一","poster_path":null},{"id":2,"media_type":"movie","title":"无海报二"},{"id":3,"media_type":"tv","name":"有海报","poster_path":"/poster.jpg"}]}"""),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+
+        var results = await service.SearchAsync("无海报");
+
+        Assert.Equal(3, results.Count);
+        Assert.Null(results[0].PosterUrl);
+        Assert.Null(results[1].PosterUrl);
+        Assert.Equal("https://image.tmdb.org/t/p/w185/poster.jpg", results[2].PosterUrl);
+    }
+
+    [Fact]
     public async Task ContinuousEpisodeMapSkipsSpecialsAndConcatenatesTmdbSeasons()
     {
         var calls = new List<string>();
