@@ -11,6 +11,8 @@ namespace BBDownForWindows.App.Pages;
 
 public sealed partial class RenamePage : Page
 {
+    private bool _isTmdbSearchInProgress;
+
     public RenamePage()
     {
         ViewModel = new RenameViewModel(((App)Application.Current).Services);
@@ -81,36 +83,48 @@ public sealed partial class RenamePage : Page
 
     private async void SearchTmdb_Click(object sender, RoutedEventArgs e)
     {
-        await ViewModel.SearchTmdbAsync();
-        if (ViewModel.TmdbResults.Count == 0) return;
+        if (_isTmdbSearchInProgress) return;
 
-        var availableWidth = Math.Max(280, ActualWidth - 120);
-        var resultList = new ListView
+        _isTmdbSearchInProgress = true;
+        SearchTmdbButton.IsEnabled = false;
+        try
         {
-            ItemsSource = ViewModel.TmdbResults,
-            ItemTemplate = (DataTemplate)Resources["TmdbResultTemplate"],
-            ItemContainerStyle = (Style)Resources["TmdbResultItemStyle"],
-            SelectionMode = ListViewSelectionMode.Single,
-            MaxHeight = 430,
-            MinWidth = 0,
-            Width = Math.Min(620, availableWidth),
-            HorizontalContentAlignment = HorizontalAlignment.Stretch
-        };
-        var dialog = new ContentDialog
+            await ViewModel.SearchTmdbAsync();
+            if (ViewModel.TmdbResults.Count == 0) return;
+
+            var availableWidth = Math.Max(280, ActualWidth - 120);
+            var resultList = new ListView
+            {
+                ItemsSource = ViewModel.TmdbResults,
+                ItemTemplate = (DataTemplate)Resources["TmdbResultTemplate"],
+                ItemContainerStyle = (Style)Resources["TmdbResultItemStyle"],
+                SelectionMode = ListViewSelectionMode.Single,
+                MaxHeight = 430,
+                MinWidth = 0,
+                Width = Math.Min(620, availableWidth),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch
+            };
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "选择 TMDB 匹配结果",
+                Content = resultList,
+                PrimaryButtonText = "应用所选",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                IsPrimaryButtonEnabled = false
+            };
+            resultList.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = resultList.SelectedItem is TmdbSearchResult;
+            if (await dialog.ShowAsync() == ContentDialogResult.Primary && resultList.SelectedItem is TmdbSearchResult result)
+            {
+                ViewModel.SelectedTmdbResult = result;
+                await ViewModel.ApplyTmdbResultAsync(result);
+            }
+        }
+        finally
         {
-            XamlRoot = XamlRoot,
-            Title = "选择 TMDB 匹配结果",
-            Content = resultList,
-            PrimaryButtonText = "应用所选",
-            CloseButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary,
-            IsPrimaryButtonEnabled = false
-        };
-        resultList.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = resultList.SelectedItem is TmdbSearchResult;
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary && resultList.SelectedItem is TmdbSearchResult result)
-        {
-            ViewModel.SelectedTmdbResult = result;
-            await ViewModel.ApplyTmdbResultAsync(result);
+            SearchTmdbButton.IsEnabled = true;
+            _isTmdbSearchInProgress = false;
         }
     }
 
