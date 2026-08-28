@@ -27,6 +27,7 @@ public sealed class RenameFileItemViewModel : ObservableObject
 public sealed class RenameViewModel : ObservableObject
 {
     private readonly AppServices _services;
+    private readonly TransientMessageDismissal _messageDismissal;
     private readonly DispatcherQueue? _dispatcher;
     private readonly List<RenameTemplate> _allTemplates = [];
     private CancellationTokenSource? _tmdbCancellation;
@@ -36,7 +37,8 @@ public sealed class RenameViewModel : ObservableObject
     private string _englishTitle = string.Empty;
     private string _year = string.Empty;
     private int _season = 1;
-    private string _filenameSuffix = string.Empty;
+    private string _releaseGroup = string.Empty;
+    private string _releaseGroupSeparator = "-";
     private bool _useCustomEpisodes;
     private bool _useTmdbSeasonMapping;
     private int _startEpisode = 1;
@@ -65,9 +67,14 @@ public sealed class RenameViewModel : ObservableObject
     private bool _showingExecutionResult;
     private int _executionOperationCount;
 
-    public RenameViewModel(AppServices services)
+    public RenameViewModel(AppServices services) : this(services, TimeSpan.FromSeconds(3))
+    {
+    }
+
+    internal RenameViewModel(AppServices services, TimeSpan successMessageDuration)
     {
         _services = services;
+        _messageDismissal = new TransientMessageDismissal(successMessageDuration);
         try { _dispatcher = DispatcherQueue.GetForCurrentThread(); }
         catch (System.Runtime.InteropServices.COMException)
         {
@@ -142,7 +149,7 @@ public sealed class RenameViewModel : ObservableObject
             if (int.TryParse(value, out var parsed)) Season = parsed;
         }
     }
-    public string FilenameSuffix { get => _filenameSuffix; set { if (SetProperty(ref _filenameSuffix, value)) ClearPreview(); } }
+    public string ReleaseGroup { get => _releaseGroup; set { if (SetProperty(ref _releaseGroup, value)) ClearPreview(); } }
     public bool UseCustomEpisodes
     {
         get => _useCustomEpisodes;
@@ -271,6 +278,7 @@ public sealed class RenameViewModel : ObservableObject
         get => _message;
         private set
         {
+            _messageDismissal.Cancel();
             if (!SetProperty(ref _message, value)) return;
             OnPropertyChanged(nameof(HasMessage));
             OnPropertyChanged(nameof(MessageVisibility));
@@ -296,6 +304,8 @@ public sealed class RenameViewModel : ObservableObject
             ? $"已完成 {PreviewItems.Count} 个视频 · {_executionOperationCount} 项文件名变更"
             : "尚未生成预览"
         : _preview.CanExecute ? $"{_preview.Items.Count} 个视频，可执行 {_preview.Operations.Count} 项文件名变更" : $"预览包含 {_preview.Errors.Count} 个冲突";
+
+    public void DismissMessage() => Message = string.Empty;
 
     public void Activate()
     {
@@ -436,7 +446,8 @@ public sealed class RenameViewModel : ObservableObject
                         Season = Season,
                         TemplateName = SelectedTemplate?.Name ?? "自定义模板",
                         TemplatePattern = TemplatePattern,
-                        FilenameSuffix = FilenameSuffix,
+                        ReleaseGroup = ReleaseGroup,
+                        ReleaseGroupSeparator = _releaseGroupSeparator,
                         UseCustomEpisodes = UseCustomEpisodes,
                         UseTmdbSeasonMapping = UseTmdbSeasonMapping,
                         StartEpisode = StartEpisode,
@@ -487,8 +498,7 @@ public sealed class RenameViewModel : ObservableObject
         }
         await LoadDirectoryAsync(result.DirectoryPath);
         ShowExecutionResult(completedItems, result.OperationCount);
-        MessageSeverity = InfoBarSeverity.Success;
-        Message = $"已完成 {result.OperationCount} 项文件名变更";
+        ShowTransientSuccess($"已完成 {result.OperationCount} 项文件名变更");
         await LoadHistoryAsync();
     }
 
@@ -506,10 +516,9 @@ public sealed class RenameViewModel : ObservableObject
             Message = snapshot.State == TaskState.Cancelled ? "撤销已取消并回滚" : $"撤销失败：{snapshot.Error}";
             return;
         }
-        MessageSeverity = InfoBarSeverity.Success;
-        Message = $"已撤销 {result.OperationCount} 项文件名变更";
         if (Directory.Exists(result.DirectoryPath)) await LoadDirectoryAsync(result.DirectoryPath);
         await LoadHistoryAsync();
+        ShowTransientSuccess($"已撤销 {result.OperationCount} 项文件名变更");
     }
 
     public async Task LoadHistoryAsync()
@@ -576,6 +585,9 @@ public sealed class RenameViewModel : ObservableObject
     private async Task RefreshTemplatesAsync()
     {
         var settings = await _services.RenameSettings.LoadAsync();
+        _releaseGroupSeparator = settings.ReleaseGroupSeparator;
+        _releaseGroup = settings.DefaultReleaseGroupEnabled ? settings.ReleaseGroup : string.Empty;
+        OnPropertyChanged(nameof(ReleaseGroup));
         _allTemplates.Clear();
         _allTemplates.AddRange(settings.Templates);
         _activeSeriesTemplateId = settings.ActiveSeriesTemplateId;
@@ -608,6 +620,13 @@ public sealed class RenameViewModel : ObservableObject
         OnPropertyChanged(nameof(HistoryPageText));
         OnPropertyChanged(nameof(CanPreviousHistoryPage));
         OnPropertyChanged(nameof(CanNextHistoryPage));
+    }
+
+    private void ShowTransientSuccess(string message)
+    {
+        MessageSeverity = InfoBarSeverity.Success;
+        Message = message;
+        _messageDismissal.Schedule(DismissMessage);
     }
 
     private void QueueActiveTemplatePersistence(RenameTemplate template)
@@ -702,13 +721,11 @@ public sealed class RenameViewModel : ObservableObject
     {
         MediaType = RenameMediaType.Series;
         _season = 1;
-        _filenameSuffix = string.Empty;
         _useCustomEpisodes = false;
         _useTmdbSeasonMapping = false;
         _startEpisode = 1;
         OnPropertyChanged(nameof(Season));
         OnPropertyChanged(nameof(SeasonText));
-        OnPropertyChanged(nameof(FilenameSuffix));
         OnPropertyChanged(nameof(UseCustomEpisodes));
         OnPropertyChanged(nameof(UseTmdbSeasonMapping));
         OnPropertyChanged(nameof(CanEditSeason));

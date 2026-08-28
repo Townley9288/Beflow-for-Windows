@@ -1,4 +1,5 @@
 using BBDownForWindows.Core;
+using System.Text.Json;
 using Xunit;
 
 namespace BBDownForWindows.Tests;
@@ -13,6 +14,8 @@ public sealed class RenameTests
 
         Assert.Equal(string.Empty, duplicate.SecondaryTitle);
         Assert.Equal("Dune", different.SecondaryTitle);
+        Assert.Equal("2025 · 剧集 · TMDB 1", duplicate.MetadataText);
+        Assert.Equal("2021 · 电影 · TMDB 2", different.MetadataText);
     }
 
     [Fact]
@@ -76,6 +79,60 @@ public sealed class RenameTests
             Assert.Contains(loaded.Templates, item => item.Name == "自定义");
         }
         finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task LegacyRenameSettingsGainDisabledReleaseGroupDefaultsWithoutLosingExistingValues()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            paths.EnsureCreated();
+            var custom = new RenameTemplate { Name = "旧模板", MediaType = RenameMediaType.Series, Pattern = "{中文名}{扩展名}" };
+            await File.WriteAllTextAsync(paths.RenameSettingsFile, JsonSerializer.Serialize(new
+            {
+                schemaVersion = 1,
+                tmdbApiKey = "legacy-key",
+                proxyUrl = "http://127.0.0.1:7890",
+                activeSeriesTemplateId = custom.Id,
+                templates = new[] { custom }
+            }, SettingsStore.CreateOptions()));
+
+            var loaded = await new RenameSettingsStore(paths).LoadAsync();
+
+            Assert.Equal(2, loaded.SchemaVersion);
+            Assert.False(loaded.DefaultReleaseGroupEnabled);
+            Assert.Equal(string.Empty, loaded.ReleaseGroup);
+            Assert.Equal("-", loaded.ReleaseGroupSeparator);
+            Assert.Equal("legacy-key", loaded.TmdbApiKey);
+            Assert.Equal("http://127.0.0.1:7890", loaded.ProxyUrl);
+            Assert.Equal(custom.Id, loaded.ActiveSeriesTemplateId);
+            Assert.Contains(loaded.Templates, item => item.Id == custom.Id && item.Pattern == custom.Pattern);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Theory]
+    [InlineData("-", "-WF")]
+    [InlineData(".", ".WF")]
+    [InlineData("_", "_WF")]
+    [InlineData(" ", " WF")]
+    [InlineData("", "WF")]
+    [InlineData("++", "++WF")]
+    public void ReleaseGroupCompositionPreservesConfiguredSeparator(string separator, string expected) =>
+        Assert.Equal(expected, RenameReleaseGroup.Compose("  WF  ", separator));
+
+    [Theory]
+    [InlineData("", "-", true, "请填写发布组名称")]
+    [InlineData("ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567", "-", false, "不能超过 32")]
+    [InlineData("WF", "12345", false, "不能超过 4")]
+    [InlineData("W:F", "-", false, "不允许使用的字符")]
+    [InlineData("WF", "/", false, "不允许使用的字符")]
+    public void ReleaseGroupValidationRejectsInvalidSettings(string group, string separator, bool requireName, string expected)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => RenameReleaseGroup.Validate(group, separator, requireName));
+        Assert.Contains(expected, error.Message);
     }
 
     [Fact]
@@ -153,6 +210,8 @@ public sealed class RenameTests
                     Season = 1,
                     TemplateName = "test",
                     TemplatePattern = "{中文名}.{季}{集}{扩展名}",
+                    ReleaseGroup = "WF",
+                    ReleaseGroupSeparator = "-",
                     Files = files
                 }, context, token);
             });
@@ -160,6 +219,9 @@ public sealed class RenameTests
             Assert.NotNull(preview);
             Assert.True(preview!.CanExecute);
             Assert.Equal(2, preview.Operations.Count);
+            var previewItem = Assert.Single(preview.Items);
+            Assert.Equal(5, previewItem.FileSizeBytes);
+            Assert.EndsWith("5 B", previewItem.DetailText, StringComparison.Ordinal);
 
             RenameExecutionResult? execution = null;
             var executeTask = await harness.TaskManager.RunExclusiveAsync(TaskKind.RenameExecute, false, "rename", async (context, token) =>
@@ -167,8 +229,8 @@ public sealed class RenameTests
                 execution = await harness.Service.ExecuteAsync(preview, context, token);
             });
             Assert.Equal(TaskState.Completed, executeTask.State);
-            Assert.True(File.Exists(Path.Combine(root.FullName, "测试剧.S01E01.mp4")));
-            Assert.True(File.Exists(Path.Combine(root.FullName, "测试剧.S01E01.zh-CN.srt")));
+            Assert.True(File.Exists(Path.Combine(root.FullName, "测试剧.S01E01-WF.mp4")));
+            Assert.True(File.Exists(Path.Combine(root.FullName, "测试剧.S01E01-WF.zh-CN.srt")));
 
             var secondService = new RenameService(harness.Runner, harness.ToolLocator, harness.Settings, harness.History);
             var undoTask = await harness.TaskManager.RunExclusiveAsync(TaskKind.RenameUndo, false, "undo", async (context, token) =>
@@ -208,6 +270,105 @@ public sealed class RenameTests
 
             var item = Assert.Single(preview!.Items);
             Assert.Equal("Raised by Demons： Panda Li.mp4", Path.GetFileName(item.TargetPath));
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task PreviewAppendsReleaseGroupBeforeExtensionForMovies()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "movie.mp4"), "video");
+            var harness = CreateHarness(root.FullName);
+            var files = await harness.Service.ScanAsync(root.FullName);
+            var preview = await harness.Service.BuildPreviewAsync(new RenamePreviewRequest
+            {
+                DirectoryPath = root.FullName,
+                MediaType = RenameMediaType.Movie,
+                EnglishTitle = "Crowned in a Hundred Days",
+                Year = "2026",
+                TemplateName = "release-group",
+                TemplatePattern = "{英文名}.{年份}.{分辨率}.{来源}.{编码}.{音频}{扩展名}",
+                ReleaseGroup = "WF",
+                ReleaseGroupSeparator = "-",
+                Files = files
+            }, new TaskExecutionContext(_ => { }), CancellationToken.None);
+
+            Assert.Equal(
+                "Crowned in a Hundred Days.2026.1080p.WEB-DL.AVC.AAC.2.0-WF.mp4",
+                Path.GetFileName(Assert.Single(preview.Items).TargetPath));
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task InvalidReleaseGroupStopsPreviewBeforeMediaProbe()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "movie.mp4"), "video");
+            var harness = CreateHarness(root.FullName);
+            var files = await harness.Service.ScanAsync(root.FullName);
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Service.BuildPreviewAsync(new RenamePreviewRequest
+            {
+                DirectoryPath = root.FullName,
+                MediaType = RenameMediaType.Movie,
+                TemplateName = "invalid-release-group",
+                TemplatePattern = "{中文名}{扩展名}",
+                ReleaseGroup = "W:F",
+                Files = files
+            }, new TaskExecutionContext(_ => { }), CancellationToken.None));
+
+            Assert.Contains("不允许使用的字符", error.Message);
+            Assert.Equal(0, harness.Runner.CallCount);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
+    public async Task PreviewUsesFourConcurrentProbesAndCachesUnchangedFiles()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            for (var episode = 1; episode <= 6; episode++)
+                File.WriteAllText(Path.Combine(root.FullName, $"E{episode:00}.mp4"), $"video-{episode}");
+            var runner = new MediaProcessRunner(50);
+            var harness = CreateHarness(root.FullName, runner);
+            var files = await harness.Service.ScanAsync(root.FullName);
+
+            async Task BuildPreviewAsync()
+            {
+                var task = await harness.TaskManager.RunExclusiveAsync(TaskKind.RenamePreview, false, "preview", async (context, token) =>
+                {
+                    await harness.Service.BuildPreviewAsync(new RenamePreviewRequest
+                    {
+                        DirectoryPath = root.FullName,
+                        ChineseTitle = "测试剧",
+                        Year = "2026",
+                        Season = 1,
+                        TemplateName = "test",
+                        TemplatePattern = "{中文名}.{季}{集}{扩展名}",
+                        Files = files
+                    }, context, token);
+                });
+                Assert.Equal(TaskState.Completed, task.State);
+            }
+
+            await BuildPreviewAsync();
+            Assert.Equal(6, runner.CallCount);
+            Assert.Equal(4, runner.MaximumConcurrency);
+
+            await BuildPreviewAsync();
+            Assert.Equal(6, runner.CallCount);
+
+            File.AppendAllText(files[0].SourcePath, "-changed");
+            await BuildPreviewAsync();
+            Assert.Equal(7, runner.CallCount);
         }
         finally { root.Delete(true); }
     }
@@ -363,13 +524,13 @@ public sealed class RenameTests
         finally { root.Delete(true); }
     }
 
-    private static Harness CreateHarness(string root)
+    private static Harness CreateHarness(string root, MediaProcessRunner? runner = null)
     {
         var app = Directory.CreateDirectory(Path.Combine(root, "app"));
         var ffprobe = Path.Combine(app.FullName, "ffprobe.exe");
         File.WriteAllText(ffprobe, "fake");
         var paths = new ApplicationPaths(app.FullName, Path.Combine(root, "local"));
-        var runner = new MediaProcessRunner();
+        runner ??= new MediaProcessRunner();
         var toolLocator = new FixedToolLocator(ffprobe);
         var settings = new FixedSettingsStore();
         var history = new RenameHistoryStore(paths);
@@ -379,10 +540,30 @@ public sealed class RenameTests
 
     private sealed record Harness(RenameService Service, TaskManager TaskManager, MediaProcessRunner Runner, FixedToolLocator ToolLocator, FixedSettingsStore Settings, RenameHistoryStore History);
 
-    private sealed class MediaProcessRunner : IProcessRunner
+    private sealed class MediaProcessRunner(int delayMilliseconds = 0) : IProcessRunner
     {
         private const string Json = """{"streams":[{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"r_frame_rate":"24000/1001"},{"codec_type":"audio","codec_name":"aac","channels":2}]}""";
-        public Task<ProcessResult> RunAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken) => Task.FromResult(new ProcessResult(0, Json, false));
+        private int _active;
+        private int _callCount;
+        private int _maximumConcurrency;
+        public int CallCount => Volatile.Read(ref _callCount);
+        public int MaximumConcurrency => Volatile.Read(ref _maximumConcurrency);
+        public async Task<ProcessResult> RunAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _callCount);
+            var active = Interlocked.Increment(ref _active);
+            while (active > Volatile.Read(ref _maximumConcurrency))
+            {
+                var observed = Volatile.Read(ref _maximumConcurrency);
+                if (active <= observed || Interlocked.CompareExchange(ref _maximumConcurrency, active, observed) == observed) break;
+            }
+            try
+            {
+                if (delayMilliseconds > 0) await Task.Delay(delayMilliseconds, cancellationToken);
+                return new ProcessResult(0, Json, false);
+            }
+            finally { Interlocked.Decrement(ref _active); }
+        }
         public Task TerminateAllAsync() => Task.CompletedTask;
     }
 

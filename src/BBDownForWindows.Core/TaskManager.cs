@@ -121,6 +121,27 @@ public sealed class TaskManager : ITaskManager
 
     public string ReadSavedLog(string path)
     {
+        return File.ReadAllText(ResolveSavedLogPath(path));
+    }
+
+    public async Task<IReadOnlyList<string>> ReadSavedLogLinesAsync(string path, CancellationToken cancellationToken = default)
+    {
+        var lines = new List<string>();
+        await using var stream = new FileStream(
+            ResolveSavedLogPath(path),
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite,
+            bufferSize: 16 * 1024,
+            useAsync: true);
+        using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+            lines.Add(line);
+        return lines;
+    }
+
+    private string ResolveSavedLogPath(string path)
+    {
         if (string.IsNullOrWhiteSpace(path)) throw new FileNotFoundException("该历史记录没有保存日志");
         var root = Path.GetFullPath(_paths.LogsDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var candidate = Path.GetFullPath(path);
@@ -131,7 +152,7 @@ public sealed class TaskManager : ITaskManager
         }
         if (!candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !candidate.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("日志路径无效");
-        return File.ReadAllText(candidate);
+        return candidate;
     }
 
     private string CreateLogPath(Guid id, string label)

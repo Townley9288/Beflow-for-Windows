@@ -64,7 +64,7 @@ public sealed class TmdbService : ITmdbService
                     chineseTitle,
                     originalTitle,
                     date.Length >= 4 ? date[..4] : string.Empty,
-                    ReadString(item, "overview"),
+                    ReadString(item, "overview").Trim(),
                     string.IsNullOrWhiteSpace(poster) ? string.Empty : $"https://image.tmdb.org/t/p/w185{poster}"));
             }
         }

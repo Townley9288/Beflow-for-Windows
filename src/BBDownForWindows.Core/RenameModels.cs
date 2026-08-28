@@ -46,10 +46,13 @@ public sealed class RenameTemplate
 
 public sealed class RenameSettings
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
     public string TmdbApiKey { get; set; } = string.Empty;
     public string ProxyUrl { get; set; } = string.Empty;
     public int RequestTimeoutSeconds { get; set; } = 8;
+    public bool DefaultReleaseGroupEnabled { get; set; }
+    public string ReleaseGroup { get; set; } = string.Empty;
+    public string ReleaseGroupSeparator { get; set; } = "-";
     public string ActiveSeriesTemplateId { get; set; } = RenameTemplate.BuiltInSeriesId;
     public string ActiveMovieTemplateId { get; set; } = RenameTemplate.BuiltInMovieId;
     public List<RenameTemplate> Templates { get; set; } = [];
@@ -60,6 +63,9 @@ public sealed class RenameSettings
         TmdbApiKey = TmdbApiKey,
         ProxyUrl = ProxyUrl,
         RequestTimeoutSeconds = RequestTimeoutSeconds,
+        DefaultReleaseGroupEnabled = DefaultReleaseGroupEnabled,
+        ReleaseGroup = ReleaseGroup,
+        ReleaseGroupSeparator = ReleaseGroupSeparator,
         ActiveSeriesTemplateId = ActiveSeriesTemplateId,
         ActiveMovieTemplateId = ActiveMovieTemplateId,
         Templates = Templates.Select(template => template.Clone()).ToList()
@@ -67,6 +73,9 @@ public sealed class RenameSettings
 
     public void EnsureDefaults()
     {
+        SchemaVersion = Math.Max(SchemaVersion, 2);
+        ReleaseGroup ??= string.Empty;
+        ReleaseGroupSeparator ??= "-";
         Templates ??= [];
         Templates.RemoveAll(template => template is null || string.IsNullOrWhiteSpace(template.Id));
         EnsureBuiltIn(RenameTemplate.SeriesDefault());
@@ -90,6 +99,39 @@ public sealed class RenameSettings
         existing.MediaType = builtIn.MediaType;
         existing.Pattern = builtIn.Pattern;
         existing.BuiltIn = true;
+    }
+}
+
+public static class RenameReleaseGroup
+{
+    public const int MaximumNameLength = 32;
+    public const int MaximumSeparatorLength = 4;
+
+    public static string NormalizeName(string? value) => (value ?? string.Empty).Trim();
+
+    public static void Validate(string? releaseGroup, string? separator, bool requireName)
+    {
+        var name = NormalizeName(releaseGroup);
+        var actualSeparator = separator ?? string.Empty;
+        if (requireName && name.Length == 0) throw new InvalidOperationException("启用默认发布组时，请填写发布组名称");
+        if (name.Length > MaximumNameLength) throw new InvalidOperationException($"发布组名称不能超过 {MaximumNameLength} 个字符");
+        if (actualSeparator.Length > MaximumSeparatorLength) throw new InvalidOperationException($"发布组分隔符不能超过 {MaximumSeparatorLength} 个字符");
+        ValidateFileNameCharacters(name, "发布组名称");
+        ValidateFileNameCharacters(actualSeparator, "发布组分隔符");
+    }
+
+    public static string Compose(string? releaseGroup, string? separator)
+    {
+        Validate(releaseGroup, separator, requireName: false);
+        var name = NormalizeName(releaseGroup);
+        return name.Length == 0 ? string.Empty : (separator ?? string.Empty) + name;
+    }
+
+    private static void ValidateFileNameCharacters(string value, string label)
+    {
+        var invalid = Path.GetInvalidFileNameChars().ToHashSet();
+        if (value.Any(character => character < 32 || invalid.Contains(character)))
+            throw new InvalidOperationException($"{label}包含 Windows 文件名不允许使用的字符");
     }
 }
 
@@ -121,7 +163,8 @@ public sealed class RenamePreviewRequest
     public int Season { get; init; } = 1;
     public string TemplateName { get; init; } = string.Empty;
     public string TemplatePattern { get; init; } = string.Empty;
-    public string FilenameSuffix { get; init; } = string.Empty;
+    public string ReleaseGroup { get; init; } = string.Empty;
+    public string ReleaseGroupSeparator { get; init; } = "-";
     public bool UseCustomEpisodes { get; init; }
     public bool UseTmdbSeasonMapping { get; init; }
     public int StartEpisode { get; init; } = 1;
@@ -140,6 +183,7 @@ public sealed class RenamePreviewItem
     public int? SeasonNumber { get; init; }
     public int? EpisodeNumber { get; init; }
     public bool UsedTmdbSeasonMapping { get; init; }
+    public long FileSizeBytes { get; init; } = -1;
     public MediaMetadata Media { get; init; } = MediaMetadata.Default;
     public List<RenameFileOperation> Operations { get; init; } = [];
     public List<string> Warnings { get; init; } = [];
@@ -152,7 +196,13 @@ public sealed class RenamePreviewItem
         : UsedTmdbSeasonMapping && SourceEpisodeNumber is not null
             ? $"原 E{SourceEpisodeNumber:00} → TMDB S{SeasonNumber:00}E{EpisodeNumber:00}"
             : $"TMDB S{SeasonNumber:00}E{EpisodeNumber:00}";
-    public string DetailText => string.Join(" · ", new[] { Media.Resolution, Media.DynamicRange, Media.VideoCodec, Media.Audio, Media.FrameRate }.Where(value => !string.IsNullOrWhiteSpace(value)));
+    public string FileSizeText => FileSizeBytes switch
+    {
+        < 0 => string.Empty,
+        0 => "0 B",
+        _ => MediaEstimateFormatter.FormatBytes(FileSizeBytes)
+    };
+    public string DetailText => string.Join(" · ", new[] { Media.Resolution, Media.DynamicRange, Media.VideoCodec, Media.Audio, Media.FrameRate, FileSizeText }.Where(value => !string.IsNullOrWhiteSpace(value)));
 }
 
 public sealed class RenamePreview
@@ -201,6 +251,8 @@ public sealed record TmdbSearchResult(
     string Overview,
     string PosterUrl)
 {
+    public string MediaTypeText => MediaType == RenameMediaType.Series ? "剧集" : "电影";
+    public string MetadataText => $"{Year} · {MediaTypeText} · TMDB {Id}";
     public string SecondaryTitle =>
         string.Equals(ChineseTitle.Trim(), OriginalTitle.Trim(), StringComparison.OrdinalIgnoreCase)
             ? string.Empty

@@ -129,6 +129,9 @@ public sealed partial class RenameTemplatesPage : Page
         SyncDownloadNamingControls();
     }
 
+    private void DownloadNamingMessage_Closed(InfoBar sender, InfoBarClosedEventArgs args) => DownloadNamingViewModel.DismissMessage();
+    private void RenameTemplateMessage_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
+
     private async void MediaTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_syncingSelection || MediaTypeBox.SelectedIndex < 0) return;

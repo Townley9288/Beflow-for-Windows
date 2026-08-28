@@ -54,24 +54,7 @@ public sealed partial class HistoryPage : Page
     private async void ViewLog_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel.SelectedRecord is null) return;
-        string content;
-        try { content = ((App)Application.Current).Services.TaskManager.ReadSavedLog(ViewModel.SelectedRecord.LogPath); }
-        catch (Exception exception) { content = exception.Message; }
-        await new ContentDialog
-        {
-            Title = "任务日志",
-            Content = new ScrollViewer
-            {
-                Content = new TextBlock
-                {
-                    Text = content,
-                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
-                    TextWrapping = TextWrapping.Wrap
-                }
-            },
-            CloseButtonText = "关闭",
-            XamlRoot = XamlRoot
-        }.ShowAsync();
+        await TaskLogDialog.ShowAsync(XamlRoot, ViewModel.SelectedRecord.LogPath);
     }
 
     private async void Clear_Click(object sender, RoutedEventArgs e)
@@ -89,6 +72,7 @@ public sealed partial class HistoryPage : Page
     }
 
     private void BackToRename_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("rename");
+    private void RenameMessage_Closed(InfoBar sender, InfoBarClosedEventArgs args) => RenameViewModel.DismissMessage();
     private async void RenameRefresh_Click(object sender, RoutedEventArgs e) => await RenameViewModel.LoadHistoryAsync();
     private void RenameHistoryPrevious_Click(object sender, RoutedEventArgs e) => RenameViewModel.PreviousHistoryPage();
     private void RenameHistoryNext_Click(object sender, RoutedEventArgs e) => RenameViewModel.NextHistoryPage();

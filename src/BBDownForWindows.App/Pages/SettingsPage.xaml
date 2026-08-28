@@ -121,7 +121,7 @@
                     </Border>
                 </Grid>
 
-                <InfoBar IsOpen="{Binding HasLoginMessage}" Visibility="{Binding LoginMessageVisibility}" IsClosable="False" Severity="{Binding LoginMessageSeverity}" Message="{Binding LoginMessage}"/>
+                <InfoBar IsOpen="{Binding HasLoginMessage}" Visibility="{Binding LoginMessageVisibility}" IsClosable="True" Severity="{Binding LoginMessageSeverity}" Message="{Binding LoginMessage}" Closed="LoginNotification_Closed"/>
             </StackPanel>
         </Border>
         <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="8">
@@ -161,6 +161,16 @@
                     <Button Grid.Column="2" Content="验证 Key" Command="{Binding ValidateTmdbCommand}" VerticalAlignment="Bottom"/>
                 </Grid>
                 <TextBlock Text="密钥仅保存在本机 Beflow 数据目录，不写入任务日志、重命名历史或下载历史。" Opacity="0.55" FontSize="12"/>
+                <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,4"/>
+                <TextBlock Text="默认发布组" FontWeight="SemiBold"/>
+                <TextBlock Text="开启后，每次进入重命名页都会自动带入发布组；仍可在当前任务中修改或清空。" Opacity="0.65" TextWrapping="Wrap"/>
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <ToggleSwitch Header="默认添加" IsOn="{Binding RenameSettings.DefaultReleaseGroupEnabled, Mode=TwoWay}" VerticalAlignment="Bottom"/>
+                    <TextBox Grid.Column="1" Header="发布组名称" Text="{Binding RenameSettings.ReleaseGroup, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxLength="32" PlaceholderText="例如 WF"/>
+                    <ComboBox Grid.Column="2" Header="分隔符" IsEditable="True" ItemsSource="{Binding ReleaseGroupSeparatorOptions}" Text="{Binding ReleaseGroupSeparator, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxDropDownHeight="220" PlaceholderText="选择或输入，最多 4 个字符"/>
+                </Grid>
+                <TextBlock Text="示例：分隔符为 -、发布组为 WF 时，文件名结尾为 -WF。支持 .、_、空格、无分隔符或自定义分隔符。" Opacity="0.55" FontSize="12" TextWrapping="Wrap"/>
             </StackPanel>
         </Border>
         <Grid ColumnSpacing="12" Margin="0,4,0,0">

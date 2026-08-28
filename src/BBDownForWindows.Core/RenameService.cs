@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -9,6 +10,9 @@ public sealed class RenameService(
     ISettingsStore settingsStore,
     IRenameHistoryStore historyStore) : IRenameService
 {
+    private const int MaximumConcurrentMediaProbes = 4;
+    private readonly ConcurrentDictionary<string, MediaProbeCacheEntry> _mediaProbeCache = new(StringComparer.OrdinalIgnoreCase);
+
     private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     { ".mkv", ".mp4", ".avi", ".ts", ".m2ts", ".mov", ".webm" };
 
@@ -77,14 +81,26 @@ public sealed class RenameService(
         if (string.IsNullOrWhiteSpace(tools.Ffprobe) || !File.Exists(tools.Ffprobe))
             throw new FileNotFoundException("找不到 ffprobe.exe，无法读取视频规格");
 
-        context.AppendLog($"正在扫描 {selected.Count} 个视频的媒体信息…\n");
+        var parallelism = Math.Min(MaximumConcurrentMediaProbes, selected.Count);
+        context.AppendLog($"正在使用 {parallelism} 路并发扫描 {selected.Count} 个视频的媒体信息…\n");
+        var probeResults = new MediaProbeSnapshot[selected.Count];
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, selected.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = MaximumConcurrentMediaProbes, CancellationToken = cancellationToken },
+            async (index, token) =>
+            {
+                probeResults[index] = await ProbeMediaCachedAsync(tools.Ffprobe, selected[index].SourcePath, token);
+            });
+        var cachedCount = probeResults.Count(result => result.FromCache);
+        if (cachedCount > 0) context.AppendLog($"已复用 {cachedCount} 个未变化文件的媒体信息。\n");
+
         var preview = new RenamePreview { Request = request };
         var allVideos = request.Files.Select(file => Path.GetFullPath(file.SourcePath)).ToList();
-        var episodeIndex = 0;
-        foreach (var file in selected)
+        for (var index = 0; index < selected.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            episodeIndex++;
+            var file = selected[index];
+            var episodeIndex = index + 1;
             var sourceEpisode = request.MediaType == RenameMediaType.Series
                 ? request.UseCustomEpisodes ? request.StartEpisode + episodeIndex - 1 : file.DetectedEpisode ?? episodeIndex
                 : (int?)null;
@@ -93,7 +109,8 @@ public sealed class RenameService(
                 mappedEpisode = request.TmdbEpisodeMap[detectedEpisode];
             var season = mappedEpisode?.SeasonNumber ?? request.Season;
             var episode = mappedEpisode?.EpisodeNumber ?? sourceEpisode;
-            var media = await ProbeMediaAsync(tools.Ffprobe, file.SourcePath, cancellationToken);
+            var probe = probeResults[index];
+            var media = probe.Media;
             var episodeName = mappedEpisode?.Name
                 ?? (episode is not null && request.EpisodeNames.TryGetValue(episode.Value, out var value) ? value : string.Empty);
             var targetName = RenderFileName(request, file.SourcePath, media, season, episode, episodeName);
@@ -106,6 +123,7 @@ public sealed class RenameService(
                 SeasonNumber = request.MediaType == RenameMediaType.Series ? season : null,
                 EpisodeNumber = episode,
                 UsedTmdbSeasonMapping = request.UseTmdbSeasonMapping,
+                FileSizeBytes = probe.FileSizeBytes,
                 Media = media
             };
             item.Operations.Add(new RenameFileOperation(item.SourcePath, item.TargetPath));
@@ -255,7 +273,34 @@ public sealed class RenameService(
         catch (JsonException) { return MediaMetadata.Default; }
     }
 
-    private async Task<MediaMetadata> ProbeMediaAsync(string ffprobe, string sourcePath, CancellationToken cancellationToken)
+    private async Task<MediaProbeSnapshot> ProbeMediaCachedAsync(string ffprobe, string sourcePath, CancellationToken cancellationToken)
+    {
+        var fullPath = Path.GetFullPath(sourcePath);
+        var source = new FileInfo(fullPath);
+        var probe = new FileInfo(ffprobe);
+        if (_mediaProbeCache.TryGetValue(fullPath, out var cached) &&
+            cached.FileSizeBytes == source.Length &&
+            cached.LastWriteTicks == source.LastWriteTimeUtc.Ticks &&
+            cached.ProbePath.Equals(probe.FullName, StringComparison.OrdinalIgnoreCase) &&
+            cached.ProbeLastWriteTicks == probe.LastWriteTimeUtc.Ticks)
+        {
+            return new MediaProbeSnapshot(cached.Media, source.Length, true);
+        }
+
+        var outcome = await ProbeMediaAsync(ffprobe, fullPath, cancellationToken);
+        if (outcome.Succeeded)
+        {
+            _mediaProbeCache[fullPath] = new MediaProbeCacheEntry(
+                source.Length,
+                source.LastWriteTimeUtc.Ticks,
+                probe.FullName,
+                probe.LastWriteTimeUtc.Ticks,
+                outcome.Media);
+        }
+        return new MediaProbeSnapshot(outcome.Media, source.Length, false);
+    }
+
+    private async Task<MediaProbeOutcome> ProbeMediaAsync(string ffprobe, string sourcePath, CancellationToken cancellationToken)
     {
         var arguments = new[]
         {
@@ -265,9 +310,14 @@ public sealed class RenameService(
         };
         var result = await processRunner.RunAsync(new ProcessRunRequest(ffprobe, arguments, Path.GetDirectoryName(sourcePath)!), null, cancellationToken);
         if (result.Cancelled) cancellationToken.ThrowIfCancellationRequested();
-        if (result.ExitCode != 0) return MediaMetadata.Default;
-        return ParseMediaMetadata(result.Output);
+        return result.ExitCode == 0
+            ? new MediaProbeOutcome(ParseMediaMetadata(result.Output), true)
+            : new MediaProbeOutcome(MediaMetadata.Default, false);
     }
+
+    private sealed record MediaProbeOutcome(MediaMetadata Media, bool Succeeded);
+    private sealed record MediaProbeSnapshot(MediaMetadata Media, long FileSizeBytes, bool FromCache);
+    private sealed record MediaProbeCacheEntry(long FileSizeBytes, long LastWriteTicks, string ProbePath, long ProbeLastWriteTicks, MediaMetadata Media);
 
     private static string RenderFileName(RenamePreviewRequest request, string sourcePath, MediaMetadata media, int season, int? episode, string episodeName)
     {
@@ -295,10 +345,11 @@ public sealed class RenameService(
         result = Regex.Replace(result, @"_{2,}", "_");
         result = Regex.Replace(result, @"-{2,}", "-");
         var currentExtension = Path.GetExtension(result);
-        if (!string.IsNullOrEmpty(request.FilenameSuffix))
+        var releaseGroupSuffix = RenameReleaseGroup.Compose(request.ReleaseGroup, request.ReleaseGroupSeparator);
+        if (releaseGroupSuffix.Length > 0)
         {
             var stem = currentExtension.Length > 0 ? result[..^currentExtension.Length] : result;
-            result = stem.TrimEnd('.', ' ', '_', '-') + request.FilenameSuffix.Trim() + currentExtension;
+            result = stem.TrimEnd('.', ' ', '_', '-') + releaseGroupSuffix + currentExtension;
         }
         result = result.Trim().Trim('.', ' ');
         result = result.Replace(':', '：');
@@ -324,6 +375,7 @@ public sealed class RenameService(
         ValidateTemplatePattern(request.TemplatePattern);
         if (request.Season < 0) throw new InvalidOperationException("季数不能小于 0");
         if (request.StartEpisode < 1) throw new InvalidOperationException("起始集数必须大于 0");
+        RenameReleaseGroup.Validate(request.ReleaseGroup, request.ReleaseGroupSeparator, requireName: false);
     }
 
     private static void ValidateTmdbSeasonMapping(RenamePreviewRequest request, IReadOnlyList<RenameFileEntry> selected)

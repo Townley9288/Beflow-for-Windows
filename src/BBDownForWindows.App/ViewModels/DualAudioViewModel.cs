@@ -34,6 +34,7 @@ public sealed class DualAudioViewModel : ObservableObject
 
     private readonly AppServices _services;
     private readonly Action<Action> _deferCatalogRowsClear;
+    private readonly TransientMessageDismissal _messageDismissal;
     private bool _initialized;
     private bool _active;
     private string _sourceModeText = "两个独立链接";
@@ -86,12 +87,17 @@ public sealed class DualAudioViewModel : ObservableObject
     private bool _manifestAudioMetadataModified;
     private bool _manifestDelayModified;
 
-    public DualAudioViewModel(AppServices services) : this(services, CreateCatalogRowsClearScheduler()) { }
+    public DualAudioViewModel(AppServices services) : this(services, CreateCatalogRowsClearScheduler(), TimeSpan.FromSeconds(3)) { }
 
-    internal DualAudioViewModel(AppServices services, Action<Action> deferCatalogRowsClear)
+    internal DualAudioViewModel(AppServices services, Action<Action> deferCatalogRowsClear) : this(services, deferCatalogRowsClear, TimeSpan.FromSeconds(3))
+    {
+    }
+
+    internal DualAudioViewModel(AppServices services, Action<Action> deferCatalogRowsClear, TimeSpan successMessageDuration)
     {
         _services = services;
         _deferCatalogRowsClear = deferCatalogRowsClear;
+        _messageDismissal = new TransientMessageDismissal(successMessageDuration);
         Console = services.TaskConsole;
         ParseCurrentCommand = new AsyncRelayCommand(() => RunCommandAsync("解析失败", () => ParseAsync(DownloadParseMode.Current)), CanParse);
         ParseAllCommand = new AsyncRelayCommand(() => RunCommandAsync("解析失败", () => ParseAsync(DownloadParseMode.All)), CanParse);
@@ -161,7 +167,15 @@ public sealed class DualAudioViewModel : ObservableObject
     public Visibility CatalogVisibility => HasCatalog ? Visibility.Visible : Visibility.Collapsed;
     public bool IsParsing { get => _isParsing; private set { if (SetProperty(ref _isParsing, value)) OnPropertyChanged(nameof(SourceCardsVisibility)); } }
     public Visibility SourceCardsVisibility => IsParsing || HasCatalog ? Visibility.Visible : Visibility.Collapsed;
-    public string Message { get => _message; private set { if (SetProperty(ref _message, value)) OnPropertyChanged(nameof(HasMessage)); } }
+    public string Message
+    {
+        get => _message;
+        private set
+        {
+            _messageDismissal.Cancel();
+            if (SetProperty(ref _message, value)) OnPropertyChanged(nameof(HasMessage));
+        }
+    }
     public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
     public InfoBarSeverity MessageSeverity { get => _messageSeverity; private set => SetProperty(ref _messageSeverity, value); }
     public double OverallProgress { get => _overallProgress; private set => SetProperty(ref _overallProgress, value); }
@@ -746,6 +760,7 @@ public sealed class DualAudioViewModel : ObservableObject
     {
         MessageSeverity = severity;
         Message = string.IsNullOrWhiteSpace(message) ? "操作未完成" : message;
+        if (severity == InfoBarSeverity.Success) _messageDismissal.Schedule(DismissMessage);
     }
 
     private DualAudioSourceMode CurrentSourceMode => SourceModeText == "同一链接奇偶分P"

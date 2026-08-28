@@ -354,7 +354,7 @@ public sealed class DownloadSelectionTests
     }
 
     [Fact]
-    public async Task ParseResolvesAvAliasToItsBangumiPlaybackUrl()
+    public async Task ParseResolvesAvAliasForCurrentEpisodeWithoutExpandingTheSeason()
     {
         const string source = "https://www.bilibili.com/video/av116933286430543?t=60.9";
         const string playback = "https://www.bilibili.com/bangumi/play/ep4368409";
@@ -371,7 +371,31 @@ public sealed class DownloadSelectionTests
         Assert.NotNull(catalog);
         Assert.Equal(source, catalog.SourceUrl);
         Assert.Equal(playback, catalog.ResolvedUrl);
+        Assert.Single(catalog.AllPages);
+        Assert.Single(catalog.Episodes);
+        Assert.Single(fixture.Runner.Requests);
         Assert.Equal(playback, fixture.Runner.Requests[0].Arguments[0]);
+        Assert.DoesNotContain("-p", fixture.Runner.Requests[0].Arguments);
+    }
+
+    [Fact]
+    public async Task ExplicitEpisodeLinkStillExpandsAllPublishedEpisodes()
+    {
+        const string source = "https://www.bilibili.com/bangumi/play/ep4368409";
+        using var fixture = new ServiceFixture(new ScriptedRunner(), new FixedMetadataService(new BilibiliVideoMetadata()));
+        DownloadCatalog? catalog = null;
+        var manager = new TaskManager(fixture.Paths, fixture.Runner);
+
+        var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadParse, false, "episode-season-parse", async (context, token) =>
+        {
+            catalog = await fixture.Service.ParseDownloadAsync(new DownloadParseRequest(source, DownloadParseMode.All), null, context, token);
+        });
+
+        Assert.Equal(TaskState.Completed, snapshot.State);
+        Assert.NotNull(catalog);
+        Assert.Equal(2, catalog.Episodes.Count);
+        Assert.Equal(2, fixture.Runner.Requests.Count);
+        Assert.Equal(source, fixture.Runner.Requests[0].Arguments[0]);
     }
 
     [Fact]

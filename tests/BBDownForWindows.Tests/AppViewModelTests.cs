@@ -126,6 +126,53 @@ public sealed class AppViewModelTests
     }
 
     [Fact]
+    public async Task SettingsSuccessMessageAutoDismissesAndDoesNotClearLaterWarning()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new SettingsViewModel(fixture.Services, TimeSpan.FromMilliseconds(50));
+
+        await viewModel.SaveInputSettingsAsync();
+        Assert.Equal("便捷输入设置已保存", viewModel.Message);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Success, viewModel.MessageSeverity);
+
+        await Task.Delay(150);
+        Assert.False(viewModel.HasMessage);
+
+        await viewModel.SaveInputSettingsAsync();
+        viewModel.ResetDownloadCommand.Execute(null);
+        Assert.Equal("默认下载设置已恢复（尚未保存）", viewModel.Message);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Warning, viewModel.MessageSeverity);
+
+        await Task.Delay(150);
+        Assert.True(viewModel.HasMessage);
+    }
+
+    [Fact]
+    public async Task NamingSuccessMessagesAutoDismissWhileErrorsRemainVisible()
+    {
+        using var fixture = new AppFixture();
+        var duration = TimeSpan.FromMilliseconds(50);
+        var downloadNaming = new DownloadNamingViewModel(fixture.Services, duration);
+        await downloadNaming.InitializeAsync();
+
+        await downloadNaming.SaveAsync();
+        Assert.Equal("下载命名规则已保存", downloadNaming.Message);
+        await Task.Delay(150);
+        Assert.False(downloadNaming.HasMessage);
+
+        downloadNaming.ReportError(new InvalidOperationException("保留错误"));
+        await Task.Delay(150);
+        Assert.Equal("保留错误", downloadNaming.Message);
+
+        var templates = new RenameTemplatesViewModel(fixture.Services, duration);
+        await templates.InitializeAsync(new RenameTemplatesNavigationContext(RenameMediaType.Series, null));
+        await templates.CreateTemplateAsync("自动消失测试");
+        Assert.True(templates.HasMessage);
+        await Task.Delay(150);
+        Assert.False(templates.HasMessage);
+    }
+
+    [Fact]
     public void DualAudioTrackPresetsApplyNameAndMkvmergeLanguageAsAPair()
     {
         using var fixture = new AppFixture();
@@ -319,13 +366,67 @@ public sealed class AppViewModelTests
         var viewModel = new SettingsViewModel(fixture.Services);
         viewModel.RenameSettings.TmdbApiKey = "new-key";
         viewModel.RenameSettings.ProxyUrl = "http://127.0.0.1:7890";
+        viewModel.RenameSettings.DefaultReleaseGroupEnabled = true;
+        viewModel.RenameSettings.ReleaseGroup = " WF ";
+        viewModel.ReleaseGroupSeparator = "空格";
 
         await viewModel.SaveRenameCommand.ExecuteAsync(null);
 
         var stored = await fixture.Services.RenameSettings.LoadAsync();
         Assert.Equal("new-key", stored.TmdbApiKey);
+        Assert.True(stored.DefaultReleaseGroupEnabled);
+        Assert.Equal("WF", stored.ReleaseGroup);
+        Assert.Equal(" ", stored.ReleaseGroupSeparator);
         Assert.Equal(custom.Id, stored.ActiveSeriesTemplateId);
         Assert.Contains(stored.Templates, item => item.Id == custom.Id && item.Pattern == custom.Pattern);
+    }
+
+    [Fact]
+    public async Task InvalidDefaultReleaseGroupDoesNotOverwriteStoredRenameSettings()
+    {
+        using var fixture = new AppFixture();
+        await fixture.Services.RenameSettings.UpdateAsync(settings =>
+        {
+            settings.ReleaseGroup = "KEPT";
+            return settings;
+        });
+        var viewModel = new SettingsViewModel(fixture.Services);
+        viewModel.RenameSettings.DefaultReleaseGroupEnabled = true;
+        viewModel.RenameSettings.ReleaseGroup = string.Empty;
+
+        await viewModel.SaveRenameCommand.ExecuteAsync(null);
+
+        Assert.Contains("请填写发布组名称", viewModel.Message);
+        Assert.Equal("KEPT", (await fixture.Services.RenameSettings.LoadAsync()).ReleaseGroup);
+    }
+
+    [Fact]
+    public async Task RenamePageReloadsDefaultReleaseGroupOnEveryInitialization()
+    {
+        using var fixture = new AppFixture();
+        await fixture.Services.RenameSettings.UpdateAsync(settings =>
+        {
+            settings.DefaultReleaseGroupEnabled = true;
+            settings.ReleaseGroup = "WF";
+            settings.ReleaseGroupSeparator = "-";
+            return settings;
+        });
+        var viewModel = new RenameViewModel(fixture.Services);
+
+        await viewModel.InitializeAsync(null);
+        Assert.Equal("WF", viewModel.ReleaseGroup);
+
+        viewModel.ReleaseGroup = "TEMP";
+        await viewModel.InitializeAsync(null);
+        Assert.Equal("WF", viewModel.ReleaseGroup);
+
+        await fixture.Services.RenameSettings.UpdateAsync(settings =>
+        {
+            settings.DefaultReleaseGroupEnabled = false;
+            return settings;
+        });
+        await viewModel.InitializeAsync(null);
+        Assert.Equal(string.Empty, viewModel.ReleaseGroup);
     }
 
     [Fact]

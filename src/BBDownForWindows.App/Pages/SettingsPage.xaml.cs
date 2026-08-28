@@ -66,6 +66,7 @@ public sealed partial class SettingsPage : Page
         window.ConfigureDragLinkMonitoring(ViewModel.Settings.MonitorDragLinks);
     }
     private void SettingsNotification_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
+    private void LoginNotification_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissLoginMessage();
 
     private void QrTimer_Tick(object? sender, object e)
     {

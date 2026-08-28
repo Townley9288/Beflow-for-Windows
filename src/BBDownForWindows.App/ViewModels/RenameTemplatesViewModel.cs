@@ -52,6 +52,7 @@ internal static class RenameTemplatePresentation
 public sealed class RenameTemplatesViewModel : ObservableObject
 {
     private readonly AppServices _services;
+    private readonly TransientMessageDismissal _messageDismissal;
     private RenameSettings _settings = new();
     private RenameMediaType _mediaType = RenameMediaType.Series;
     private RenameTemplateListItem? _selectedItem;
@@ -61,7 +62,15 @@ public sealed class RenameTemplatesViewModel : ObservableObject
     private InfoBarSeverity _messageSeverity = InfoBarSeverity.Informational;
     private bool _loadingEditor;
 
-    public RenameTemplatesViewModel(AppServices services) => _services = services;
+    public RenameTemplatesViewModel(AppServices services) : this(services, TimeSpan.FromSeconds(3))
+    {
+    }
+
+    internal RenameTemplatesViewModel(AppServices services, TimeSpan successMessageDuration)
+    {
+        _services = services;
+        _messageDismissal = new TransientMessageDismissal(successMessageDuration);
+    }
 
     public IReadOnlyList<string> MediaTypeOptions { get; } = ["剧集", "电影"];
     public IReadOnlyList<string> FieldOptions => RenameTemplatePresentation.FieldOptions;
@@ -134,6 +143,7 @@ public sealed class RenameTemplatesViewModel : ObservableObject
         get => _message;
         private set
         {
+            _messageDismissal.Cancel();
             if (!SetProperty(ref _message, value)) return;
             OnPropertyChanged(nameof(HasMessage));
             OnPropertyChanged(nameof(MessageVisibility));
@@ -257,7 +267,7 @@ public sealed class RenameTemplatesViewModel : ObservableObject
             return current;
         });
         ReloadTemplates(GetActiveTemplateId(_mediaType));
-        SetMessage("自定义模板已删除", InfoBarSeverity.Informational);
+        SetMessage("自定义模板已删除", InfoBarSeverity.Informational, transient: true);
     }
 
     public async Task SetActiveAsync()
@@ -332,6 +342,7 @@ public sealed class RenameTemplatesViewModel : ObservableObject
     }
 
     public void ReportError(Exception exception) => SetMessage(exception.Message, InfoBarSeverity.Error);
+    public void DismissMessage() => Message = string.Empty;
 
     private void ReloadTemplates(string? selectedId)
     {
@@ -403,9 +414,10 @@ public sealed class RenameTemplatesViewModel : ObservableObject
             throw new InvalidOperationException($"当前{(mediaType == RenameMediaType.Series ? "剧集" : "电影")}模板中已存在同名项目");
     }
 
-    private void SetMessage(string message, InfoBarSeverity severity)
+    private void SetMessage(string message, InfoBarSeverity severity, bool transient = false)
     {
         MessageSeverity = severity;
         Message = message;
+        if (severity == InfoBarSeverity.Success || transient) _messageDismissal.Schedule(() => Message = string.Empty);
     }
 }

@@ -11,6 +11,8 @@ public sealed class SettingsViewModel : ObservableObject
     public sealed record OptionItem(string Value, string Label);
 
     private readonly AppServices _services;
+    private readonly TransientMessageDismissal _messageDismissal;
+    private readonly TransientMessageDismissal _loginMessageDismissal;
     private AppSettings _settings = new();
     private RenameSettings _renameSettings = new();
     private string _toolStatus = "尚未检测";
@@ -27,9 +29,15 @@ public sealed class SettingsViewModel : ObservableObject
 
     internal sealed record ToolDetectionResult(ToolPaths Tools, IReadOnlyList<string> Versions);
 
-    public SettingsViewModel(AppServices services)
+    public SettingsViewModel(AppServices services) : this(services, TimeSpan.FromSeconds(3))
+    {
+    }
+
+    internal SettingsViewModel(AppServices services, TimeSpan successMessageDuration)
     {
         _services = services;
+        _messageDismissal = new TransientMessageDismissal(successMessageDuration);
+        _loginMessageDismissal = new TransientMessageDismissal(successMessageDuration);
         SaveDownloadCommand = new AsyncRelayCommand(SaveDownloadSettingsAsync);
         ResetDownloadCommand = new RelayCommand(ResetDownloadSettings);
         SaveRenameCommand = new AsyncRelayCommand(SaveRenameSettingsAsync);
@@ -68,7 +76,38 @@ public sealed class SettingsViewModel : ObservableObject
     public IReadOnlyList<OptionItem> AudioBitrateOptions { get; } =
     [new("highest", "最高码率"), new("lowest", "最低码率")];
     public AppSettings Settings { get => _settings; private set => SetProperty(ref _settings, value); }
-    public RenameSettings RenameSettings { get => _renameSettings; private set => SetProperty(ref _renameSettings, value); }
+    public RenameSettings RenameSettings
+    {
+        get => _renameSettings;
+        private set
+        {
+            if (!SetProperty(ref _renameSettings, value)) return;
+            OnPropertyChanged(nameof(ReleaseGroupSeparator));
+        }
+    }
+    public string ReleaseGroupSeparator
+    {
+        get => RenameSettings.ReleaseGroupSeparator switch
+        {
+            " " => "空格",
+            "" => "无分隔符",
+            var value => value
+        };
+        set
+        {
+            var actual = value switch
+            {
+                "空格" => " ",
+                "无分隔符" => string.Empty,
+                null => string.Empty,
+                _ => value
+            };
+            if (string.Equals(RenameSettings.ReleaseGroupSeparator, actual, StringComparison.Ordinal)) return;
+            RenameSettings.ReleaseGroupSeparator = actual;
+            OnPropertyChanged();
+        }
+    }
+    public IReadOnlyList<string> ReleaseGroupSeparatorOptions { get; } = ["-", ".", "_", "空格", "无分隔符"];
     public TaskConsoleViewModel Console { get; }
     public AccountChannelViewModel WebAccount { get; }
     public AccountChannelViewModel TvAccount { get; }
@@ -81,6 +120,7 @@ public sealed class SettingsViewModel : ObservableObject
         get => _loginMessage;
         private set
         {
+            _loginMessageDismissal.Cancel();
             if (SetProperty(ref _loginMessage, value))
             {
                 OnPropertyChanged(nameof(HasLoginMessage));
@@ -96,6 +136,7 @@ public sealed class SettingsViewModel : ObservableObject
         get => _message;
         private set
         {
+            _messageDismissal.Cancel();
             if (SetProperty(ref _message, value))
             {
                 OnPropertyChanged(nameof(HasMessage));
@@ -311,14 +352,24 @@ public sealed class SettingsViewModel : ObservableObject
 
     private async Task SaveRenameSettingsAsync()
     {
-        var edited = RenameSettings.Clone();
-        RenameSettings = await _services.RenameSettings.UpdateAsync(current =>
+        try
         {
-            var snapshot = current.Clone();
-            CopyTmdbSettings(edited, snapshot);
-            return snapshot;
-        });
-        SetMessage("影视重命名设置已保存", InfoBarSeverity.Success);
+            var edited = RenameSettings.Clone();
+            edited.ReleaseGroup = RenameReleaseGroup.NormalizeName(edited.ReleaseGroup);
+            RenameReleaseGroup.Validate(edited.ReleaseGroup, edited.ReleaseGroupSeparator, edited.DefaultReleaseGroupEnabled);
+            RenameSettings = await _services.RenameSettings.UpdateAsync(current =>
+            {
+                var snapshot = current.Clone();
+                CopyTmdbSettings(edited, snapshot);
+                CopyReleaseGroupSettings(edited, snapshot);
+                return snapshot;
+            });
+            SetMessage("影视重命名设置已保存", InfoBarSeverity.Success);
+        }
+        catch (InvalidOperationException exception)
+        {
+            SetMessage(exception.Message, InfoBarSeverity.Warning);
+        }
     }
 
     private async Task SaveAriaSettingsAsync()
@@ -515,15 +566,15 @@ public sealed class SettingsViewModel : ObservableObject
             if (!CanApply(activationToken)) return;
             var account = channel == AccountChannel.Web ? WebAccount : TvAccount;
             var credentialUpdated = File.Exists(credentialPath) && File.GetLastWriteTimeUtc(credentialPath) > credentialTimestamp;
-            LoginMessageSeverity = credentialUpdated && account.IsLoggedIn ? InfoBarSeverity.Success : InfoBarSeverity.Warning;
-            LoginMessage = credentialUpdated
+            var severity = credentialUpdated && account.IsLoggedIn ? InfoBarSeverity.Success : InfoBarSeverity.Warning;
+            SetLoginMessage(credentialUpdated
                 ? account.IsLoggedIn ? $"{account.ChannelTitle}登录成功" : $"{account.ChannelTitle}账号数据已更新，但状态尚未验证成功"
-                : $"{account.ChannelTitle}账号数据没有更新，二维码可能已过期或尚未在手机端确认";
+                : $"{account.ChannelTitle}账号数据没有更新，二维码可能已过期或尚未在手机端确认", severity);
         }
         else
         {
-            LoginMessageSeverity = snapshot.State == TaskState.Cancelled ? InfoBarSeverity.Informational : InfoBarSeverity.Error;
-            LoginMessage = snapshot.State == TaskState.Cancelled ? "登录已取消" : $"登录失败：{snapshot.Error}";
+            var severity = snapshot.State == TaskState.Cancelled ? InfoBarSeverity.Informational : InfoBarSeverity.Error;
+            SetLoginMessage(snapshot.State == TaskState.Cancelled ? "登录已取消" : $"登录失败：{snapshot.Error}", severity);
         }
     }
 
@@ -535,12 +586,15 @@ public sealed class SettingsViewModel : ObservableObject
         {
             var edited = RenameSettings.Clone();
             await _services.Tmdb.ValidateApiKeyAsync(edited);
-            RenameSettings = await _services.RenameSettings.UpdateAsync(current =>
+            var persisted = await _services.RenameSettings.UpdateAsync(current =>
             {
                 var snapshot = current.Clone();
                 CopyTmdbSettings(edited, snapshot);
                 return snapshot;
             });
+            // Validating the TMDB key saves only TMDB fields; keep unsaved release-group edits visible until the user presses Save.
+            CopyReleaseGroupSettings(edited, persisted);
+            RenameSettings = persisted;
             SetMessage("TMDB API Key 验证成功", InfoBarSeverity.Success);
         }
         catch (Exception exception) when (exception is InvalidOperationException or HttpRequestException)
@@ -549,7 +603,12 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    public void DismissMessage() => Message = string.Empty;
+    public void DismissMessage()
+    {
+        Message = string.Empty;
+    }
+
+    public void DismissLoginMessage() => LoginMessage = string.Empty;
 
     private static void CopyTmdbSettings(RenameSettings source, RenameSettings target)
     {
@@ -558,10 +617,25 @@ public sealed class SettingsViewModel : ObservableObject
         target.RequestTimeoutSeconds = source.RequestTimeoutSeconds;
     }
 
+    private static void CopyReleaseGroupSettings(RenameSettings source, RenameSettings target)
+    {
+        target.DefaultReleaseGroupEnabled = source.DefaultReleaseGroupEnabled;
+        target.ReleaseGroup = source.ReleaseGroup;
+        target.ReleaseGroupSeparator = source.ReleaseGroupSeparator;
+    }
+
     private void SetMessage(string message, InfoBarSeverity severity)
     {
         MessageSeverity = severity;
         Message = message;
+        if (severity == InfoBarSeverity.Success) _messageDismissal.Schedule(() => Message = string.Empty);
+    }
+
+    private void SetLoginMessage(string message, InfoBarSeverity severity)
+    {
+        LoginMessageSeverity = severity;
+        LoginMessage = message;
+        if (severity == InfoBarSeverity.Success) _loginMessageDismissal.Schedule(() => LoginMessage = string.Empty);
     }
 
     private void Console_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)

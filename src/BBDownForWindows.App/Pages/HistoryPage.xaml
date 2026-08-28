@@ -78,7 +78,7 @@
             <TabViewItem Header="重命名记录" IsClosable="False">
                 <Grid Padding="0,8,0,0" RowSpacing="12" DataContext="{x:Bind RenameViewModel, Mode=OneWay}">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" IsClosable="False" Severity="{Binding MessageSeverity}" Message="{Binding Message}"/>
+                    <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" IsClosable="True" Severity="{Binding MessageSeverity}" Message="{Binding Message}" Closed="RenameMessage_Closed"/>
                     <Border Grid.Row="1" Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" VerticalAlignment="Stretch">
                         <Grid RowSpacing="10">
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>

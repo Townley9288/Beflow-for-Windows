@@ -16,6 +16,7 @@ public sealed class DownloadNamingFieldGroup(string name, IReadOnlyList<Download
 public sealed class DownloadNamingViewModel : ObservableObject
 {
     private readonly AppServices _services;
+    private readonly TransientMessageDismissal _messageDismissal;
     private DownloadNamingProfile _singleDraft = DownloadNamingProfile.Default();
     private DownloadNamingProfile _multiDraft = DownloadNamingProfile.Default();
     private DownloadNamingProfile _savedSingle = DownloadNamingProfile.Default();
@@ -25,9 +26,14 @@ public sealed class DownloadNamingViewModel : ObservableObject
     private string _message = string.Empty;
     private InfoBarSeverity _messageSeverity = InfoBarSeverity.Informational;
 
-    public DownloadNamingViewModel(AppServices services)
+    public DownloadNamingViewModel(AppServices services) : this(services, TimeSpan.FromSeconds(3))
+    {
+    }
+
+    internal DownloadNamingViewModel(AppServices services, TimeSpan successMessageDuration)
     {
         _services = services;
+        _messageDismissal = new TransientMessageDismissal(successMessageDuration);
         FieldGroups = services.DownloadNaming.Fields
             .GroupBy(field => field.Category)
             .Select(group => new DownloadNamingFieldGroup(group.Key, group.ToList()))
@@ -98,6 +104,7 @@ public sealed class DownloadNamingViewModel : ObservableObject
         get => _message;
         private set
         {
+            _messageDismissal.Cancel();
             if (!SetProperty(ref _message, value)) return;
             OnPropertyChanged(nameof(HasMessage));
             OnPropertyChanged(nameof(MessageVisibility));
@@ -169,6 +176,7 @@ public sealed class DownloadNamingViewModel : ObservableObject
     }
 
     public void ReportError(Exception exception) => SetMessage(exception.Message, InfoBarSeverity.Error);
+    public void DismissMessage() => Message = string.Empty;
 
     private DownloadNamingProfile CurrentDraft => _profileKind == DownloadNamingProfileKind.MultiEpisode ? _multiDraft : _singleDraft;
     private DownloadNamingPreview CurrentPreview => _services.DownloadNaming.Preview(CurrentDraft, _profileKind,
@@ -213,6 +221,7 @@ public sealed class DownloadNamingViewModel : ObservableObject
     {
         MessageSeverity = severity;
         Message = message;
+        if (severity == InfoBarSeverity.Success) _messageDismissal.Schedule(() => Message = string.Empty);
     }
 
     private static bool ProfileEquals(DownloadNamingProfile left, DownloadNamingProfile right) =>

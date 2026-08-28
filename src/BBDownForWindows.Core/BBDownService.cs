@@ -25,10 +25,11 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var sourceUrl = request.Url.Trim();
         var metadata = metadataService is null ? null : await metadataService.GetAsync(sourceUrl, cancellationToken);
         var resolvedUrl = string.IsNullOrWhiteSpace(metadata?.PlaybackUrl) ? sourceUrl : metadata.PlaybackUrl;
-        if (!resolvedUrl.Equals(sourceUrl, StringComparison.OrdinalIgnoreCase))
-            context.AppendLog($"检测到番剧播放地址，已按 {resolvedUrl} 解析完整清晰度。\n");
+        var followsBangumiRedirect = !resolvedUrl.Equals(sourceUrl, StringComparison.OrdinalIgnoreCase);
+        if (followsBangumiRedirect)
+            context.AppendLog($"检测到番剧播放地址，已按 {resolvedUrl} 解析当前集完整清晰度。\n");
         var tools = await ResolveToolsAsync(cancellationToken);
-        if (request.Mode == DownloadParseMode.All)
+        if (request.Mode == DownloadParseMode.All && !followsBangumiRedirect)
         {
             return await ParseAllDownloadAsync(request, sourceUrl, resolvedUrl, metadata, tools, progress, context, cancellationToken);
         }
@@ -56,7 +57,9 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             Title = title,
             Metadata = metadata,
             ParsedAt = DateTimeOffset.Now,
-            AllPages = parser.Pages.ToList(),
+            AllPages = followsBangumiRedirect
+                ? parser.Episodes.Select(item => item.Page).DistinctBy(item => item.Number).OrderBy(item => item.Number).ToList()
+                : parser.Pages.ToList(),
             Episodes = parser.Episodes.OrderBy(item => item.Page.Number).ToList()
         };
     }

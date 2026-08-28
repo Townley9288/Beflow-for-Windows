@@ -12,6 +12,7 @@ public sealed class DownloadViewModel : ObservableObject
     public sealed record OptionItem(string Value, string Label);
 
     private readonly AppServices _services;
+    private readonly TransientMessageDismissal _messageDismissal;
     private readonly HashSet<int> _failedPages = [];
     private string _url = string.Empty;
     private string _searchText = string.Empty;
@@ -49,9 +50,14 @@ public sealed class DownloadViewModel : ObservableObject
     private bool _loadingRestore;
     private int _parseGeneration;
 
-    public DownloadViewModel(AppServices services)
+    public DownloadViewModel(AppServices services) : this(services, TimeSpan.FromSeconds(3))
+    {
+    }
+
+    internal DownloadViewModel(AppServices services, TimeSpan successMessageDuration)
     {
         _services = services;
+        _messageDismissal = new TransientMessageDismissal(successMessageDuration);
         Console = services.TaskConsole;
         ParseCurrentCommand = new AsyncRelayCommand(() => ParseAsync(DownloadParseMode.Current), CanParse);
         ParseAllCommand = new AsyncRelayCommand(() => ParseAsync(DownloadParseMode.All), CanParse);
@@ -191,6 +197,7 @@ public sealed class DownloadViewModel : ObservableObject
         get => _message;
         private set
         {
+            _messageDismissal.Cancel();
             if (!SetProperty(ref _message, value)) return;
             OnPropertyChanged(nameof(HasMessage));
             OnPropertyChanged(nameof(MessageVisibility));
@@ -775,6 +782,7 @@ public sealed class DownloadViewModel : ObservableObject
         MessageLogPath = logPath;
         MessageSeverity = severity;
         Message = value;
+        if (severity == InfoBarSeverity.Success) _messageDismissal.Schedule(DismissMessage);
     }
 
     private static string FormatBytes(long bytes)

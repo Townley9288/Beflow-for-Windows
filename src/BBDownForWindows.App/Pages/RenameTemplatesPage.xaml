@@ -22,7 +22,7 @@
             <TabViewItem Header="下载命名" IsClosable="False">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Padding="0,8,0,0" Spacing="12" DataContext="{x:Bind DownloadNamingViewModel, Mode=OneWay}">
-                        <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" IsClosable="False" Severity="{Binding MessageSeverity}" Message="{Binding Message}"/>
+                        <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" IsClosable="True" Severity="{Binding MessageSeverity}" Message="{Binding Message}" Closed="DownloadNamingMessage_Closed"/>
 
                         <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                             <Grid ColumnSpacing="12">
@@ -172,7 +172,7 @@
                             <Button Grid.Column="1" Content="返回重命名" Click="BackToRename_Click" VerticalAlignment="Center"/>
                         </Grid>
 
-                        <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" IsClosable="False" Severity="{Binding MessageSeverity}" Message="{Binding Message}"/>
+                        <InfoBar IsOpen="{Binding HasMessage}" Visibility="{Binding MessageVisibility}" IsClosable="True" Severity="{Binding MessageSeverity}" Message="{Binding Message}" Closed="RenameTemplateMessage_Closed"/>
 
                         <Grid x:Name="TemplateWorkspace" ColumnSpacing="12" RowSpacing="12">
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition x:Name="EditorSecondaryRow" Height="0"/></Grid.RowDefinitions>

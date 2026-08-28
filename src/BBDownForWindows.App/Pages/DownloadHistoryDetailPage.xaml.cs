@@ -1,4 +1,5 @@
 using BBDownForWindows.App.ViewModels;
+using BBDownForWindows.App.Controls;
 using BBDownForWindows.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -42,15 +43,6 @@ public sealed partial class DownloadHistoryDetailPage : Page
     private async void ViewLog_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel.Record is null) return;
-        string content;
-        try { content = ((App)Application.Current).Services.TaskManager.ReadSavedLog(ViewModel.Record.LogPath); }
-        catch (Exception exception) { content = exception.Message; }
-        await new ContentDialog
-        {
-            Title = "任务日志",
-            Content = new ScrollViewer { Content = new TextBlock { Text = content, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"), TextWrapping = TextWrapping.Wrap } },
-            CloseButtonText = "关闭",
-            XamlRoot = XamlRoot
-        }.ShowAsync();
+        await TaskLogDialog.ShowAsync(XamlRoot, ViewModel.Record.LogPath);
     }
 }

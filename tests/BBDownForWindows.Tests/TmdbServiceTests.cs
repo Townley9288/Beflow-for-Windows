@@ -28,7 +28,7 @@ public sealed class TmdbServiceTests
             requests.Add(request.RequestUri!);
             var path = request.RequestUri!.AbsolutePath;
             if (path.EndsWith("/authentication/token/new", StringComparison.Ordinal)) return Json("{\"success\":true}");
-            if (path.EndsWith("/search/multi", StringComparison.Ordinal)) return Json("""{"results":[{"id":12,"media_type":"tv","name":"流人","original_name":"Slow Horses","first_air_date":"2024-09-04","overview":"简介","poster_path":"/poster.jpg"}]}""");
+            if (path.EndsWith("/search/multi", StringComparison.Ordinal)) return Json("""{"results":[{"id":12,"media_type":"tv","name":"流人","original_name":"Slow Horses","first_air_date":"2024-09-04","overview":"　　简介　","poster_path":"/poster.jpg"}]}""");
             if (path.EndsWith("/tv/12", StringComparison.Ordinal)) return Json("""{"name":"Slow Horses","first_air_date":"2024-09-04","alternative_titles":{"results":[{"iso_3166_1":"US","title":"Slow Horses"}]}}""");
             if (path.EndsWith("/tv/12/season/4", StringComparison.Ordinal)) return Json("""{"episodes":[{"episode_number":1,"name":"身份盗窃"}]}""");
             return new HttpResponseMessage(HttpStatusCode.NotFound);
@@ -43,6 +43,7 @@ public sealed class TmdbServiceTests
 
         Assert.Single(results);
         Assert.Single(cachedResults);
+        Assert.Equal("简介", results.Single().Overview);
         Assert.Equal("Slow Horses", detail.EnglishTitle);
         Assert.Equal("身份盗窃", episodes[1]);
         Assert.Equal(4, requests.Count);

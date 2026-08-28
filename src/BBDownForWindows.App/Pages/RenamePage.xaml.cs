@@ -89,6 +89,7 @@ public sealed partial class RenamePage : Page
         {
             ItemsSource = ViewModel.TmdbResults,
             ItemTemplate = (DataTemplate)Resources["TmdbResultTemplate"],
+            ItemContainerStyle = (Style)Resources["TmdbResultItemStyle"],
             SelectionMode = ListViewSelectionMode.Single,
             MaxHeight = 430,
             MinWidth = 0,
@@ -114,6 +115,7 @@ public sealed partial class RenamePage : Page
     }
 
     private async void Preview_Click(object sender, RoutedEventArgs e) => await ViewModel.PreviewAsync();
+    private void RenameMessage_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
 
     private async void Execute_Click(object sender, RoutedEventArgs e)
     {

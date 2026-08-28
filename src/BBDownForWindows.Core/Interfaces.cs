@@ -106,6 +106,7 @@ public interface ITaskManager
     Task CancelActiveAsync();
     Task CleanupAsync();
     string ReadSavedLog(string path);
+    Task<IReadOnlyList<string>> ReadSavedLogLinesAsync(string path, CancellationToken cancellationToken = default);
 }
 
 public interface IBBDownService
