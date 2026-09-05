@@ -113,10 +113,11 @@ public sealed class ProcessRunner : IProcessRunner
         return Task.CompletedTask;
     }
 
-    private static async Task ReadLinesAsync(Stream stream, Action<string> consume)
+    internal static async Task ReadLinesAsync(Stream stream, Action<string> consume)
     {
         var buffer = new byte[4096];
         using var pending = new MemoryStream();
+        var previousWasCarriageReturn = false;
         while (true)
         {
             var count = await stream.ReadAsync(buffer);
@@ -124,11 +125,22 @@ public sealed class ProcessRunner : IProcessRunner
             var start = 0;
             for (var index = 0; index < count; index++)
             {
-                if (buffer[index] != (byte)'\n') continue;
-                pending.Write(buffer, start, index - start + 1);
-                consume(OutputDecoder.Decode(pending.ToArray()));
+                var value = buffer[index];
+                if (previousWasCarriageReturn)
+                {
+                    previousWasCarriageReturn = false;
+                    if (value == (byte)'\n')
+                    {
+                        start = index + 1;
+                        continue;
+                    }
+                }
+                if (value != (byte)'\r' && value != (byte)'\n') continue;
+                pending.Write(buffer, start, index - start);
+                consume(OutputDecoder.Decode(pending.ToArray()) + "\n");
                 pending.SetLength(0);
                 start = index + 1;
+                previousWasCarriageReturn = value == (byte)'\r';
             }
             if (start < count) pending.Write(buffer, start, count - start);
         }

@@ -55,9 +55,17 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $Executable = Join-Path $Publish 'BBDown.exe'
     $Marker = Join-Path $BuildRoot 'beflow-patches.complete'
     $PatchSignature = 'interactive_selection=preserve_across_retry'
+    $EncodingSignature = 'console_output_encoding=utf-8'
+    $MediaDirectSignature = 'media_http_client=direct_no_proxy'
+    $PreparationSignature = 'download_preparation=pipe_v1'
+    $ParseChaptersSignature = 'info_parse=skip_chapter_request'
     if ((Test-Path -LiteralPath $Executable -PathType Leaf) -and
         (Test-Path -LiteralPath $Marker -PathType Leaf) -and
-        [IO.File]::ReadAllText($Marker).Contains($PatchSignature)) { return $Publish }
+        [IO.File]::ReadAllText($Marker).Contains($PatchSignature) -and
+        [IO.File]::ReadAllText($Marker).Contains($EncodingSignature) -and
+        [IO.File]::ReadAllText($Marker).Contains($MediaDirectSignature) -and
+        [IO.File]::ReadAllText($Marker).Contains($PreparationSignature) -and
+        [IO.File]::ReadAllText($Marker).Contains($ParseChaptersSignature)) { return $Publish }
 
     $WorkingDirectory = Join-Path $CacheDirectory "work\bbdown-$($Entry.version)-$PID"
     New-Item -ItemType Directory -Force -Path $WorkingDirectory, $Publish | Out-Null
@@ -162,6 +170,11 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
 
     $ProgramPath = Join-Path $WorkingDirectory 'BBDown\Program.cs'
     $ProgramContent = [IO.File]::ReadAllText($ProgramPath)
+    # GBK bytes for 帧 also form valid UTF-8, so per-line detection cannot distinguish them.
+    $OutputEncodingNeedle = '            Console.CancelKeyPress += Console_CancelKeyPress;'
+    if ([regex]::Matches($ProgramContent, [regex]::Escape($OutputEncodingNeedle)).Count -ne 1) { throw 'The pinned BBDown entry point changed; refusing to apply the UTF-8 output patch.' }
+    $OutputEncodingReplacement = '            Console.OutputEncoding = new System.Text.UTF8Encoding(false);' + [Environment]::NewLine + $OutputEncodingNeedle
+    $ProgramContent = $ProgramContent.Replace($OutputEncodingNeedle, $OutputEncodingReplacement)
     $DolbyNeedle = 'Config.qualitys["126"]'
     $InteractiveNeedle = 'Config.qualitys[key]'
     if (-not $ProgramContent.Contains($DolbyNeedle) -or -not $ProgramContent.Contains($InteractiveNeedle)) { throw 'The pinned BBDown program quality lookups changed; refusing to apply the safe quality lookup.' }
@@ -200,7 +213,39 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
         '                    }'
     if (-not $ProgramContent.Contains($SelectionRetryNeedle)) { throw 'The pinned BBDown interactive selection block changed; refusing to apply an unverified retry patch.' }
     $ProgramContent = $ProgramContent.Replace($SelectionRetryNeedle, $SelectionRetryReplacement)
+
+    # Chapter metadata is used for download/muxing, not the stream catalog shown by -info.
+    $ChapterRequestNeedle = '                p.points = await FetchPointsAsync(p.cid, p.aid);'
+    $ChapterRequestReplacement = '                if (!myOption.OnlyShowInfo)' + [Environment]::NewLine +
+        '                    p.points = await FetchPointsAsync(p.cid, p.aid);'
+    if ([regex]::Matches($ProgramContent, [regex]::Escape($ChapterRequestNeedle)).Count -ne 1) { throw 'The pinned BBDown chapter request changed; refusing to patch an unverified parse path.' }
+    $ProgramContent = $ProgramContent.Replace($ChapterRequestNeedle, $ChapterRequestReplacement)
     [IO.File]::WriteAllText($ProgramPath, $ProgramContent, [Text.UTF8Encoding]::new($false))
+
+    $DownloadPath = Join-Path $WorkingDirectory 'BBDown\BBDownDownloadUtil.cs'
+    $DownloadContent = [IO.File]::ReadAllText($DownloadPath).Replace("`r`n", "`n")
+    $DownloadClassNeedle = "    internal class BBDownDownloadUtil`n    {`n"
+    $DownloadClassReplacement = @'
+    internal class BBDownDownloadUtil
+    {
+        // Media downloads bypass system/environment proxies; API and login clients are independent.
+        private static readonly HttpClient MediaHttpClient = new(new HttpClientHandler
+        {
+            UseProxy = false,
+            AllowAutoRedirect = true,
+            AutomaticDecompression = DecompressionMethods.All
+        }) { Timeout = TimeSpan.FromMinutes(2) };
+
+'@.Replace("`r`n", "`n") + "`n"
+    if ([regex]::Matches($DownloadContent, [regex]::Escape($DownloadClassNeedle)).Count -ne 1) { throw 'The pinned BBDown download class changed; refusing to add the direct media client.' }
+    $DownloadContent = $DownloadContent.Replace($DownloadClassNeedle, $DownloadClassReplacement)
+    $MediaSendNeedle = 'AppHttpClient.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead)'
+    if ([regex]::Matches($DownloadContent, [regex]::Escape($MediaSendNeedle)).Count -ne 2) { throw 'The pinned BBDown media request calls changed; refusing to reroute an unverified download path.' }
+    $DownloadContent = $DownloadContent.Replace($MediaSendNeedle, 'MediaHttpClient.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead)')
+    $SizeResponseNeedle = "`n            var response = (await MediaHttpClient.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead)).EnsureSuccessStatusCode();"
+    if ([regex]::Matches($DownloadContent, [regex]::Escape($SizeResponseNeedle)).Count -ne 1) { throw 'The pinned BBDown file-size response changed; refusing to patch its disposal.' }
+    $DownloadContent = $DownloadContent.Replace($SizeResponseNeedle, $SizeResponseNeedle.Replace('var response', 'using var response'))
+    [IO.File]::WriteAllText($DownloadPath, $DownloadContent, [Text.UTF8Encoding]::new($false))
 
     $LoginPath = Join-Path $WorkingDirectory 'BBDown\BBDownLoginUtil.cs'
     $LoginContent = [IO.File]::ReadAllText($LoginPath).Replace("`r`n", "`n")
@@ -364,11 +409,13 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $LoginContent = $LoginContent.Replace($LoginTvNeedle, $LoginHelpers + $LoginTvNeedle)
     [IO.File]::WriteAllText($LoginPath, $LoginContent, [Text.UTF8Encoding]::new($false))
 
+    & (Join-Path $PSScriptRoot 'Apply-DownloadPreparationPatch.ps1') -WorkingDirectory $WorkingDirectory
     $Project = Join-Path $WorkingDirectory 'BBDown\BBDown.csproj'
     & dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:ManagePackageVersionsCentrally=false -p:Version=$($Entry.version) -o $Publish | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patched BBDown build failed with exit code $LASTEXITCODE" }
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Patched BBDown build did not produce BBDown.exe.' }
-    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`nquality=100:智能修复`nquality_lookup=support_formats_then_safe_fallback`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`nweb_login=cookie_container_with_trusted_callback_fallback`n$PatchSignature`n", [Text.UTF8Encoding]::new($false))
+    & (Join-Path $PSScriptRoot 'Test-BBDownOutputEncoding.ps1') -ExecutablePath $Executable | Out-Host
+    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`nquality=100:智能修复`nquality_lookup=support_formats_then_safe_fallback`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`nweb_login=cookie_container_with_trusted_callback_fallback`n$PatchSignature`n$EncodingSignature`n$MediaDirectSignature`n$PreparationSignature`n$ParseChaptersSignature`n", [Text.UTF8Encoding]::new($false))
     return $Publish
 }
 

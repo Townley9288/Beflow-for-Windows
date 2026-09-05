@@ -150,6 +150,20 @@
             <StackPanel Spacing="8">
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="解析设置" Style="{StaticResource SubtitleTextBlockStyle}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="保存" Command="{Binding SaveParseCommand}" Style="{StaticResource AccentButtonStyle}"/>
+                </Grid>
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="160"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <ComboBox Header="解析并发数" HorizontalAlignment="Stretch" ItemsSource="{Binding ParseConcurrencyOptions}" SelectedItem="{Binding Settings.ParseConcurrency, Mode=TwoWay}"/>
+                    <TextBlock Grid.Column="1" Text="默认 4 路，可选择 6 或 8 路。较高并发可能触发 B 站限流；保存后从下次解析生效。" Opacity="0.65" TextWrapping="Wrap" VerticalAlignment="Bottom"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+        <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock Text="影视重命名" Style="{StaticResource SubtitleTextBlockStyle}" VerticalAlignment="Center"/>
                     <Button Grid.Column="1" Content="保存" Command="{Binding SaveRenameCommand}" Style="{StaticResource AccentButtonStyle}"/>
                 </Grid>
@@ -198,7 +212,7 @@
                 <TextBlock Text="开启后使用 4/8/16 档自动调优，下面的连接数、分片数和同时任务数作为上限；关闭后直接使用填写值。" Opacity="0.65" TextWrapping="Wrap"/>
                 <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Header="aria2c.exe 路径" Text="{Binding Settings.Aria2cPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="选择…" VerticalAlignment="Bottom" Click="BrowseAria_Click"/></Grid>
                 <Grid ColumnSpacing="12" RowSpacing="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition x:Name="AriaSecondaryRow" Height="0"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition x:Name="AriaColumn0" Width="*"/><ColumnDefinition x:Name="AriaColumn1" Width="*"/><ColumnDefinition x:Name="AriaColumn2" Width="*"/><ColumnDefinition x:Name="AriaColumn3" Width="*"/></Grid.ColumnDefinitions>
-                    <NumberBox Header="最大连接数" Minimum="1" Maximum="32" Value="{Binding Settings.Aria2MaxConnection, Mode=TwoWay}"/><NumberBox Grid.Column="1" Header="最大分片数" Minimum="1" Maximum="32" Value="{Binding Settings.Aria2Split, Mode=TwoWay}"/><NumberBox x:Name="AriaConcurrent" Grid.Column="2" Header="最大同时任务数" Minimum="1" Maximum="32" Value="{Binding Settings.Aria2MaxConcurrentDownloads, Mode=TwoWay}"/><NumberBox x:Name="AriaMinSplit" Grid.Column="3" Header="最小分片 MB" Minimum="1" Maximum="64" Value="{Binding Settings.Aria2MinSplitSize, Mode=TwoWay}"/>
+                    <NumberBox Header="最大连接数" Minimum="1" Maximum="16" Value="{Binding Settings.Aria2MaxConnection, Mode=TwoWay}"/><NumberBox Grid.Column="1" Header="最大分片数" Minimum="1" Maximum="32" Value="{Binding Settings.Aria2Split, Mode=TwoWay}"/><NumberBox x:Name="AriaConcurrent" Grid.Column="2" Header="最大同时任务数" Minimum="1" Maximum="32" Value="{Binding Settings.Aria2MaxConcurrentDownloads, Mode=TwoWay}"/><NumberBox x:Name="AriaMinSplit" Grid.Column="3" Header="最小分片 MB" Minimum="1" Maximum="64" Value="{Binding Settings.Aria2MinSplitSize, Mode=TwoWay}"/>
                 </Grid>
             </StackPanel></Border>
             <Border x:Name="MkvCard" Grid.Column="1" Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="8">

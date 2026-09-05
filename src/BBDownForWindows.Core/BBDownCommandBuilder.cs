@@ -68,11 +68,14 @@ public static class BBDownCommandBuilder
         if (!string.IsNullOrWhiteSpace(tools.Ffmpeg)) arguments.AddRange(["--ffmpeg-path", tools.Ffmpeg]);
         if (request.UseAria2c)
         {
+            Aria2TuningPolicy.ValidateMaxConnection(request.Aria2MaxConnection);
             arguments.Add("--use-aria2c");
             var aria = !string.IsNullOrWhiteSpace(request.Aria2cPath) ? request.Aria2cPath : tools.Aria2c;
             if (!string.IsNullOrWhiteSpace(aria)) arguments.AddRange(["--aria2c-path", aria]);
             var ariaArguments = $"-x{request.Aria2MaxConnection} -s{request.Aria2Split} -j{request.Aria2MaxConcurrentDownloads} -k {request.Aria2MinSplitSize}M";
             if (request.Aria2AutoTune) ariaArguments += " --file-allocation=none --disk-cache=64M";
+            // Media transfers always connect directly, including when proxy environment variables are inherited.
+            ariaArguments += " --all-proxy= --http-proxy= --https-proxy=";
             arguments.AddRange(["--aria2c-args", ariaArguments]);
         }
     }

@@ -7,6 +7,99 @@ namespace BBDownForWindows.Tests;
 
 public sealed class AppViewModelTests
 {
+    [Theory]
+    [InlineData(4)]
+    [InlineData(6)]
+    [InlineData(8)]
+    public async Task ParseSettingsPersistIndependentlyOfOtherSettings(int concurrency)
+    {
+        using var fixture = new AppFixture();
+        await fixture.Services.Settings.SaveAsync(new AppSettings
+        {
+            WorkDirectory = "kept-directory", Encoding = "AV1", Aria2MaxConnection = 8,
+            MonitorClipboard = false, ThemeMode = AppThemeMode.Dark
+        });
+        var viewModel = new SettingsViewModel(fixture.Services);
+        viewModel.Settings.ParseConcurrency = concurrency;
+
+        await viewModel.SaveParseCommand.ExecuteAsync(null);
+
+        Assert.Contains("下次解析生效", viewModel.Message);
+        var saved = await fixture.Services.Settings.LoadAsync();
+        Assert.Equal(concurrency, saved.ParseConcurrency);
+        Assert.Equal("kept-directory", saved.WorkDirectory);
+        Assert.Equal("AV1", saved.Encoding);
+        Assert.Equal(8, saved.Aria2MaxConnection);
+        Assert.False(saved.MonitorClipboard);
+        Assert.Equal(AppThemeMode.Dark, saved.ThemeMode);
+
+        // A settings page opened earlier must not overwrite a newer parse preference.
+        viewModel.Settings.ParseConcurrency = 4;
+        await viewModel.SaveDownloadCommand.ExecuteAsync(null);
+        await viewModel.SaveAriaCommand.ExecuteAsync(null);
+        Assert.Equal(concurrency, (await fixture.Services.Settings.LoadAsync()).ParseConcurrency);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    [InlineData(9)]
+    public async Task InvalidParseConcurrencyDoesNotOverwriteSavedPreference(int concurrency)
+    {
+        using var fixture = new AppFixture();
+        await fixture.Services.Settings.SaveAsync(new AppSettings { ParseConcurrency = 6 });
+        var viewModel = new SettingsViewModel(fixture.Services);
+        viewModel.Settings.ParseConcurrency = concurrency;
+
+        await viewModel.SaveParseCommand.ExecuteAsync(null);
+
+        Assert.Contains("4、6 或 8", viewModel.Message);
+        Assert.Equal(concurrency, viewModel.Settings.ParseConcurrency);
+        Assert.Equal(6, (await fixture.Services.Settings.LoadAsync()).ParseConcurrency);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(17)]
+    [InlineData(32)]
+    public async Task InvalidAriaConnectionSettingsShowAnErrorWithoutSaving(int connections)
+    {
+        using var fixture = new AppFixture();
+        await fixture.Services.Settings.SaveAsync(new AppSettings { Aria2MaxConnection = 8, Aria2Split = 12 });
+        var viewModel = new SettingsViewModel(fixture.Services);
+        viewModel.Settings.Aria2MaxConnection = connections;
+        viewModel.Settings.Aria2Split = 20;
+
+        await viewModel.SaveAriaCommand.ExecuteAsync(null);
+
+        Assert.Contains("1–16", viewModel.Message);
+        Assert.Equal(connections, viewModel.Settings.Aria2MaxConnection);
+        var saved = await fixture.Services.Settings.LoadAsync();
+        Assert.Equal(8, saved.Aria2MaxConnection);
+        Assert.Equal(12, saved.Aria2Split);
+    }
+
+    [Fact]
+    public async Task ValidAriaSettingsPreserveOtherDownloadSettings()
+    {
+        using var fixture = new AppFixture();
+        await fixture.Services.Settings.SaveAsync(new AppSettings { WorkDirectory = "kept-directory", Encoding = "AV1" });
+        var viewModel = new SettingsViewModel(fixture.Services);
+        viewModel.Settings.Aria2MaxConnection = 16;
+        viewModel.Settings.Aria2Split = 10;
+        viewModel.Settings.Aria2AutoTune = false;
+
+        await viewModel.SaveAriaCommand.ExecuteAsync(null);
+
+        Assert.Equal("aria2c 设置已保存", viewModel.Message);
+        var saved = await fixture.Services.Settings.LoadAsync();
+        Assert.Equal(16, saved.Aria2MaxConnection);
+        Assert.Equal(10, saved.Aria2Split);
+        Assert.False(saved.Aria2AutoTune);
+        Assert.Equal("kept-directory", saved.WorkDirectory);
+        Assert.Equal("AV1", saved.Encoding);
+    }
+
     [Fact]
     public void RestoredManualStreamsKeepUnavailableOriginalSignatureUntilUserOverridesIt()
     {

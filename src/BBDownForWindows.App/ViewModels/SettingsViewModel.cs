@@ -39,6 +39,7 @@ public sealed class SettingsViewModel : ObservableObject
         _messageDismissal = new TransientMessageDismissal(successMessageDuration);
         _loginMessageDismissal = new TransientMessageDismissal(successMessageDuration);
         SaveDownloadCommand = new AsyncRelayCommand(SaveDownloadSettingsAsync);
+        SaveParseCommand = new AsyncRelayCommand(SaveParseSettingsAsync);
         ResetDownloadCommand = new RelayCommand(ResetDownloadSettings);
         SaveRenameCommand = new AsyncRelayCommand(SaveRenameSettingsAsync);
         SaveAriaCommand = new AsyncRelayCommand(SaveAriaSettingsAsync);
@@ -63,6 +64,7 @@ public sealed class SettingsViewModel : ObservableObject
         new("智能修复", "智能修复"), new("720P 准高清", "720P 准高清"), new("480P 标清", "480P 标清"), new("360P 流畅", "360P 流畅")
     ];
     public IReadOnlyList<string> EncodingOptions { get; } = ["HEVC", "AVC", "AV1"];
+    public IReadOnlyList<int> ParseConcurrencyOptions => ParseConcurrencyPolicy.Options;
     public IReadOnlyList<string> DownloadModeOptions { get; } = ["视频+音频", "仅视频", "仅音频"];
     public IReadOnlyList<OptionItem> AudioCodecOptions { get; } =
     [
@@ -148,6 +150,7 @@ public sealed class SettingsViewModel : ObservableObject
     public Visibility MessageVisibility => HasMessage ? Visibility.Visible : Visibility.Collapsed;
     public InfoBarSeverity MessageSeverity { get => _messageSeverity; private set => SetProperty(ref _messageSeverity, value); }
     public IAsyncRelayCommand SaveDownloadCommand { get; }
+    public IAsyncRelayCommand SaveParseCommand { get; }
     public IRelayCommand ResetDownloadCommand { get; }
     public IAsyncRelayCommand SaveRenameCommand { get; }
     public IAsyncRelayCommand SaveAriaCommand { get; }
@@ -343,6 +346,21 @@ public sealed class SettingsViewModel : ObservableObject
         SetMessage("便捷输入设置已保存", InfoBarSeverity.Success);
     }
 
+    private async Task SaveParseSettingsAsync()
+    {
+        try
+        {
+            var concurrency = Settings.ParseConcurrency;
+            ParseConcurrencyPolicy.Validate(concurrency);
+            await UpdateStoredSettingsAsync(settings => settings.ParseConcurrency = concurrency);
+            SetMessage("解析设置已保存，下次解析生效", InfoBarSeverity.Success);
+        }
+        catch (InvalidOperationException exception)
+        {
+            SetMessage(exception.Message, InfoBarSeverity.Warning);
+        }
+    }
+
     private void ResetDownloadSettings()
     {
         var defaults = new AppSettings();
@@ -374,9 +392,17 @@ public sealed class SettingsViewModel : ObservableObject
 
     private async Task SaveAriaSettingsAsync()
     {
-        var edited = Settings.Clone();
-        await UpdateStoredSettingsAsync(settings => CopyAriaSettings(edited, settings));
-        SetMessage("aria2c 设置已保存", InfoBarSeverity.Success);
+        try
+        {
+            var edited = Settings.Clone();
+            Aria2TuningPolicy.ValidateMaxConnection(edited.Aria2MaxConnection);
+            await UpdateStoredSettingsAsync(settings => CopyAriaSettings(edited, settings));
+            SetMessage("aria2c 设置已保存", InfoBarSeverity.Success);
+        }
+        catch (InvalidOperationException exception)
+        {
+            SetMessage(exception.Message, InfoBarSeverity.Warning);
+        }
     }
 
     private async Task SaveMkvSettingsAsync()

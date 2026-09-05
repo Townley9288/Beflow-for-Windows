@@ -94,6 +94,7 @@ public sealed class AppSettings
     }
     [JsonIgnore] public AudioBitratePriority AudioBitratePriority { get; set; } = AudioBitratePriority.Highest;
     [JsonPropertyName("saveTaskLogs")] public bool SaveTaskLogs { get; set; } = true;
+    [JsonPropertyName("parseConcurrency")] public int ParseConcurrency { get; set; } = ParseConcurrencyPolicy.Default;
     [JsonPropertyName("apiMode")] public string ApiMode { get; set; } = "WEB";
     [JsonPropertyName("danmaku")] public bool Danmaku { get; set; }
     [JsonPropertyName("subtitle")] public bool Subtitle { get; set; }

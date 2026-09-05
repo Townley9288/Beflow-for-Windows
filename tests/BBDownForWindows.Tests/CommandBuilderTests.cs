@@ -5,6 +5,39 @@ namespace BBDownForWindows.Tests;
 
 public sealed class CommandBuilderTests
 {
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(17, false)]
+    [InlineData(32, false)]
+    [InlineData(17, true)]
+    public void InvalidAriaConnectionCountIsRejectedWithoutClamping(int connections, bool autoTune)
+    {
+        var request = new DownloadRequest { Url = "BV1", UseAria2c = true, Aria2MaxConnection = connections, Aria2AutoTune = autoTune };
+
+        Assert.Contains("1–16", Assert.Throws<InvalidOperationException>(() => Aria2TuningPolicy.Apply(request, 200L * 1024 * 1024)).Message);
+        Assert.Throws<InvalidOperationException>(() => BBDownCommandBuilder.BuildDownloadArguments(request, new ToolPaths()));
+        Assert.Throws<InvalidOperationException>(() => BBDownCommandBuilder.BuildExactDownloadArguments(request, new ToolPaths()));
+        Assert.Equal(connections, request.Aria2MaxConnection);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(16)]
+    public void AriaConnectionCountAcceptsBothSupportedBoundaries(int connections)
+    {
+        var request = new DownloadRequest { Url = "BV1", UseAria2c = true, Aria2AutoTune = false, Aria2MaxConnection = connections };
+        Aria2TuningPolicy.Apply(request, 0);
+        var args = BBDownCommandBuilder.BuildExactDownloadArguments(request, new ToolPaths());
+        Assert.Contains($"-x{connections} ", args[args.IndexOf("--aria2c-args") + 1]);
+    }
+
+    [Fact]
+    public void DisabledAriaDoesNotValidateUnusedConnectionSettings()
+    {
+        var request = new DownloadRequest { Url = "BV1", UseAria2c = false, Aria2MaxConnection = 32 };
+        Assert.DoesNotContain("--use-aria2c", BBDownCommandBuilder.BuildDownloadArguments(request, new ToolPaths()));
+    }
+
     [Fact]
     public void UsesQualityNamesAndSkipFlags()
     {
@@ -101,7 +134,26 @@ public sealed class CommandBuilderTests
         var ariaArguments = arguments[arguments.IndexOf("--aria2c-args") + 1];
 
         Assert.False(tuning.Applied);
-        Assert.Equal("-x12 -s10 -j6 -k 8M", ariaArguments);
+        Assert.Equal("-x12 -s10 -j6 -k 8M --all-proxy= --http-proxy= --https-proxy=", ariaArguments);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void MediaDownloadsDisableAllAriaProxiesRegardlessOfSelectionOrTuning(bool exact, bool autoTune)
+    {
+        var request = new DownloadRequest { Url = "BV1", UseAria2c = true, Aria2AutoTune = autoTune };
+        var arguments = exact
+            ? BBDownCommandBuilder.BuildExactDownloadArguments(request, new ToolPaths())
+            : BBDownCommandBuilder.BuildDownloadArguments(request, new ToolPaths());
+        var ariaArguments = arguments[arguments.IndexOf("--aria2c-args") + 1].Split(' ');
+
+        Assert.Contains("--all-proxy=", ariaArguments);
+        Assert.Contains("--http-proxy=", ariaArguments);
+        Assert.Contains("--https-proxy=", ariaArguments);
+        Assert.DoesNotContain("--aria2c-args", BBDownCommandBuilder.BuildInfoArguments(request, new ToolPaths()));
     }
 
     [Fact]

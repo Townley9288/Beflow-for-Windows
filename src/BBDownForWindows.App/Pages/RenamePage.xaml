@@ -17,7 +17,6 @@
                 <StackPanel Grid.Column="1" Spacing="2">
                     <TextBlock Text="{x:Bind ChineseTitle}" FontWeight="SemiBold"/>
                     <TextBlock Text="{x:Bind MetadataText}" FontSize="12" Opacity="0.65"/>
-                    <TextBlock Text="{x:Bind SecondaryTitle}" Opacity="0.65"/>
                     <TextBlock Text="{x:Bind Overview}" Opacity="0.55" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxLines="2"/>
                 </StackPanel>
             </Grid>

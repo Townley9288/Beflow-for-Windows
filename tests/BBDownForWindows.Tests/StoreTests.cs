@@ -26,6 +26,7 @@ public sealed class StoreTests
             Assert.True(settings.MonitorDragLinks);
             Assert.True(settings.CheckUpdatesOnStartup);
             Assert.True(settings.Aria2AutoTune);
+            Assert.Equal(4, settings.ParseConcurrency);
         }
         finally
         {

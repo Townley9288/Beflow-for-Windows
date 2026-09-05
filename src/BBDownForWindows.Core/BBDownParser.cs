@@ -232,7 +232,7 @@ public static partial class BBDownParser
     [GeneratedRegex("视频标题:\\s*(.+)$")] private static partial Regex TitleRegex();
     [GeneratedRegex("\\bP(\\d+):\\s*\\[(\\d+)\\]\\s*\\[(.+?)\\]\\s*\\[([^\\]]+)\\]")] private static partial Regex PageRegex();
     [GeneratedRegex("^\\s*(\\d+)\\.\\s*(.+)$")] private static partial Regex StreamRegex();
-    [GeneratedRegex("\\[([^\\]]+)\\]")] private static partial Regex BracketRegex();
+    [GeneratedRegex("\\[([^\\]]*)\\]")] private static partial Regex BracketRegex();
     [GeneratedRegex("开始解析P(\\d+):")] private static partial Regex ParsingPageRegex();
     [GeneratedRegex("已选择\\s*[：:]\\s*([^\\r\\n]+)", RegexOptions.IgnoreCase)] private static partial Regex SelectedRegex();
     [GeneratedRegex("共计\\s*(\\d+)\\s*个分P")] private static partial Regex TotalPagesRegex();

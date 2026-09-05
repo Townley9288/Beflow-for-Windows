@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.Channels;
 using BBDownForWindows.Core;
 using Xunit;
 
@@ -6,6 +7,64 @@ namespace BBDownForWindows.Tests;
 
 public sealed class ProcessAndTaskTests
 {
+    [Theory]
+    [InlineData("utf-8", 1)]
+    [InlineData("utf-8", 3)]
+    [InlineData("GB18030", 1)]
+    [InlineData("GB18030", 4096)]
+    public async Task RedirectedReaderHandlesCrLfAndSplitMultibyteCharacters(string encodingName, int chunkSize)
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        using var stream = new ChunkedStream(Encoding.GetEncoding(encodingName).GetBytes("开始下载视频\r\n13%\r96%\n尾部"), chunkSize);
+        var lines = new List<string>();
+
+        await ProcessRunner.ReadLinesAsync(stream, lines.Add);
+
+        Assert.Equal(["开始下载视频\n", "13%\n", "96%\n", "尾部"], lines);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task RedirectedReaderPublishesCarriageReturnBeforeTheProcessFinishes()
+    {
+        using var stream = new LiveStream();
+        var first = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lines = new List<string>();
+        var reader = ProcessRunner.ReadLinesAsync(stream, line => { lines.Add(line); first.TrySetResult(line); });
+        try
+        {
+            stream.Feed("13%\r");
+            Assert.Equal("13%\n", await first.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+            Assert.False(reader.IsCompleted);
+            stream.Feed("\n96%\r");
+        }
+        finally
+        {
+            stream.Complete();
+            await reader;
+        }
+        Assert.Equal(["13%\n", "96%\n"], lines);
+    }
+
+    private sealed class ChunkedStream(byte[] bytes, int chunkSize) : MemoryStream(bytes)
+    {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            base.ReadAsync(buffer[..Math.Min(buffer.Length, chunkSize)], cancellationToken);
+    }
+
+    private sealed class LiveStream : MemoryStream
+    {
+        private readonly Channel<byte[]> _chunks = Channel.CreateUnbounded<byte[]>();
+        public void Feed(string text) => _chunks.Writer.TryWrite(Encoding.UTF8.GetBytes(text));
+        public void Complete() => _chunks.Writer.TryComplete();
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (!await _chunks.Reader.WaitToReadAsync(cancellationToken)) return 0;
+            var bytes = await _chunks.Reader.ReadAsync(cancellationToken);
+            bytes.CopyTo(buffer);
+            return bytes.Length;
+        }
+    }
+
     [Fact]
     public void OutputDecoderHandlesUtf8AndGbkChinese()
     {

@@ -14,12 +14,20 @@ public sealed record Aria2TuningResult(
 
 public static class Aria2TuningPolicy
 {
+    public const int MaximumConnectionsPerServer = 16;
     private const long SmallStreamLimit = 128L * 1024 * 1024;
     private const long MediumStreamLimit = 1024L * 1024 * 1024;
 
+    public static void ValidateMaxConnection(int value)
+    {
+        if (value is < 1 or > MaximumConnectionsPerServer)
+            throw new InvalidOperationException($"aria2c 最大连接数必须为 1–{MaximumConnectionsPerServer}，请在设置中修改。");
+    }
+
     public static Aria2TuningResult Apply(DownloadRequest request, long estimatedStreamBytes)
     {
-        var maxConnection = Math.Clamp(request.Aria2MaxConnection, 1, 32);
+        ValidateMaxConnection(request.Aria2MaxConnection);
+        var maxConnection = request.Aria2MaxConnection;
         var split = Math.Clamp(request.Aria2Split, 1, 32);
         var concurrent = Math.Clamp(request.Aria2MaxConcurrentDownloads, 1, 32);
         var minSplitSize = Math.Clamp(request.Aria2MinSplitSize, 1, 64);

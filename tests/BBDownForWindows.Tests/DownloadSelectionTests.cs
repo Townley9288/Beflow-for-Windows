@@ -14,14 +14,14 @@ public sealed class DownloadSelectionTests
         parser.TryConsume("开始下载P1视频", out _);
 
         Assert.True(parser.TryConsume("[####################--------------------] 50% / - 10 MB/s", out var video));
-        Assert.Equal(41.67, video.Percent, 2);
+        Assert.Equal(41.67, video.Percent!.Value, 2);
         Assert.Equal("10 MB/s", video.Speed);
         Assert.Equal("约 7秒", video.Eta);
 
         parser.TryConsume("合并视频分片", out _);
         parser.TryConsume("开始下载P1音频", out _);
         Assert.True(parser.TryConsume("[####################--------------------] 50% / - 5 MB/s", out var audio));
-        Assert.Equal(91.67, audio.Percent, 2);
+        Assert.Equal(91.67, audio.Percent!.Value, 2);
         Assert.Equal("5 MB/s", audio.Speed);
         Assert.Equal("约 2秒", audio.Eta);
     }
@@ -269,11 +269,13 @@ public sealed class DownloadSelectionTests
     [Fact]
     public void AriaProgressAcrossMultipleTransfersDoesNotReset()
     {
-        var parser = new Aria2ProgressParser();
+        var parser = new Aria2ProgressParser(100L * 1024 * 1024, 100L * 1024 * 1024, DownloadMode.VideoAndAudio);
+        parser.TryConsume("开始下载P1视频...", out _);
         Assert.True(parser.TryConsume("[#aaaa11 50MiB/100MiB(50%) CN:8 DL:10MiB ETA:5s]", out var first));
+        parser.TryConsume("开始下载P1音频...", out _);
         Assert.True(parser.TryConsume("[#bbbb22 10MiB/100MiB(10%) CN:8 DL:8MiB ETA:11s]", out var second));
-        Assert.Equal(50, first.Percent, 1);
-        Assert.True(second.Percent >= 50);
+        Assert.Equal(25, first.Percent!.Value, 1);
+        Assert.Equal(55, second.Percent!.Value, 1);
     }
 
     [Fact]
@@ -281,11 +283,13 @@ public sealed class DownloadSelectionTests
     {
         var parser = new Aria2ProgressParser(100L * 1024 * 1024, 20L * 1024 * 1024, DownloadMode.VideoAndAudio);
 
+        parser.TryConsume("开始下载P1视频...", out _);
         Assert.True(parser.TryConsume("[#aaaa11 100MiB/100MiB(100%) CN:8 DL:10MiB ETA:0s]", out var video));
+        parser.TryConsume("开始下载P1音频...", out _);
         Assert.True(parser.TryConsume("[#bbbb22 10MiB/20MiB(50%) CN:8 DL:8MiB ETA:1s]", out var audio));
 
-        Assert.Equal(83.33, video.Percent, 2);
-        Assert.Equal(91.67, audio.Percent, 2);
+        Assert.Equal(83.33, video.Percent!.Value, 2);
+        Assert.Equal(91.67, audio.Percent!.Value, 2);
     }
 
     [Fact]
@@ -311,11 +315,17 @@ public sealed class DownloadSelectionTests
         Assert.Contains("2", fixture.Runner.Requests[1].Arguments);
     }
 
-    [Fact]
-    public async Task AllPageParseUsesBoundedFourWayConcurrencyAndKeepsEpisodeOrder()
+    [Theory]
+    [InlineData(null, 17, 4)]
+    [InlineData(4, 17, 4)]
+    [InlineData(6, 17, 6)]
+    [InlineData(8, 17, 8)]
+    [InlineData(8, 3, 2)]
+    public async Task AllPageParseUsesSavedConcurrencyAndKeepsEpisodeOrder(int? concurrency, int totalPages, int expectedWorkers)
     {
-        var runner = new ScriptedRunner { TotalPages = 9, ParseDelay = TimeSpan.FromMilliseconds(60) };
+        var runner = new ScriptedRunner { TotalPages = totalPages, ParseDelay = TimeSpan.FromMilliseconds(60) };
         using var fixture = new ServiceFixture(runner);
+        if (concurrency is { } selected) await fixture.Settings.SaveAsync(new AppSettings { ParseConcurrency = selected });
         DownloadCatalog? catalog = null;
         var updates = new List<DownloadParseProgress>();
         var manager = new TaskManager(fixture.Paths, fixture.Runner);
@@ -328,12 +338,31 @@ public sealed class DownloadSelectionTests
 
         Assert.Equal(TaskState.Completed, snapshot.State);
         Assert.NotNull(catalog);
-        Assert.Equal(Enumerable.Range(1, 9), catalog!.Episodes.Select(item => item.Page.Number));
-        Assert.Equal(9, updates.Count(item => item.Episode is not null));
-        Assert.Equal(5, runner.Requests.Count);
-        Assert.Equal(4, runner.MaximumActiveParses);
+        Assert.Equal(Enumerable.Range(1, totalPages), catalog!.Episodes.Select(item => item.Page.Number));
+        Assert.All(catalog.Episodes, episode => Assert.Equal(DownloadEpisodeParseState.Ready, episode.State));
+        Assert.Equal(totalPages, updates.Count(item => item.Episode is not null));
+        Assert.Equal(expectedWorkers + 1, runner.Requests.Count);
+        Assert.Equal(expectedWorkers, runner.MaximumActiveParses);
         Assert.All(runner.Requests, item => Assert.DoesNotContain("ALL", item.Arguments));
-        Assert.Equal(4, runner.Requests.Count(item => item.Arguments.Any(argument => argument.Contains(','))));
+        var parsedPages = runner.Requests.Skip(1).SelectMany(item =>
+            BBDownParser.ExpandPageExpression(item.Arguments[item.Arguments.ToList().IndexOf("-p") + 1])).Order().ToArray();
+        Assert.Equal(Enumerable.Range(2, totalPages - 1), parsedPages);
+    }
+
+    [Fact]
+    public async Task InvalidSavedParseConcurrencyStopsBeforeStartingProcesses()
+    {
+        using var fixture = new ServiceFixture(new ScriptedRunner());
+        await fixture.Settings.SaveAsync(new AppSettings { ParseConcurrency = 0 });
+        var manager = new TaskManager(fixture.Paths, fixture.Runner);
+
+        var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadParse, false, "invalid-concurrency", async (context, token) =>
+            await fixture.Service.ParseDownloadAsync(new DownloadParseRequest("ss1", DownloadParseMode.All), null, context, token));
+
+        Assert.Equal(TaskState.Failed, snapshot.State);
+        Assert.Contains("4、6 或 8", snapshot.Error);
+        Assert.Empty(fixture.Runner.Requests);
+        Assert.Equal(0, (await fixture.Settings.LoadAsync()).ParseConcurrency);
     }
 
     [Fact]
@@ -463,9 +492,12 @@ public sealed class DownloadSelectionTests
         Assert.Equal(DownloadEpisodeResultState.Failed, batch.Episodes[1].State);
         var downloads = runner.Requests.Where(item => item.Arguments.Contains("--interactive")).ToList();
         Assert.Equal(2, downloads.Count);
-        Assert.All(downloads, item => Assert.Equal("1\n2\n", item.StandardInput));
-        Assert.Contains(Path.Combine("测试合集", "[P01]第一集"), downloads[0].Arguments);
-        Assert.Contains(Path.Combine("测试合集", "[P02]第二集"), downloads[1].Arguments);
+        Assert.Equal(2, runner.Requests.Count);
+        Assert.Equal(1, fixture.Locator.Calls);
+        Assert.All(downloads, item => Assert.Null(item.StandardInput));
+        Assert.All(runner.PreparationReplies, item => { Assert.Equal(1, item.VideoIndex); Assert.Equal(2, item.AudioIndex); });
+        Assert.Equal(Path.Combine("测试合集", "[P01]第一集"), runner.PreparationReplies[0].RelativeOutputPath);
+        Assert.Equal(Path.Combine("测试合集", "[P02]第二集"), runner.PreparationReplies[1].RelativeOutputPath);
         Assert.Equal(Path.Combine(output.FullName, "测试合集"), batch.OutputDirectory);
         Assert.Contains(batch.OutputFiles, path => path.EndsWith(Path.Combine("测试合集", "[P01]第一集.mp4"), StringComparison.OrdinalIgnoreCase));
         Assert.Contains(progress, update => update.CompletedEpisodes == 1 && update.TotalEpisodes == 2 && Math.Abs(update.OverallPercent - 50) < 0.01);
@@ -664,12 +696,16 @@ public sealed class DownloadSelectionTests
             var source = Path.Combine(app.FullName, "BBDown.exe");
             File.WriteAllText(source, "binary");
             Runner = runner;
-            Service = new BBDownService(Paths, runner, new FixedToolLocator(source), new FixedSettingsStore(), metadataService);
+            Locator = new FixedToolLocator(source);
+            Settings = new SettingsStore(Paths);
+            Service = new BBDownService(Paths, runner, Locator, Settings, metadataService);
         }
         public DirectoryInfo Root { get; }
         public ApplicationPaths Paths { get; }
         public ScriptedRunner Runner { get; }
         public BBDownService Service { get; }
+        public FixedToolLocator Locator { get; }
+        public SettingsStore Settings { get; }
         public void Dispose() => Root.Delete(true);
     }
 
@@ -678,6 +714,7 @@ public sealed class DownloadSelectionTests
         private int _activeParses;
         private int _maximumActiveParses;
         public List<ProcessRunRequest> Requests { get; } = [];
+        public List<DownloadPreparationReply> PreparationReplies { get; } = [];
         public int FailDownloadPage { get; set; }
         public int ParseExitCode { get; set; }
         public string ParseFailureOutput { get; set; } = string.Empty;
@@ -693,12 +730,26 @@ public sealed class DownloadSelectionTests
             var page = selectedPages[0];
             if (request.Arguments.Contains("--interactive"))
             {
+                DownloadPreparationReply? prepared = null;
+                var pipeIndex = request.Arguments.ToList().IndexOf("--beflow-pipe");
+                if (pipeIndex >= 0)
+                {
+                    using var pipe = new System.IO.Pipes.NamedPipeClientStream(".", request.Arguments[pipeIndex + 1], System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+                    await pipe.ConnectAsync(cancellationToken);
+                    using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
+                    using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+                    var catalog = MuxedPages.Contains(page) ? MuxedInfoOutput(page) : InfoOutput(page);
+                    await writer.WriteLineAsync(System.Text.Json.JsonSerializer.Serialize(new { Protocol = 1, Page = page, Output = catalog }).AsMemory(), cancellationToken);
+                    var response = await reader.ReadLineAsync(cancellationToken);
+                    prepared = System.Text.Json.JsonSerializer.Deserialize<DownloadPreparationReply>(response!)!;
+                    PreparationReplies.Add(prepared);
+                }
                 if (page != FailDownloadPage)
                 {
                     var workIndex = request.Arguments.ToList().IndexOf("--work-dir");
                     var patternIndex = request.Arguments.ToList().IndexOf("-M");
                     var directory = request.Arguments[workIndex + 1];
-                    var relative = patternIndex >= 0 ? request.Arguments[patternIndex + 1] : $"[P{page:00}]第{page}集";
+                    var relative = prepared is not null ? prepared.RelativeOutputPath : patternIndex >= 0 ? request.Arguments[patternIndex + 1] : $"[P{page:00}]第{page}集";
                     var target = Path.Combine(directory, relative + ".mp4");
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                     File.WriteAllText(target, "video");
@@ -793,15 +844,9 @@ public sealed class DownloadSelectionTests
 
     private sealed class FixedToolLocator(string bbDown) : IToolLocator
     {
-        public ToolPaths Locate(AppSettings settings) => new() { BBDown = bbDown };
+        public int Calls { get; private set; }
+        public ToolPaths Locate(AppSettings settings) { Calls++; return new() { BBDown = bbDown }; }
         public Task<string> GetVersionAsync(string executable, CancellationToken cancellationToken = default) => Task.FromResult("test");
-    }
-
-    private sealed class FixedSettingsStore : ISettingsStore
-    {
-        public Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default) => Task.FromResult(new AppSettings());
-        public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<AppSettings> UpdateAsync(Func<AppSettings, AppSettings> update, CancellationToken cancellationToken = default) => Task.FromResult(update(new AppSettings()));
     }
 
     private sealed class MetadataHandler : HttpMessageHandler
