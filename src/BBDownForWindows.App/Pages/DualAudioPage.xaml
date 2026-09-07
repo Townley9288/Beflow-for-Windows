@@ -11,22 +11,13 @@
                 <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <StackPanel>
-                <TextBlock Text="多音轨封装" Style="{StaticResource TitleTextBlockStyle}"/>
+                <TextBlock Text="多音轨封装" Style="{StaticResource TitleTextBlockStyle}"/><Button Content="取消编辑" Visibility="{Binding CancelEditVisibility}" Click="CancelQueueEdit_Click"/>
                 <TextBlock Text="同时解析两个版本，逐集选择画面与两条音轨后精确下载并封装 MKV" Opacity="0.65"/>
             </StackPanel>
 
             <StackPanel Grid.Row="1" Spacing="8">
                 <InfoBar IsOpen="{Binding HasMessage}" Severity="{Binding MessageSeverity}" Message="{Binding Message}" IsClosable="True" Closed="MessageInfoBar_Closed"/>
-                <InfoBar IsOpen="{Binding HasResult}" IsClosable="False" Severity="Success" HorizontalContentAlignment="Stretch">
-                    <InfoBar.Content>
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="多音轨任务已结束" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" Text="{Binding ResultMessage}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                            <Button Grid.Column="2" Content="打开输出文件夹" Click="OpenOutputFolder_Click"/>
-                        </Grid>
-                    </InfoBar.Content>
-                </InfoBar>
+
             </StackPanel>
 
             <Border Grid.Row="2" Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
@@ -122,13 +113,13 @@
                                             <ComboBox Grid.Column="1" ItemsSource="{Binding SourceA.EncodingOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding SourceA.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                             <ComboBox Grid.Column="2" ItemsSource="{Binding SourceA.AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedAudio, Mode=TwoWay}" IsEnabled="{Binding SourceA.AudioSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         </Grid>
-                                        <ComboBox Grid.Column="3" ItemsSource="{x:Bind SourceBChoices}" DisplayMemberPath="Label" SelectedValuePath="PageNumber" SelectedValue="{x:Bind SelectedSourceBPageNumber, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                        <ComboBox Grid.Column="3" ItemsSource="{Binding SourceBChoices}" DisplayMemberPath="Label" SelectedValuePath="PageNumber" SelectedValue="{Binding SelectedSourceBPageNumber, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         <Grid Grid.Row="1" Grid.Column="3" ColumnSpacing="6" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding SourceB.SelectedSpecificationText}"><Grid.ColumnDefinitions><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
                                             <ComboBox ItemsSource="{Binding SourceB.QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedQuality, Mode=TwoWay}" IsEnabled="{Binding SourceB.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                             <ComboBox Grid.Column="1" ItemsSource="{Binding SourceB.EncodingOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding SourceB.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                             <ComboBox Grid.Column="2" ItemsSource="{Binding SourceB.AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedAudio, Mode=TwoWay}" IsEnabled="{Binding SourceB.AudioSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         </Grid>
-                                        <ComboBox Grid.Column="4" ItemsSource="{x:Bind MainVideoModes}" SelectedItem="{x:Bind MainVideoModeText, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                        <ComboBox Grid.Column="4" ItemsSource="{Binding MainVideoModes}" SelectedItem="{Binding MainVideoModeText, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         <StackPanel Grid.Row="1" Grid.Column="4" Spacing="1" VerticalAlignment="Center"><TextBlock Text="{x:Bind MainVideoSourceText, Mode=OneWay}" FontWeight="SemiBold"/><TextBlock Text="{x:Bind RecommendationReason, Mode=OneWay}" FontSize="10" Opacity="0.65" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind RecommendationReason, Mode=OneWay}"/></StackPanel>
                                         <TextBlock Grid.RowSpan="2" Grid.Column="5" Text="{x:Bind EstimatedSizeText, Mode=OneWay}" VerticalAlignment="Center"/>
                                         <CheckBox Grid.Column="6" Content="单独设置" IsChecked="{x:Bind UseCustomDelay, Mode=TwoWay}" VerticalAlignment="Center"/>
@@ -143,20 +134,14 @@
             </ScrollViewer>
 
             <StackPanel Grid.Row="6" Spacing="8">
-                <Border Visibility="{Binding ProgressVisibility}" Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <StackPanel Spacing="4"><TextBlock Text="总体进度" FontWeight="SemiBold"/><ProgressBar Value="{Binding OverallProgress}" Maximum="100"/><TextBlock Text="{Binding ProgressDetail}" Opacity="0.65" FontSize="12" TextTrimming="CharacterEllipsis"/></StackPanel>
-                        <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="{Binding ProgressTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><ProgressBar Value="{Binding CurrentProgress}" Maximum="100" IsIndeterminate="{Binding CurrentProgressIndeterminate}"/><TextBlock Text="当前来源下载或 MKV 封装阶段" Opacity="0.65" FontSize="12"/></StackPanel>
-                    </Grid>
-                </Border>
+
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <Button Content="全选" Command="{Binding SelectAllCommand}"/><Button Grid.Column="1" Content="反选" Command="{Binding InvertSelectionCommand}"/>
                     <TextBlock Grid.Column="2" Text="{Binding SelectionSummary}" VerticalAlignment="Center" Margin="4,0"/>
                     <Button Grid.Column="3" Content="任务设置" Click="ShowTaskSettings_Click"/>
-                    <Button Grid.Column="4" Content="取消" Command="{Binding Console.CancelCommand}"/>
-                    <Button Grid.Column="5" Content="下载并封装选中项" Command="{Binding StartCommand}" Style="{StaticResource AccentButtonStyle}"/>
+                    <Button Grid.Column="4" Content="查看队列" Click="ViewQueue_Click"/>
+                    <Button Grid.Column="5" Content="{Binding EnqueueText}" Command="{Binding StartCommand}" Style="{StaticResource AccentButtonStyle}"/>
                 </Grid>
             </StackPanel>
         </Grid>

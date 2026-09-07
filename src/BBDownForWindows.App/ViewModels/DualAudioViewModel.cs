@@ -96,6 +96,7 @@ public sealed class DualAudioViewModel : ObservableObject
     internal DualAudioViewModel(AppServices services, Action<Action> deferCatalogRowsClear, TimeSpan successMessageDuration)
     {
         _services = services;
+        QueueEdit = new QueueEditSession(services.DownloadQueue);
         _deferCatalogRowsClear = deferCatalogRowsClear;
         _messageDismissal = new TransientMessageDismissal(successMessageDuration);
         Console = services.TaskConsole;
@@ -319,6 +320,68 @@ public sealed class DualAudioViewModel : ObservableObject
         return true;
     }
 
+    public bool IsDuplicateClipboardInput(string input) =>
+        MainWindow.IsDuplicateClipboardInput(SourceAUrl, input)
+        || (CurrentSourceMode == DualAudioSourceMode.Separate && MainWindow.IsDuplicateClipboardInput(SourceBUrl, input));
+
+    public DualAudioSource? GetClipboardInputTarget() => CurrentSourceMode == DualAudioSourceMode.Interleaved
+        || string.IsNullOrWhiteSpace(SourceAUrl) ? DualAudioSource.A
+        : string.IsNullOrWhiteSpace(SourceBUrl) ? DualAudioSource.B : null;
+
+    public bool ApplyClipboardInput(string value, DualAudioSource target)
+    {
+        if (Console.IsBusy || IsParsing || !BilibiliInputParser.TryExtract(value, out var input)
+            || IsDuplicateClipboardInput(input)) return false;
+        if (CurrentSourceMode == DualAudioSourceMode.Interleaved)
+            return target == DualAudioSource.A && ApplyExternalInputs([input]);
+
+        var previous = _catalog;
+        var keepA = target == DualAudioSource.B && previous is not null && UrlsMatch(previous.SourceAUrl, SourceAUrl);
+        var keepB = target == DualAudioSource.A && previous is not null && UrlsMatch(previous.SourceBUrl, SourceBUrl);
+        var retainedSelections = CaptureSourceSelections(target == DualAudioSource.A ? DualAudioSource.B : DualAudioSource.A);
+        _suppressSourceInvalidation = true;
+        try
+        {
+            if (target == DualAudioSource.A) SourceAUrl = input;
+            else SourceBUrl = input;
+        }
+        finally { _suppressSourceInvalidation = false; }
+        _parseGeneration++;
+        var current = new DualAudioCatalog
+        {
+            SourceMode = DualAudioSourceMode.Separate, ParseMode = DownloadParseMode.All,
+            SourceAUrl = SourceAUrl.Trim(), SourceBUrl = SourceBUrl.Trim(),
+            SourceA = keepA ? previous!.SourceA : null, SourceB = keepB ? previous!.SourceB : null,
+            SourceAError = keepA ? previous!.SourceAError : string.Empty,
+            SourceBError = keepB ? previous!.SourceBError : string.Empty
+        };
+        current.Pairs.AddRange(DualAudioService.BuildPairs(current.SourceA, current.SourceB));
+        LoadCatalog(current);
+        RestoreSourceSelections(target == DualAudioSource.A ? DualAudioSource.B : DualAudioSource.A, retainedSelections);
+        LastResult = null;
+        return true;
+    }
+
+    public Task ParseClipboardInputAsync(DualAudioSource target) => RunCommandAsync($"来源 {target} 解析失败", () =>
+    {
+        var otherUrl = target == DualAudioSource.A ? SourceBUrl : SourceAUrl;
+        var otherCatalog = target == DualAudioSource.A ? _catalog?.SourceB : _catalog?.SourceA;
+        return CurrentSourceMode == DualAudioSourceMode.Interleaved || (otherCatalog is null && !string.IsNullOrWhiteSpace(otherUrl))
+            ? ParseAsync(DownloadParseMode.All) : RetrySourceAsync(target);
+    });
+
+    private Dictionary<int, EpisodeStreamSelection> CaptureSourceSelections(DualAudioSource source) => Pairs
+        .Select(row => source == DualAudioSource.A ? row.SourceA : row.SourceB)
+        .Where(row => row is not null).Select(row => row!.BuildSelection())
+        .GroupBy(selection => selection.PageNumber).ToDictionary(group => group.Key, group => group.First());
+
+    private void RestoreSourceSelections(DualAudioSource source, IReadOnlyDictionary<int, EpisodeStreamSelection> selections)
+    {
+        foreach (var row in Pairs.Select(pair => source == DualAudioSource.A ? pair.SourceA : pair.SourceB))
+            if (row is not null && selections.TryGetValue(row.PageNumber, out var selection))
+                row.ApplyRestored(selection, DownloadMode.VideoAndAudio);
+    }
+
     public async Task InitializeAsync(HistoryRecord? restore = null)
     {
         if (!_initialized)
@@ -399,8 +462,9 @@ public sealed class DualAudioViewModel : ObservableObject
         _catalog = catalog;
         SourceATitle = catalog.SourceA?.Title ?? string.Empty;
         SourceBTitle = catalog.SourceB?.Title ?? string.Empty;
-        SourceAParseStatus = catalog.SourceA is null ? catalog.SourceAError : $"已解析 {catalog.SourceA.Episodes.Count} 集";
-        SourceBParseStatus = catalog.SourceB is null ? catalog.SourceBError : $"已解析 {catalog.SourceB.Episodes.Count} 集";
+        SourceAParseStatus = string.IsNullOrWhiteSpace(SourceAUrl) ? "等待来源 A 链接" : catalog.SourceA is null ? catalog.SourceAError : $"已解析 {catalog.SourceA.Episodes.Count} 集";
+        SourceBParseStatus = CurrentSourceMode == DualAudioSourceMode.Separate && string.IsNullOrWhiteSpace(SourceBUrl)
+            ? "等待来源 B 链接" : catalog.SourceB is null ? catalog.SourceBError : $"已解析 {catalog.SourceB.Episodes.Count} 集";
         var sourceBChoices = (catalog.SourceB?.Episodes ?? [])
             .OrderBy(item => item.Page.Number)
             .Select(item => new DualAudioPairViewModel.EpisodeChoice(item.Page.Number, $"P{item.Page.Number} · {item.Page.Title}", item))
@@ -421,6 +485,8 @@ public sealed class DualAudioViewModel : ObservableObject
     {
         if (_catalog is null || SourceModeText != "两个独立链接") return;
         var existingCatalog = _catalog;
+        var retainedSource = source == DualAudioSource.A ? DualAudioSource.B : DualAudioSource.A;
+        var retainedSelections = CaptureSourceSelections(retainedSource);
         var parseGeneration = _parseGeneration;
         var sourceAUrl = SourceAUrl.Trim();
         var sourceBUrl = SourceBUrl.Trim();
@@ -476,6 +542,7 @@ public sealed class DualAudioViewModel : ObservableObject
         };
         merged.Pairs.AddRange(DualAudioService.BuildPairs(merged.SourceA, merged.SourceB));
         LoadCatalog(merged);
+        RestoreSourceSelections(retainedSource, retainedSelections);
         var error = source == DualAudioSource.A ? merged.SourceAError : merged.SourceBError;
         if (snapshot.State == TaskState.Cancelled) ShowMessage($"来源 {source} 的重试已取消，原有结果仍保留。", InfoBarSeverity.Warning);
         else if (!string.IsNullOrWhiteSpace(error)) ShowMessage($"来源 {source} 仍无法解析：{error}", InfoBarSeverity.Warning);
@@ -500,50 +567,34 @@ public sealed class DualAudioViewModel : ObservableObject
         NotifyRowsChanged();
     }
 
+    public QueueEditSession QueueEdit { get; private set; } = null!;
+    private AppSettings? _queueSettings;
+    public string EnqueueText => QueueEdit.EditingId.HasValue ? "保存队列任务" : "加入队列";
+    public Visibility CancelEditVisibility => QueueEdit.EditingId.HasValue ? Visibility.Visible : Visibility.Collapsed;
+    public async Task LoadQueueAsync(QueueNavigationContext navigation)
+    {
+        var item = QueueSnapshot.Copy(navigation.Item);
+        QueueEdit.Begin(navigation);
+        _queueSettings = QueueEditSession.SettingsFrom(item.DualAudio!.Options);
+        _suppressSourceInvalidation = true;
+        try { ApplyBatch(item.DualAudio); }
+        finally { _suppressSourceInvalidation = false; }
+        LoadCatalog(item.DualCatalog!);
+        ApplyRestoredSelections(new DualAudioBatchHistory { Request = item.DualAudio });
+        QueueEdit.SetBaseline(await BuildQueueItemAsync());
+        OnPropertyChanged(nameof(EnqueueText)); OnPropertyChanged(nameof(CancelEditVisibility));
+    }
+    public async Task<DownloadQueueItem> BuildQueueItemAsync() => new()
+    {
+        Kind = DownloadQueueKind.DualAudio, DualCatalog = _catalog, DualAudio = await BuildBatchRequestAsync()
+    };
     private async Task StartAsync()
     {
         if (ConfirmMkvmergeAvailableAsync is not null && !await ConfirmMkvmergeAvailableAsync()) return;
-        Message = string.Empty;
+        await QueueEdit.SaveAsync(await BuildQueueItemAsync());
         LastResult = null;
-        OverallProgress = 0;
-        CurrentProgress = 0;
-        var request = await BuildBatchRequestAsync();
-        DualAudioBatchResult? result = null;
-        var progress = new Progress<DualAudioProgressSnapshot>(UpdateProgress);
-        var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DualAudioMux, request.Options.SaveTaskLogs, "dual_audio_mux", async (context, token) =>
-        {
-            result = await _services.DualAudio.DownloadAndMuxAsync(request, progress, context, token);
-            if (!result.Cancelled && result.Succeeded == 0) throw new InvalidOperationException("所有配对均下载或封装失败");
-        });
-        if (result is null)
-        {
-            ShowMessage(snapshot.Error, InfoBarSeverity.Error);
-            return;
-        }
-        LastResult = result;
-        foreach (var pairResult in result.Pairs)
-            Pairs.FirstOrDefault(item => item.PairNumber == pairResult.PairNumber)?.ApplyResult(pairResult);
-        ResultMessage = $"成功 {result.Succeeded} 对，失败 {result.Failed} 对。输出：{result.OutputDirectory}";
-        await _services.History.AddAsync(new HistoryRecord
-        {
-            TaskType = TaskKind.DualAudioMux,
-            Title = result.Title,
-            Url = request.SourceAUrl,
-            SecondaryUrl = request.SourceBUrl,
-            Timestamp = DateTimeOffset.Now,
-            LogPath = snapshot.LogPath,
-            OutputDirectory = result.OutputDirectory,
-            OutputFiles = result.OutputFiles,
-            DualAudioBatch = new DualAudioBatchHistory { Request = request, Pairs = result.Pairs, ManifestPath = result.ManifestPath }
-        });
-        ShowMessage(snapshot.State switch
-        {
-            TaskState.Cancelled => "任务已取消，已保留完成结果和中间文件。",
-            TaskState.Failed => snapshot.Error,
-            _ when result.Failed > 0 => ResultMessage,
-            _ => "多音轨封装完成。"
-        }, snapshot.State == TaskState.Failed ? InfoBarSeverity.Error : result.Failed > 0 || snapshot.State == TaskState.Cancelled ? InfoBarSeverity.Warning : InfoBarSeverity.Success);
-        NotifyRowsChanged();
+        ShowMessage("任务已加入队列。", InfoBarSeverity.Success);
+        OnPropertyChanged(nameof(EnqueueText)); OnPropertyChanged(nameof(CancelEditVisibility));
     }
 
     private async Task RemuxAsync()
@@ -570,7 +621,7 @@ public sealed class DualAudioViewModel : ObservableObject
 
     private async Task<DualAudioBatchRequest> BuildBatchRequestAsync()
     {
-        var settings = await _services.Settings.LoadAsync();
+        var settings = _queueSettings ?? await _services.Settings.LoadAsync();
         return new DualAudioBatchRequest
         {
             SourceMode = SourceModeText == "同一链接奇偶分P" ? DualAudioSourceMode.Interleaved : DualAudioSourceMode.Separate,
@@ -582,7 +633,7 @@ public sealed class DualAudioViewModel : ObservableObject
             SourceBTitle = SourceBTitle,
             ApiMode = settings.ApiMode,
             Options = BuildDownloadOptions(settings),
-            Pairs = Pairs.Where(item => item.IsDownloadable).Select(item => item.BuildSelection(checked((int)SourceBDelay))).ToList(),
+            Pairs = Pairs.Where(item => item.IsSelected && item.IsDownloadable).Select(item => item.BuildSelection(checked((int)SourceBDelay))).ToList(),
             SourceALabel = SourceALabel,
             SourceBLabel = SourceBLabel,
             SourceALanguage = SourceALanguage,

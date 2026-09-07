@@ -18,6 +18,7 @@ public sealed partial class MainWindow : Window
     private bool _isWindowActive;
     private string _lastClipboardInput = string.Empty;
     private string _pendingClipboardInput = string.Empty;
+    private bool _applyingClipboardInput;
     public MainWindow()
     {
         InitializeComponent();
@@ -69,7 +70,7 @@ public sealed partial class MainWindow : Window
         var resolvedTag = tag switch
         {
             "rename-history" => "history",
-            "dual" or "rename" or "rename-templates" or "history" or "history-detail" or "settings" or "about" or "download" => tag,
+            "queue" or "dual" or "rename" or "rename-templates" or "history" or "history-detail" or "settings" or "about" or "download" => tag,
             _ => "download"
         };
         if (parameter is null && string.Equals(resolvedTag, _currentNavigationTag, StringComparison.Ordinal))
@@ -81,6 +82,10 @@ public sealed partial class MainWindow : Window
         _navigationInProgress = true;
         try
         {
+            if (ContentFrame.Content is IQueueEditorPage editor && !await editor.ConfirmLeaveQueueEditAsync())
+            {
+                SelectNavigationItem(_currentNavigationTag); return;
+            }
             if (ContentFrame.Content is Pages.RenameTemplatesPage templatePage && resolvedTag != "rename-templates" &&
                 !await templatePage.ConfirmDiscardChangesAsync())
             {
@@ -90,6 +95,7 @@ public sealed partial class MainWindow : Window
 
             var page = resolvedTag switch
             {
+                "queue" => typeof(Pages.DownloadQueuePage),
                 "dual" => typeof(Pages.DualAudioPage),
                 "rename" => typeof(Pages.RenamePage),
                 "rename-templates" => typeof(Pages.RenameTemplatesPage),
@@ -102,6 +108,10 @@ public sealed partial class MainWindow : Window
             if (!ContentFrame.Navigate(page, navigationParameter)) return;
             _currentNavigationTag = resolvedTag;
             SelectNavigationItem(resolvedTag == "history-detail" ? "history" : resolvedTag);
+        }
+        catch (Exception exception)
+        {
+            await new ContentDialog { XamlRoot = WindowRoot.XamlRoot, Title = "无法切换页面", Content = exception.Message, CloseButtonText = "关闭" }.ShowAsync();
         }
         finally
         {
@@ -153,6 +163,11 @@ public sealed partial class MainWindow : Window
     private async void RootNavigation_Loaded(object sender, RoutedEventArgs e)
     {
         RootNavigation.Loaded -= RootNavigation_Loaded;
+        try { await ((App)Application.Current).Services.DownloadQueue.InitializeAsync(); }
+        catch (Exception exception)
+        {
+            await new ContentDialog { XamlRoot = WindowRoot.XamlRoot, Title = "下载队列无法读取", Content = exception.Message + "\n原队列文件已保留。", CloseButtonText = "关闭" }.ShowAsync();
+        }
         var settings = await ((App)Application.Current).Services.Settings.LoadAsync();
         ConfigureClipboardMonitoring(settings.MonitorClipboard);
         ConfigureDragLinkMonitoring(settings.MonitorDragLinks);
@@ -201,12 +216,8 @@ public sealed partial class MainWindow : Window
             if (input.Equals(_lastClipboardInput, StringComparison.OrdinalIgnoreCase)) return;
 
             _lastClipboardInput = input;
-            if (((App)Application.Current).Services.TaskConsole.IsBusy)
-            {
-                _pendingClipboardInput = input;
-                return;
-            }
-            ShowClipboardInput(input);
+            _pendingClipboardInput = input;
+            await ApplyPendingClipboardInputAsync();
         }
         catch (Exception)
         {
@@ -214,14 +225,38 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ShowClipboardInput(string input)
+    private async Task ShowClipboardInputAsync(string input)
     {
-        _pendingClipboardInput = string.Empty;
         if (ContentFrame.Content is Pages.DownloadPage page && IsDuplicateClipboardInput(page.ViewModel.Url, input)) return;
+        var dualPage = ContentFrame.Content as Pages.DualAudioPage;
+        if (dualPage?.ViewModel.IsDuplicateClipboardInput(input) == true) return;
         if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
             presenter.Restore();
         Activate();
+        if (dualPage is not null)
+        {
+            await dualPage.ReceiveClipboardInputAsync(input);
+            return;
+        }
         Navigate("download", new Pages.DownloadInputNavigationContext(input, ParseAutomatically: true));
+    }
+
+    private async Task ApplyPendingClipboardInputAsync()
+    {
+        var console = ((App)Application.Current).Services.TaskConsole;
+        if (_applyingClipboardInput || console.IsBusy) return;
+        _applyingClipboardInput = true;
+        try
+        {
+            while (_clipboardMonitoring && !console.IsBusy && !string.IsNullOrWhiteSpace(_pendingClipboardInput))
+            {
+                var input = _pendingClipboardInput;
+                _pendingClipboardInput = string.Empty;
+                if (input.Equals(_lastClipboardInput, StringComparison.OrdinalIgnoreCase))
+                    await ShowClipboardInputAsync(input);
+            }
+        }
+        finally { _applyingClipboardInput = false; }
     }
 
     private void TaskConsole_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -229,13 +264,7 @@ public sealed partial class MainWindow : Window
         var console = ((App)Application.Current).Services.TaskConsole;
         if (e.PropertyName != nameof(console.IsBusy) || console.IsBusy
             || !_clipboardMonitoring || string.IsNullOrWhiteSpace(_pendingClipboardInput)) return;
-        var input = _pendingClipboardInput;
-        _pendingClipboardInput = string.Empty;
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (_clipboardMonitoring && input.Equals(_lastClipboardInput, StringComparison.OrdinalIgnoreCase))
-                ShowClipboardInput(input);
-        });
+        DispatcherQueue.TryEnqueue(async () => await ApplyPendingClipboardInputAsync());
     }
 
     private async void ThemeMenuItem_Click(object sender, RoutedEventArgs e)
@@ -293,44 +322,41 @@ public sealed partial class MainWindow : Window
     private async void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
     {
         if (_forceClosing) return;
-        var manager = ((App)Application.Current).Services.TaskManager;
-        var templatePage = ContentFrame.Content as Pages.RenameTemplatesPage;
-        var hasUnsavedTemplate = templatePage?.HasUnsavedChanges == true;
-        var hasRunningTask = manager.ActiveTask?.State == Core.TaskState.Running;
-        if (hasUnsavedTemplate || hasRunningTask)
+        args.Cancel = true;
+        if (_closingDialogOpen) return;
+        _closingDialogOpen = true;
+        var services = ((App)Application.Current).Services;
+        Pages.SettingsPage? settingsPage = null;
+        try
         {
-            args.Cancel = true;
-            if (_closingDialogOpen) return;
-            _closingDialogOpen = true;
-            Pages.SettingsPage? suspendedSettingsPage = null;
-            try
+            if (ContentFrame.Content is IQueueEditorPage editor && !await editor.ConfirmLeaveQueueEditAsync()) return;
+            if (ContentFrame.Content is Pages.RenameTemplatesPage templates && !await templates.ConfirmDiscardChangesAsync()) return;
+            if (services.Work.HasRunningOperations)
             {
-                if (hasUnsavedTemplate && !await templatePage!.ConfirmDiscardChangesAsync()) return;
-                if (hasRunningTask)
+                settingsPage = ContentFrame.Content as Pages.SettingsPage;
+                if (settingsPage is not null) await settingsPage.SuspendQrDialogAsync();
+                var dialog = new ContentDialog
                 {
-                    suspendedSettingsPage = ContentFrame.Content as Pages.SettingsPage;
-                    if (suspendedSettingsPage is not null)
-                        await suspendedSettingsPage.SuspendQrDialogAsync();
-                    var dialog = new ContentDialog
-                    {
-                        XamlRoot = WindowRoot.XamlRoot,
-                        Title = "任务仍在运行",
-                        Content = "关闭 Beflow 将取消当前下载、登录、封装或重命名任务。已下载文件和 .aria2 文件会保留。",
-                        PrimaryButtonText = "取消任务并退出",
-                        CloseButtonText = "继续运行",
-                        DefaultButton = ContentDialogButton.Close
-                    };
-                    if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-                    await manager.CancelActiveAsync();
-                }
-                _forceClosing = true;
-                Close();
+                    XamlRoot = WindowRoot.XamlRoot, Title = "任务仍在运行",
+                    Content = "退出会停止当前操作并保存下载队列，已下载文件和断点会保留。下次打开后需手动继续。",
+                    PrimaryButtonText = "停止并退出", CloseButtonText = "继续运行", DefaultButton = ContentDialogButton.Close
+                };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
             }
-            finally
-            {
-                if (!_forceClosing) suspendedSettingsPage?.ResumeQrDialog();
-                _closingDialogOpen = false;
-            }
+            // A corrupt queue has never been scheduled or overwritten; it remains available for repair.
+            if (services.DownloadQueue.Error.Length == 0) await services.DownloadQueue.ShutdownAsync();
+            await services.TaskManager.CancelActiveAsync();
+            await services.QueueTaskManager.CancelActiveAsync();
+            _forceClosing = true; Close();
+        }
+        catch (Exception exception)
+        {
+            await new ContentDialog { XamlRoot = WindowRoot.XamlRoot, Title = "停止任务失败", Content = exception.Message, CloseButtonText = "关闭" }.ShowAsync();
+        }
+        finally
+        {
+            if (!_forceClosing) settingsPage?.ResumeQrDialog();
+            _closingDialogOpen = false;
         }
     }
 

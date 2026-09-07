@@ -32,11 +32,13 @@ public sealed class TaskManager : ITaskManager
     private readonly object _sync = new();
     private CancellationTokenSource? _activeCancellation;
     private TaskSnapshot? _activeTask;
+    private readonly WorkCoordinator? _work;
 
-    public TaskManager(ApplicationPaths paths, IProcessRunner processRunner)
+    public TaskManager(ApplicationPaths paths, IProcessRunner processRunner, WorkCoordinator? work = null)
     {
         _paths = paths;
         _processRunner = processRunner;
+        _work = work;
         _paths.EnsureCreated();
         CleanupOldLogs();
     }
@@ -55,6 +57,7 @@ public sealed class TaskManager : ITaskManager
         var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         try
         {
+            using var activity = _work?.EnterForeground(kind);
             if (persistLog)
             {
                 snapshot.LogPath = CreateLogPath(snapshot.Id, logLabel);

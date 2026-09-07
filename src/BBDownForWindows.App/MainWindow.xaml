@@ -12,6 +12,7 @@
             <NavigationViewItemHeader Content="下载与封装" />
             <NavigationViewItem Content="下载" Tag="download" Icon="Download" />
             <NavigationViewItem Content="多音轨封装" Tag="dual" Icon="Document" />
+            <NavigationViewItem Content="下载队列" Tag="queue" Icon="List" />
             <NavigationViewItemHeader Content="文件整理" />
             <NavigationViewItem Content="重命名" Tag="rename">
                 <NavigationViewItem.Icon><FontIcon Glyph="&#xE8AC;" /></NavigationViewItem.Icon>

@@ -23,6 +23,7 @@
 - 双链接或奇偶分P双音轨解析，支持双方独立选流、智能推荐主视频、逐集调整与 MKV 批量封装
 - 下载后直接进入原生影视重命名，支持 TMDB、独立命名模板管理、媒体规格识别、字幕/弹幕/封面联动及安全撤销
 - 批量下载进度、规格历史详情、失败集重试、持久日志和任务取消
+- 普通下载与多音轨共用持久队列，支持等待任务编辑、排序和暂停续传
 - 跟随系统、浅色与深色主题切换，并记忆上次选择
 - 剪贴板链接自动识别与解析、下载及多音轨页面链接拖放，并提供独立开关
 - 安装版在线更新
@@ -36,6 +37,16 @@
 项目暂未购买代码签名证书，Windows SmartScreen 可能在首次运行时显示“未知发布者”。请只从本仓库 Release 下载，并可使用同名 `.sha256` 文件核对完整性。
 
 安装版数据保存在 `%LOCALAPPDATA%\Beflow`，覆盖安装会保留现有配置和历史记录。
+
+开启剪贴板监听后，在其他应用复制 B 站链接会自动填入并解析。当前位于多音轨封装页时，链接依次填入空的来源 A、B；解析期间复制的新链接会等待当前解析结束。两框都有链接时会询问替换哪个来源，重复链接不会覆盖另一来源。“同一链接奇偶分P”模式使用来源 A 输入框。
+
+## 下载队列
+
+解析并选择分集及音视频规格后，点击“加入队列”。普通下载和多音轨任务按加入顺序执行，下载时可以继续解析其他链接。尚未开始的任务可以编辑、上移或下移。
+
+“暂停”保留当前任务的断点；“取消当前任务”结束该任务并继续下一个。关闭软件会保存队列，下次打开后需手动点击“继续”。内置单线程、多线程和 aria2 均支持断点续传，资源或断点校验不通过时会显示错误并保留文件。
+
+内置传输完成并保存校验信息后，会清理该轨道的下载分片。多音轨的来源文件按“保留来源文件”设置处理；“清理完成记录”只移除队列记录，保留成品和历史记录。
 
 ## 在线更新
 
@@ -59,10 +70,20 @@ dotnet test BBDown-for-Windows.sln -c Release -p:Platform=x64
 dotnet build src\BBDownForWindows.App\BBDownForWindows.App.csproj -c Release -p:Platform=x64
 ```
 
+队列续传与完成后清理的本地 HTTP 验证：
+
+```powershell
+.\scripts\AcquireTools.ps1 -OutputDirectory artifacts/queue-validation/tools-build
+dotnet build tests/QueueTransferHarness/QueueTransferHarness.csproj -c Release
+python scripts/Test-QueueTransfers.py
+```
+
+每次运行会创建独立结果目录。真实 B 站队列与跨进程恢复验证见 `tests/QueueIntegrationHarness/README.md`。
+
 生成发行包：
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 1.1.1.9
+.\scripts\Build-Release.ps1 -Version 1.1.1.10
 ```
 
 BBDown 与 aria2 由脚本从官方 Release 下载。固定 FFmpeg 历史归档可通过 `-FfmpegArchiveUrl`、环境变量 `FFMPEG_ARCHIVE_URL` 或本地归档提供，所有工具下载均校验 SHA-256。

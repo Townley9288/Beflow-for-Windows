@@ -10,7 +10,7 @@ namespace BBDownForWindows.App.Pages;
 
 public sealed record DualAudioNavigationContext(string ExistingTaskDirectory, bool OpenTaskSettings = true);
 
-public sealed partial class DualAudioPage : Page
+public sealed partial class DualAudioPage : Page, IQueueEditorPage
 {
     public DualAudioPage()
     {
@@ -21,10 +21,39 @@ public sealed partial class DualAudioPage : Page
 
     public DualAudioViewModel ViewModel { get; }
 
+    public async Task ReceiveClipboardInputAsync(string input)
+    {
+        if (ViewModel.IsDuplicateClipboardInput(input)) return;
+        var target = ViewModel.GetClipboardInputTarget();
+        if (target is null)
+        {
+            var result = await new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = "将新链接填入哪个来源？",
+                Content = $"来源 A 和 B 都已有链接。\n新链接：{input}",
+                PrimaryButtonText = "替换来源 A", SecondaryButtonText = "替换来源 B", CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Close
+            }.ShowAsync();
+            if (result == ContentDialogResult.None) return;
+            target = result == ContentDialogResult.Primary ? DualAudioSource.A : DualAudioSource.B;
+        }
+        if (ViewModel.ApplyClipboardInput(input, target.Value))
+            await ViewModel.ParseClipboardInputAsync(target.Value);
+    }
+
+    public async Task<bool> ConfirmLeaveQueueEditAsync() =>
+        await ViewModel.QueueEdit.ConfirmLeaveAsync(await ViewModel.BuildQueueItemAsync(), XamlRoot);
+    private void ViewQueue_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("queue");
+    private async void CancelQueueEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if (await ConfirmLeaveQueueEditAsync()) ((App)Application.Current).MainWindow.Navigate("queue");
+    }
+
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         ViewModel.Activate();
         await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
+        if (e.Parameter is QueueNavigationContext queue) await ViewModel.LoadQueueAsync(queue);
         if (e.Parameter is DualAudioNavigationContext context)
         {
             await ViewModel.PrepareExistingRemuxAsync(context.ExistingTaskDirectory);

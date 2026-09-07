@@ -14,8 +14,10 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         TaskExecutionContext context,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.SourceAUrl)) throw new ArgumentException("来源 A URL 不能为空");
-        if (request.SourceMode == DualAudioSourceMode.Separate && string.IsNullOrWhiteSpace(request.SourceBUrl))
+        if ((request.SourceMode == DualAudioSourceMode.Interleaved || request.OnlySource != DualAudioSource.B)
+            && string.IsNullOrWhiteSpace(request.SourceAUrl)) throw new ArgumentException("来源 A URL 不能为空");
+        if (request.SourceMode == DualAudioSourceMode.Separate && request.OnlySource != DualAudioSource.A
+            && string.IsNullOrWhiteSpace(request.SourceBUrl))
             throw new ArgumentException("来源 B URL 不能为空");
 
         if (request.SourceMode == DualAudioSourceMode.Interleaved)

@@ -4,7 +4,8 @@ using System.Text.RegularExpressions;
 namespace BBDownForWindows.Core;
 
 public sealed class BBDownService(ApplicationPaths paths, IProcessRunner processRunner, IToolLocator toolLocator, ISettingsStore settingsStore,
-    IBilibiliMetadataService? metadataService = null, IDownloadNamingService? downloadNamingService = null) : IBBDownService
+    IBilibiliMetadataService? metadataService = null, IDownloadNamingService? downloadNamingService = null,
+    ParseConcurrencyLimiter? parseLimiter = null) : IBBDownService
 {
     private readonly BBDownRuntimeManager _runtimeManager = new(paths);
     private readonly IDownloadNamingService _downloadNaming = downloadNamingService ?? new DownloadNamingService();
@@ -676,6 +677,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
 
     public async Task<string> GetTitleAsync(string url, CancellationToken cancellationToken)
     {
+        using var permit = parseLimiter is null ? null : await parseLimiter.EnterAsync(cancellationToken);
         var tools = await ResolveToolsAsync(cancellationToken);
         var result = await processRunner.RunAsync(new ProcessRunRequest(tools.BBDown, [url, "-info"], paths.RuntimeDirectory), null, cancellationToken);
         return BBDownParser.ParseInfo(result.Output).Title;
@@ -803,12 +805,13 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         progress?.Report(new DownloadProgressSnapshot(phase, completed, total, episode.PageNumber, episode.PageTitle, overall, currentPercent, speed, eta, message));
     }
 
-    private Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, TaskExecutionContext context,
+    private async Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, TaskExecutionContext context,
         CancellationToken cancellationToken, string? input = null, Action<string>? observer = null,
         bool usePseudoConsole = false, Func<string, bool>? shouldLog = null)
     {
+        using var permit = parseLimiter is not null && arguments.Contains("-info") ? await parseLimiter.EnterAsync(cancellationToken) : null;
         context.AppendLog(SanitizeDiagnosticOutput($"\n$ {Path.GetFileName(executable)} {string.Join(' ', arguments.Select(Quote))}\n"));
-        return processRunner.RunAsync(new ProcessRunRequest(executable, arguments, paths.RuntimeDirectory, input, usePseudoConsole), line =>
+        return await processRunner.RunAsync(new ProcessRunRequest(executable, arguments, paths.RuntimeDirectory, input, usePseudoConsole), line =>
         {
             observer?.Invoke(line);
             if (shouldLog?.Invoke(line) ?? true)

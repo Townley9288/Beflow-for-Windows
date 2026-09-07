@@ -251,6 +251,8 @@ public sealed class TaskSnapshot
 
 public sealed class HistoryRecord
 {
+    public Guid? QueueTaskId { get; set; }
+    public Guid? ParentQueueTaskId { get; set; }
     [JsonPropertyName("id")] public Guid Id { get; set; }
     public TaskKind TaskType { get; set; }
     public string Url { get; set; } = string.Empty;

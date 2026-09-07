@@ -107,6 +107,7 @@ public sealed class DownloadNamingContext
     public AudioStreamInfo? Audio { get; init; }
     public string PreferredRelativePath { get; init; } = string.Empty;
     public bool AllowPartialReuse { get; init; }
+    public bool FailOnConflict { get; init; }
 }
 
 public sealed record DownloadNamingValidationResult(bool IsValid, string Error);
@@ -215,11 +216,18 @@ public sealed partial class DownloadNamingService : IDownloadNamingService
         {
             var preferred = TryPreferredPlan(context, reservedPaths);
             if (preferred is not null) return preferred;
+            if (context.FailOnConflict) throw new IOException("已选输出路径无效或被其他文件占用");
         }
 
         var rendered = Render(context);
         var leaf = rendered.LeafDirectory;
         var stem = rendered.FileStem;
+        if (context.FailOnConflict)
+        {
+            if (HasConflict(leaf, stem, false) || !reservedPaths.Add(Path.Combine(leaf, stem)))
+                throw new IOException($"输出路径被占用：{Path.Combine(leaf, stem)}");
+            return new DownloadOutputPlan(rendered.MainDirectory, leaf, rendered.RelativePath, stem, rendered.Warnings);
+        }
         var uniqueStem = ResolveUniqueStem(leaf, stem, reservedPaths, allowPartialReuse: false);
         var relativeDirectory = Path.GetRelativePath(Path.GetFullPath(context.RootDirectory), leaf);
         var relativePath = relativeDirectory == "." ? uniqueStem : Path.Combine(relativeDirectory, uniqueStem);

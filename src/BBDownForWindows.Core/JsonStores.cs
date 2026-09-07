@@ -103,6 +103,12 @@ public sealed class HistoryStore(ApplicationPaths paths) : IHistoryStore
             var history = await LoadCoreAsync(cancellationToken);
             EnsureIds(history);
             if (record.Id == Guid.Empty) record.Id = Guid.NewGuid();
+            if (record.QueueTaskId is { } queueId)
+            {
+                var existing = history.FirstOrDefault(item => item.QueueTaskId == queueId);
+                if (existing is not null) record.Id = existing.Id;
+                history.RemoveAll(item => item.QueueTaskId == queueId);
+            }
             history.Insert(0, record);
             await AtomicJson.WriteAsync(paths.HistoryFile, history, Options, cancellationToken);
         }

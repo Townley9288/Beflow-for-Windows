@@ -7,7 +7,7 @@ namespace BBDownForWindows.Core;
 /// </summary>
 public sealed class BBDownRuntimeManager(ApplicationPaths paths)
 {
-    private readonly object _sync = new();
+    private static readonly object Sync = new();
 
     public string PrepareExecutable(string sourcePath)
     {
@@ -18,7 +18,7 @@ public sealed class BBDownRuntimeManager(ApplicationPaths paths)
         var destination = Path.GetFullPath(paths.RuntimeBBDownExecutable);
         if (source.Equals(destination, StringComparison.OrdinalIgnoreCase)) return destination;
 
-        lock (_sync)
+        lock (Sync)
         {
             paths.EnsureCreated();
             if (IsCurrent(source, destination)) return destination;

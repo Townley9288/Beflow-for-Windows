@@ -373,6 +373,66 @@ public sealed class AppViewModelTests
     }
 
     [Fact]
+    public void ClipboardInputsFillEmptyDualAudioSourcesInOrderAndRequireChoiceWhenFull()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DualAudioViewModel(fixture.Services);
+        Assert.Equal(DualAudioSource.A, viewModel.GetClipboardInputTarget());
+        Assert.True(viewModel.ApplyClipboardInput("av170001", viewModel.GetClipboardInputTarget()!.Value));
+        Assert.Equal(DualAudioSource.B, viewModel.GetClipboardInputTarget());
+        Assert.True(viewModel.ApplyClipboardInput("av170002", viewModel.GetClipboardInputTarget()!.Value));
+        Assert.Equal("av170001", viewModel.SourceAUrl);
+        Assert.Equal("av170002", viewModel.SourceBUrl);
+        Assert.Null(viewModel.GetClipboardInputTarget());
+        Assert.False(viewModel.ApplyClipboardInput("av170001", DualAudioSource.B));
+        Assert.False(viewModel.ApplyClipboardInput("av170002", DualAudioSource.A));
+        Assert.False(viewModel.ApplyClipboardInput("https://example.com", DualAudioSource.A));
+        Assert.Equal("av170001", viewModel.SourceAUrl);
+        Assert.Equal("av170002", viewModel.SourceBUrl);
+    }
+
+    [Fact]
+    public void ClipboardInputKeepsInterleavedModeOnSourceA()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DualAudioViewModel(fixture.Services) { SourceModeText = "同一链接奇偶分P", SourceAUrl = "av170001" };
+        Assert.Equal(DualAudioSource.A, viewModel.GetClipboardInputTarget());
+        Assert.True(viewModel.ApplyClipboardInput("av170002", DualAudioSource.A));
+        Assert.Equal("同一链接奇偶分P", viewModel.SourceModeText);
+        Assert.Equal("av170002", viewModel.SourceAUrl);
+        Assert.Empty(viewModel.SourceBUrl);
+    }
+
+    [Fact]
+    public async Task SecondClipboardInputPreservesFirstSourceCatalogAndManualStreamSelection()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DualAudioViewModel(fixture.Services);
+        var episode = ReadyEpisode(1, "A");
+        var catalog = new DownloadCatalog { SourceUrl = "av170001", Title = "来源 A", Episodes = [episode], AllPages = [episode.Page] };
+        var selected = new EpisodeStreamSelection { PageNumber = 1, PageTitle = "A",
+            Video = new("1080P 高清", "1920x1080", "HEVC", 1000, true), Audio = new("M4A", 192, true) };
+        await viewModel.LoadQueueAsync(new QueueNavigationContext(new DownloadQueueItem
+        {
+            Kind = DownloadQueueKind.DualAudio,
+            DualCatalog = new DualAudioCatalog { SourceAUrl = "av170001", SourceA = catalog,
+                Pairs = [new DualAudioEpisodePair { PairNumber = 1, SourceA = episode }] },
+            DualAudio = new DualAudioBatchRequest { SourceAUrl = "av170001", WorkDirectory = fixture.RootPath,
+                Pairs = [new() { PairNumber = 1, SourceAPageNumber = 1, SourceA = selected }] }
+        }, false));
+
+        Assert.True(viewModel.ApplyClipboardInput("av170002", DualAudioSource.B));
+        Assert.Equal("av170001", viewModel.SourceAUrl);
+        Assert.Equal("av170002", viewModel.SourceBUrl);
+        Assert.Equal("来源 A", viewModel.SourceATitle);
+        Assert.Equal("已解析 1 集", viewModel.SourceAParseStatus);
+        var row = Assert.Single(viewModel.Pairs);
+        Assert.Equal(selected.Video, row.SourceA!.BuildSelection().Video);
+        Assert.Equal(selected.Audio, row.SourceA.BuildSelection().Audio);
+        Assert.Null(row.SourceB);
+    }
+
+    [Fact]
     public void ChangingDualAudioLinksDefersPopulatedRowTeardownUntilTheBindingUpdateReturns()
     {
         using var fixture = new AppFixture();

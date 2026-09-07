@@ -40,7 +40,7 @@
             </VisualStateManager.VisualStateGroups>
 
             <StackPanel>
-                <TextBlock Text="下载" Style="{StaticResource TitleTextBlockStyle}"/>
+                <TextBlock Text="下载" Style="{StaticResource TitleTextBlockStyle}"/><Button Content="取消编辑" Visibility="{Binding CancelEditVisibility}" Click="CancelQueueEdit_Click"/>
                 <TextBlock Text="解析实际可用的视频与音频流，再逐集精确下载" Opacity="0.65"/>
             </StackPanel>
 
@@ -57,23 +57,7 @@
             </Border>
 
             <StackPanel Grid.Row="2" Spacing="8">
-                <InfoBar IsOpen="{Binding HasDownloadResult}" IsClosable="False" Severity="Success" HorizontalContentAlignment="Stretch">
-                    <InfoBar.Content>
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="下载任务已结束" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" Text="{Binding DownloadResultMessage}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <Button Content="打开下载文件夹" Click="OpenDownloadFolder_Click"/>
-                                <Button Content="去重命名" Click="GoRename_Click" IsEnabled="{Binding CanRenameDownload}" Style="{StaticResource AccentButtonStyle}"/>
-                            </StackPanel>
-                        </Grid>
-                    </InfoBar.Content>
-                </InfoBar>
+
                 <Border Visibility="{Binding CatalogVisibility}" Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <Grid ColumnSpacing="14">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="140"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -172,9 +156,9 @@
                             <TextBlock Text="{Binding DownloadDirectorySummary}" MaxWidth="190" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                     </Button>
-                    <Button Grid.Column="5" Height="32" Content="重试失败集" Command="{Binding RetryFailedCommand}"/>
-                    <Button Grid.Column="6" Height="32" Content="取消" Command="{Binding Console.CancelCommand}"/>
-                    <Button Grid.Column="7" Height="32" Content="下载选中项" Command="{Binding DownloadSelectedCommand}" Style="{StaticResource AccentButtonStyle}"/>
+
+                    <Button Grid.Column="6" Height="32" Content="查看队列" Click="ViewQueue_Click"/>
+                    <Button Grid.Column="7" Height="32" Content="{Binding EnqueueText}" Command="{Binding DownloadSelectedCommand}" Style="{StaticResource AccentButtonStyle}"/>
                 </Grid>
                 <Grid x:Name="DownloadFooterCompact" Visibility="Collapsed" RowSpacing="8">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -194,8 +178,8 @@
                             </StackPanel>
                         </Button>
                         <Button Grid.Column="1" Height="32" Content="重试失败集" Command="{Binding RetryFailedCommand}"/>
-                        <Button Grid.Column="2" Height="32" Content="取消" Command="{Binding Console.CancelCommand}"/>
-                        <Button Grid.Column="3" Height="32" Content="下载选中项" Command="{Binding DownloadSelectedCommand}" Style="{StaticResource AccentButtonStyle}"/>
+                        <Button Grid.Column="2" Height="32" Content="查看队列" Click="ViewQueue_Click"/>
+                        <Button Grid.Column="3" Height="32" Content="{Binding EnqueueText}" Command="{Binding DownloadSelectedCommand}" Style="{StaticResource AccentButtonStyle}"/>
                     </Grid>
                 </Grid>
             </StackPanel>

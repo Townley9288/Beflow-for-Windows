@@ -558,6 +558,8 @@ public sealed class SettingsViewModel : ObservableObject
 
     private async Task CleanupAsync()
     {
+        await _services.DownloadQueue.PauseAsync();
+        await _services.QueueTaskManager.CleanupAsync();
         await _services.TaskManager.CleanupAsync();
         SetMessage("本会话启动的进程已清理；下载文件和 .aria2 文件均已保留。", InfoBarSeverity.Success);
     }

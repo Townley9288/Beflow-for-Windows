@@ -30,6 +30,7 @@ public sealed class ApplicationPaths
     public string LogsDirectory { get; }
     public string SettingsFile { get; }
     public string HistoryFile { get; }
+    public string DownloadQueueFile => Path.Combine(DataRoot, "download-queue.json");
     public string RenameSettingsFile { get; }
     public string RenameHistoryFile { get; }
     public string MigrationMarkerFile { get; }

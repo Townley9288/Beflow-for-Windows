@@ -10,7 +10,7 @@ namespace BBDownForWindows.App.Pages;
 
 public sealed record DownloadInputNavigationContext(string Input, bool ParseAutomatically = false);
 
-public sealed partial class DownloadPage : Page
+public sealed partial class DownloadPage : Page, IQueueEditorPage
 {
     private DownloadNamingNavigationContext? _pendingNamingNavigation;
 
@@ -22,10 +22,19 @@ public sealed partial class DownloadPage : Page
 
     public DownloadViewModel ViewModel { get; }
 
+    public async Task<bool> ConfirmLeaveQueueEditAsync() =>
+        await ViewModel.QueueEdit.ConfirmLeaveAsync(await ViewModel.BuildQueueItemAsync(), XamlRoot);
+    private void ViewQueue_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("queue");
+    private async void CancelQueueEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if (await ConfirmLeaveQueueEditAsync()) ((App)Application.Current).MainWindow.Navigate("queue");
+    }
+
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         ViewModel.Activate();
         await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
+        if (e.Parameter is QueueNavigationContext queue) await ViewModel.LoadQueueAsync(queue);
         if (e.Parameter is DownloadInputNavigationContext input
             && ViewModel.ApplyExternalInput(input.Input)
             && input.ParseAutomatically

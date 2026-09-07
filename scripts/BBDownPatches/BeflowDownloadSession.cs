@@ -11,10 +11,15 @@ namespace BBDown;
 // This source is copied into the pinned BBDown build by AcquireTools.ps1.
 internal static class BeflowDownloadSession
 {
+    internal static bool Queued { get; private set; }
+    private static NamedPipeClientStream? channel;
+    private static StreamWriter? channelWriter;
+    private static StreamReader? channelReader;
     internal sealed record Selection(int VideoIndex, int AudioIndex, string RelativeOutputPath, string Aria2Arguments);
 
-    internal static Selection Prepare(string pipeName, Page page, BBDown.Core.Entity.ParsedResult tracks, bool muxed)
+    internal static Selection Prepare(string pipeName, Page page, BBDown.Core.Entity.ParsedResult tracks, bool muxed, bool queued = false)
     {
+        Queued = queued;
         var output = new StringBuilder();
         output.AppendLine($"P{page.index}: [{page.cid}] [{page.title}] [{page.dur}s]");
         output.AppendLine($"开始解析P{page.index}:");
@@ -35,15 +40,16 @@ internal static class BeflowDownloadSession
             var duration = page.dur == 0 ? audio.dur : page.dur;
             output.AppendLine(FormattableString.Invariant($"{index}. [{audio.codecs}] [{audio.bandwith} kbps] [~{FormatFileSize(duration * audio.bandwith * 1024 / 8)}]"));
         }
-        using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
+        var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
         pipe.Connect(30000);
-        using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
-        using var reader = new StreamReader(pipe, new UTF8Encoding(false), leaveOpen: true);
+        var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+        var reader = new StreamReader(pipe, new UTF8Encoding(false), leaveOpen: true);
+        channel = pipe; channelWriter = writer; channelReader = reader;
         using var buffer = new MemoryStream();
         using (var json = new Utf8JsonWriter(buffer))
         {
             json.WriteStartObject();
-            json.WriteNumber("Protocol", 1);
+            json.WriteNumber("Protocol", queued ? 2 : 1);
             json.WriteNumber("Page", page.index);
             json.WriteString("Output", output.ToString());
             json.WriteEndObject();
@@ -51,13 +57,30 @@ internal static class BeflowDownloadSession
         writer.WriteLine(Encoding.UTF8.GetString(buffer.ToArray()));
         using var response = JsonDocument.Parse(reader.ReadLine() ?? throw new IOException("Beflow 下载准备连接已关闭"));
         var root = response.RootElement;
-        if (root.GetProperty("Protocol").GetInt32() != 1) throw new InvalidOperationException("Beflow 下载准备协议版本不匹配");
+        if (root.GetProperty("Protocol").GetInt32() != (queued ? 2 : 1)) throw new InvalidOperationException("Beflow 下载准备协议版本不匹配");
         var selection = new Selection(root.GetProperty("VideoIndex").GetInt32(), root.GetProperty("AudioIndex").GetInt32(),
             root.GetProperty("RelativeOutputPath").GetString()!, root.GetProperty("Aria2Arguments").GetString()!);
-        if ((tracks.VideoTracks.Count > 0 && (selection.VideoIndex < 0 || selection.VideoIndex >= tracks.VideoTracks.Count)) ||
-            (tracks.AudioTracks.Count > 0 && (selection.AudioIndex < 0 || selection.AudioIndex >= tracks.AudioTracks.Count)) ||
+        if (selection.VideoIndex < -1 || selection.VideoIndex >= tracks.VideoTracks.Count ||
+            selection.AudioIndex < -1 || selection.AudioIndex >= tracks.AudioTracks.Count ||
             string.IsNullOrWhiteSpace(selection.RelativeOutputPath))
             throw new InvalidOperationException("Beflow 返回了无效的下载选择");
+        if (!queued) { reader.Dispose(); writer.Dispose(); pipe.Dispose(); }
         return selection;
+    }
+
+    internal static void Stage(string stage, string path = "")
+    {
+        if (!Queued) return;
+        using var buffer = new MemoryStream();
+        using (var json = new Utf8JsonWriter(buffer))
+        {
+            json.WriteStartObject(); json.WriteNumber("Protocol", 2);
+            json.WriteString("Stage", stage); json.WriteString("Path", path); json.WriteEndObject();
+        }
+        channelWriter!.WriteLine(Encoding.UTF8.GetString(buffer.ToArray()));
+        using var response = JsonDocument.Parse(channelReader!.ReadLine() ?? throw new IOException("队列阶段确认连接已关闭"));
+        if (response.RootElement.GetProperty("Protocol").GetInt32() != 2 || !response.RootElement.GetProperty("Ack").GetBoolean())
+            throw new IOException("队列阶段未确认保存");
+        if (stage == "muxed") { channelReader.Dispose(); channelWriter.Dispose(); channel!.Dispose(); }
     }
 }

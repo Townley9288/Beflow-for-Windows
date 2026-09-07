@@ -57,6 +57,7 @@ public sealed class DownloadViewModel : ObservableObject
     internal DownloadViewModel(AppServices services, TimeSpan successMessageDuration)
     {
         _services = services;
+        QueueEdit = new QueueEditSession(services.DownloadQueue);
         _messageDismissal = new TransientMessageDismissal(successMessageDuration);
         Console = services.TaskConsole;
         ParseCurrentCommand = new AsyncRelayCommand(() => ParseAsync(DownloadParseMode.Current), CanParse);
@@ -535,79 +536,60 @@ public sealed class DownloadViewModel : ObservableObject
         OnSelectionChanged();
     }
 
+    public QueueEditSession QueueEdit { get; private set; } = null!;
+    private AppSettings? _queueSettings;
+    private readonly DateTimeOffset _queueTimestamp = DateTimeOffset.Now;
+    public string EnqueueText => QueueEdit.EditingId.HasValue ? "保存队列任务" : "加入队列";
+    public Visibility CancelEditVisibility => QueueEdit.EditingId.HasValue ? Visibility.Visible : Visibility.Collapsed;
+
+    public async Task LoadQueueAsync(QueueNavigationContext navigation)
+    {
+        var item = QueueSnapshot.Copy(navigation.Item);
+        QueueEdit.Begin(navigation);
+        var batch = item.Download!;
+        _queueSettings = QueueEditSession.SettingsFrom(batch.Options);
+        Apply(batch.Options);
+        _restoredNamingProfile = batch.NamingProfile.Clone();
+        _restoredNamingProfileKind = batch.NamingProfileKind;
+        _pendingRestore = batch.Episodes;
+        Rows.Clear(); VisibleRows.Clear();
+        ApplyCatalog(item.Catalog!, false);
+        QueueEdit.SetBaseline(await BuildQueueItemAsync());
+        OnPropertyChanged(nameof(EnqueueText)); OnPropertyChanged(nameof(CancelEditVisibility));
+    }
+
+    public async Task<DownloadQueueItem> BuildQueueItemAsync() => new()
+    {
+        Kind = DownloadQueueKind.Download, Catalog = Catalog,
+        Download = new DownloadBatchRequest
+        {
+            Options = await BuildRequestAsync(), Title = Catalog?.Title ?? "", ParsedAt = Catalog?.ParsedAt ?? _queueTimestamp,
+            DownloadedAt = _queueTimestamp, TotalPages = Math.Max(Catalog?.AllPages.Count ?? Rows.Count, 1),
+            NamingProfileKind = ActiveNamingProfileKind, NamingProfile = GetActiveNamingProfile().Clone(), Metadata = Catalog?.Metadata,
+            Episodes = Rows.Where(row => row.IsSelected && row.IsReady && SelectionComplete(row)).Select(row => row.BuildSelection()).ToList()
+        }
+    };
+    private bool SelectionComplete(DownloadEpisodeViewModel row)
+    {
+        var selection = row.BuildSelection();
+        if (row.Episode.IsMuxedStream) return selection.Video is not null;
+        return CurrentDownloadMode switch
+        {
+            DownloadMode.VideoOnly => selection.Video is not null,
+            DownloadMode.AudioOnly => selection.Audio is not null,
+            _ => selection.Video is not null && selection.Audio is not null
+        };
+    }
     private async Task StartDownloadAsync()
     {
-        var selectedRows = Rows.Where(row => row.IsSelected && row.IsReady).OrderBy(row => row.PageNumber).ToList();
-        if (selectedRows.Count == 0) return;
-        LastDownloadResult = null;
-        _failedPages.Clear();
-        var options = await BuildRequestAsync();
-        var namingProfile = GetActiveNamingProfile().Clone();
-        var namingKind = ActiveNamingProfileKind;
-        var downloadedAt = DateTimeOffset.Now;
-        var batchRequest = new DownloadBatchRequest
+        try
         {
-            Options = options,
-            Title = Catalog?.Title ?? string.Empty,
-            ParsedAt = Catalog?.ParsedAt ?? DateTimeOffset.Now,
-            DownloadedAt = downloadedAt,
-            TotalPages = Math.Max(Catalog?.AllPages.Count ?? selectedRows.Count, selectedRows.Count),
-            NamingProfileKind = namingKind,
-            NamingProfile = namingProfile,
-            Metadata = Catalog?.Metadata,
-            Episodes = selectedRows.Select(row => row.BuildSelection()).ToList()
-        };
-        DownloadBatchResult? result = null;
-        ShowProgress = true;
-        OverallProgress = 0;
-        CurrentProgress = 0;
-        CurrentProgressIndeterminate = !UseAria2c;
-        ProgressTitle = "正在准备下载";
-        ProgressDetail = $"共 {selectedRows.Count} 集";
-        var downloadProgress = new Progress<DownloadProgressSnapshot>(OnDownloadProgress);
-        var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DownloadBatch, SaveTaskLogs, "download_batch", async (context, token) =>
-        {
-            result = await _services.BBDown.DownloadBatchAsync(batchRequest, downloadProgress, context, token);
-        });
-
-        if (result is null)
-        {
-            ShowProgress = false;
-            SetMessage(string.IsNullOrWhiteSpace(snapshot.Error) ? "下载任务未能启动" : snapshot.Error, InfoBarSeverity.Error);
-            return;
+            await QueueEdit.SaveAsync(await BuildQueueItemAsync());
+            LastDownloadResult = null;
+            SetMessage("任务已加入队列。", InfoBarSeverity.Success);
+            OnPropertyChanged(nameof(EnqueueText)); OnPropertyChanged(nameof(CancelEditVisibility));
         }
-        foreach (var episode in result.Episodes)
-        {
-            Rows.FirstOrDefault(row => row.PageNumber == episode.PageNumber)?.ApplyResult(episode);
-            if (episode.State == DownloadEpisodeResultState.Failed) _failedPages.Add(episode.PageNumber);
-        }
-        LastDownloadResult = new DownloadResult(result.Title, result.OutputDirectory, result.OutputFiles, result.HasVideo, result.RenameDirectory);
-        await _services.History.AddAsync(new HistoryRecord
-        {
-            TaskType = TaskKind.DownloadBatch,
-            Title = result.Title,
-            Url = Url.Trim(),
-            Timestamp = DateTimeOffset.Now,
-            LogPath = snapshot.LogPath,
-            OutputDirectory = result.OutputDirectory,
-            OutputFiles = result.OutputFiles,
-            DownloadBatch = new DownloadBatchHistory
-            {
-                Options = options,
-                ParsedAt = batchRequest.ParsedAt,
-                DownloadedAt = downloadedAt,
-                TotalPages = batchRequest.TotalPages,
-                NamingProfileKind = namingKind,
-                NamingProfile = namingProfile.Clone(),
-                Episodes = result.Episodes
-            }
-        });
-        var succeeded = result.Episodes.Count(item => item.State == DownloadEpisodeResultState.Completed);
-        var failed = result.Episodes.Count(item => item.State == DownloadEpisodeResultState.Failed);
-        ShowProgress = false;
-        SetMessage(failed == 0 ? $"下载完成：成功 {succeeded} 集。" : $"批量任务完成：成功 {succeeded} 集，失败 {failed} 集。", failed == 0 ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
-        RetryFailedCommand.NotifyCanExecuteChanged();
-        NotifyCommands();
+        catch (Exception exception) { SetMessage(exception.Message, InfoBarSeverity.Error); }
     }
 
     private async Task RetryFailedAsync()
@@ -630,7 +612,7 @@ public sealed class DownloadViewModel : ObservableObject
 
     private async Task<DownloadRequest> BuildRequestAsync()
     {
-        var settings = await _services.Settings.LoadAsync();
+        var settings = _queueSettings ?? await _services.Settings.LoadAsync();
         return new DownloadRequest
         {
             Url = CatalogMatchesCurrentUrl() && !string.IsNullOrWhiteSpace(Catalog!.ResolvedUrl) ? Catalog.ResolvedUrl : Url.Trim(), Quality = QualityRule, Encoding = Encoding,

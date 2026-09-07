@@ -6,6 +6,53 @@ namespace BBDownForWindows.Tests;
 
 public sealed class DualAudioTests
 {
+    [Theory]
+    [InlineData(DualAudioSource.A)]
+    [InlineData(DualAudioSource.B)]
+    public async Task ClipboardSourceCanBeParsedBeforeTheOtherLinkArrives(DualAudioSource source)
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, Path.Combine(root.FullName, "local"));
+            var runner = new NoopRunner();
+            var bbdown = new ParallelParseService();
+            var service = new DualAudioService(paths, bbdown, runner, new StubSettingsStore(), new StubToolLocator());
+            var manager = new TaskManager(paths, runner);
+            DualAudioCatalog? catalog = null;
+            var snapshot = await manager.RunExclusiveAsync(TaskKind.DualAudioParse, false, "clipboard-source", async (context, token) =>
+                catalog = await service.ParseAsync(new DualAudioParseRequest(DualAudioSourceMode.Separate,
+                    source == DualAudioSource.A ? "source-a" : "", source == DualAudioSource.B ? "source-b" : "",
+                    DownloadParseMode.All, OnlySource: source), null, null, context, token));
+            Assert.Equal(TaskState.Completed, snapshot.State);
+            Assert.Equal([source == DualAudioSource.A ? "source-a" : "source-b"], bbdown.RequestedUrls);
+            Assert.NotNull(source == DualAudioSource.A ? catalog!.SourceA : catalog!.SourceB);
+            Assert.Null(source == DualAudioSource.A ? catalog!.SourceB : catalog!.SourceA);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Theory]
+    [InlineData("source-a", "")]
+    [InlineData("", "source-b")]
+    public async Task FullDualAudioParseStillRequiresBothLinks(string a, string b)
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var runner = new NoopRunner();
+            var bbdown = new ParallelParseService();
+            var service = new DualAudioService(paths, bbdown, runner, new StubSettingsStore(), new StubToolLocator());
+            var manager = new TaskManager(paths, runner);
+            var snapshot = await manager.RunExclusiveAsync(TaskKind.DualAudioParse, false, "both-required", (context, token) =>
+                service.ParseAsync(new DualAudioParseRequest(DualAudioSourceMode.Separate, a, b, DownloadParseMode.All), null, null, context, token));
+            Assert.Equal(TaskState.Failed, snapshot.State);
+            Assert.Empty(bbdown.RequestedUrls);
+        }
+        finally { root.Delete(true); }
+    }
+
     [Fact]
     public void RecommendationUsesRealResolutionBeforeHdr()
     {

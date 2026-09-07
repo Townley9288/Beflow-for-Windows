@@ -17,11 +17,18 @@ public sealed class AppServices
         Theme = new ThemeManager(Settings);
         ProcessRunner = new ProcessRunner();
         ToolLocator = new ToolLocator(paths);
-        TaskManager = new TaskManager(paths, ProcessRunner);
+        Work = new WorkCoordinator();
+        ParseLimiter = new ParseConcurrencyLimiter(Settings);
+        TaskManager = new TaskManager(paths, ProcessRunner, Work);
+        QueueProcessRunner = new ProcessRunner();
+        QueueTaskManager = new TaskManager(paths, QueueProcessRunner);
         TaskConsole = new ViewModels.TaskConsoleViewModel(TaskManager);
         BilibiliMetadata = new BilibiliMetadataService(HttpClient);
         DownloadNaming = new DownloadNamingService();
-        BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata, DownloadNaming);
+        BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata, DownloadNaming, ParseLimiter);
+        DownloadQueue = new DownloadQueueService(new DownloadQueueStore(paths),
+            new DownloadQueueExecutor(new QueuedMediaDownloader(paths, QueueProcessRunner, ToolLocator, ParseLimiter),
+                QueueProcessRunner, ToolLocator, DownloadNaming, History), QueueTaskManager, Work);
         DualAudio = new DualAudioService(paths, BBDown, ProcessRunner, Settings, ToolLocator);
         Tmdb = new TmdbService(RenameSettings);
         Rename = new RenameService(ProcessRunner, ToolLocator, Settings, RenameHistory);
@@ -40,6 +47,11 @@ public sealed class AppServices
     public IUpdateStateStore UpdateState { get; }
     public ThemeManager Theme { get; }
     public IProcessRunner ProcessRunner { get; }
+    public WorkCoordinator Work { get; }
+    public ParseConcurrencyLimiter ParseLimiter { get; }
+    public IProcessRunner QueueProcessRunner { get; }
+    public ITaskManager QueueTaskManager { get; }
+    public DownloadQueueService DownloadQueue { get; }
     public IToolLocator ToolLocator { get; }
     public ITaskManager TaskManager { get; }
     public ViewModels.TaskConsoleViewModel TaskConsole { get; }

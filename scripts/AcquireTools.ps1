@@ -57,7 +57,7 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $PatchSignature = 'interactive_selection=preserve_across_retry'
     $EncodingSignature = 'console_output_encoding=utf-8'
     $MediaDirectSignature = 'media_http_client=direct_no_proxy'
-    $PreparationSignature = 'download_preparation=pipe_v1'
+    $PreparationSignature = 'download_preparation=pipe_v2_queue_resume_v2_cleanup'
     $ParseChaptersSignature = 'info_parse=skip_chapter_request'
     if ((Test-Path -LiteralPath $Executable -PathType Leaf) -and
         (Test-Path -LiteralPath $Marker -PathType Leaf) -and
@@ -410,6 +410,7 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     [IO.File]::WriteAllText($LoginPath, $LoginContent, [Text.UTF8Encoding]::new($false))
 
     & (Join-Path $PSScriptRoot 'Apply-DownloadPreparationPatch.ps1') -WorkingDirectory $WorkingDirectory
+    & (Join-Path $PSScriptRoot 'Apply-QueueDownloadPatch.ps1') -WorkingDirectory $WorkingDirectory
     $Project = Join-Path $WorkingDirectory 'BBDown\BBDown.csproj'
     & dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:ManagePackageVersionsCentrally=false -p:Version=$($Entry.version) -o $Publish | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patched BBDown build failed with exit code $LASTEXITCODE" }

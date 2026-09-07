@@ -71,7 +71,7 @@ public sealed class UpdateCoordinator
     public async Task ApplyAvailableAsync(CancellationToken cancellationToken = default)
     {
         if (AvailableRelease is null) throw new InvalidOperationException("当前没有可安装的新版本。");
-        if (_services.TaskManager.ActiveTask?.State == TaskState.Running)
+        if (_services.Work.HasRunningOperations)
             throw new InvalidOperationException("当前有任务正在运行，请等待任务完成或取消后再更新。");
         if (IsBusy) return;
 
@@ -94,6 +94,9 @@ public sealed class UpdateCoordinator
             StatusText = $"正在下载 {asset.FileName}…";
             var progress = new Progress<double>(value => Progress = value);
             var package = await _services.Updates.DownloadAndVerifyAsync(asset, updateDirectory, progress, cancellationToken);
+            if (_services.Work.HasRunningOperations) throw new InvalidOperationException("有任务正在运行，请暂停队列并等待操作结束后安装。");
+            using var exclusive = _services.Work.EnterForeground(TaskKind.RenameExecute);
+            await _services.DownloadQueue.ShutdownAsync();
             StatusText = "更新包校验通过，正在启动更新…";
             if (_services.Paths.Portable)
                 StartPortableUpdater(package, updateDirectory);

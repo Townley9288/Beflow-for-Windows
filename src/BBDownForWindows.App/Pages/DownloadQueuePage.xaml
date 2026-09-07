@@ -1,0 +1,46 @@
+<Page x:Class="BBDownForWindows.App.Pages.DownloadQueuePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Padding="24,16" RowSpacing="12">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel Spacing="4"><TextBlock Text="下载队列" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock x:Name="QueueStatus" Opacity="0.7"/></StackPanel>
+            <Button Grid.Column="1" x:Name="PauseButton" Content="暂停" Click="Pause_Click" VerticalAlignment="Center"/>
+            <Button Grid.Column="2" Content="清理完成记录" Click="Clear_Click" VerticalAlignment="Center"/>
+        </Grid>
+        <InfoBar Grid.Row="1" x:Name="ErrorBar" Severity="Error" IsClosable="True"/>
+        <ListView Grid.Row="2" x:Name="QueueList" SelectionMode="None" HorizontalContentAlignment="Stretch">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Border Padding="12" Margin="0,3" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                        <StackPanel Spacing="6">
+                            <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="1" Text="{Binding StateText}"/>
+                            </Grid>
+                            <TextBlock Text="{Binding Summary}" Opacity="0.7"/>
+                            <TextBlock Text="{Binding Links}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Links}" FontSize="12"/>
+                            <TextBlock Text="{Binding OutputDirectory}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding OutputDirectory}" FontSize="12"/>
+                            <TextBlock Text="{Binding ProgressText}" TextTrimming="CharacterEllipsis" Visibility="{Binding ProgressVisibility}"/>
+                            <ProgressBar Value="{Binding Percent}" IsIndeterminate="{Binding Indeterminate}" Visibility="{Binding ProgressVisibility}" Maximum="100"/>
+                            <TextBlock Text="{Binding Error}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"/>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Content="详情" Click="Details_Click"/>
+                                <Button Content="日志" Click="Logs_Click"/>
+                                <Button Content="打开目录" Click="Folder_Click"/>
+                                <Button Content="取消当前任务" Visibility="{Binding RunningVisibility}" Click="Cancel_Click"/>
+                                <Button Content="重试失败项" Visibility="{Binding RetryVisibility}" Click="Retry_Click"/>
+                                <Button Content="修改失败项" Visibility="{Binding RetryVisibility}" Click="EditFailures_Click"/>
+                                <Button Content="上移" Visibility="{Binding WaitingVisibility}" Click="Up_Click"/>
+                                <Button Content="下移" Visibility="{Binding WaitingVisibility}" Click="Down_Click"/>
+                                <Button Content="编辑" Visibility="{Binding WaitingVisibility}" Click="Edit_Click"/>
+                                <Button Content="移除" Visibility="{Binding RemoveVisibility}" Click="Remove_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</Page>

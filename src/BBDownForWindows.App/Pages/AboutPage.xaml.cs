@@ -84,20 +84,18 @@ public sealed partial class AboutPage : Page
         UpdateProgress.Visibility = _updates.IsBusy && _updates.Progress > 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateProgress.Value = _updates.Progress;
         var release = _updates.AvailableRelease;
-        LatestVersionText.Visibility = release is null ? Visibility.Collapsed : Visibility.Visible;
-        LatestVersionText.Text = release is null
-            ? string.Empty
-            : release.PublishedAt == DateTimeOffset.MinValue
-                ? $"最新版本：v{Core.UpdateService.FormatVersion(release.Version)}"
-                : $"最新版本：v{Core.UpdateService.FormatVersion(release.Version)} · {release.PublishedAt.ToLocalTime():yyyy-MM-dd}";
-        ReleaseNotesContainer.Visibility = release is null || string.IsNullOrWhiteSpace(release.ReleaseNotes) ? Visibility.Collapsed : Visibility.Visible;
         ReleaseNotesText.Text = FormatReleaseNotes(release?.ReleaseNotes ?? string.Empty);
+        ReleaseNotesContainer.Visibility = string.IsNullOrWhiteSpace(ReleaseNotesText.Text) ? Visibility.Collapsed : Visibility.Visible;
         ReleasePageLink.Visibility = release is null ? Visibility.Collapsed : Visibility.Visible;
         if (release is not null) ReleasePageLink.NavigateUri = release.ReleasePage;
     }
 
     private static string FormatReleaseNotes(string value)
     {
+        // The status already names the version; omit only the leading release title.
+        value = Regex.Replace(value,
+            @"\A\uFEFF?\s*#{1,6}[ \t]+(?:Beflow(?:[ \t]+for[ \t]+Windows)?[ \t]+)?v?\d+(?:\.\d+){1,3}[ \t]*#*[ \t]*(?:\r?\n|$)",
+            string.Empty, RegexOptions.IgnoreCase);
         var lines = value.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n')
             .Select(line => Regex.Replace(line, @"^\s{0,3}#{1,6}\s+", string.Empty))
             .Select(line => Regex.Replace(line, @"^\s*[-*]\s+", "• "));
