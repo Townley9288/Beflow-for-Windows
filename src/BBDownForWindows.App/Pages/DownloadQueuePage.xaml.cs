@@ -1,9 +1,10 @@
-using System.Collections.ObjectModel;
 using System.Diagnostics;
+using BBDownForWindows.App.ViewModels;
 using BBDownForWindows.Core;
-using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace BBDownForWindows.App.Pages;
@@ -11,19 +12,19 @@ namespace BBDownForWindows.App.Pages;
 public sealed partial class DownloadQueuePage : Page
 {
     private readonly AppServices services = ((App)Application.Current).Services;
-    private readonly ObservableCollection<QueueRow> rows = [];
+    public DownloadQueueViewModel ViewModel { get; } = new();
     private readonly object progressGate = new();
     private QueueProgress? pendingProgress;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private bool active;
     public DownloadQueuePage()
     {
-        InitializeComponent(); QueueList.ItemsSource = rows;
+        InitializeComponent();
         timer.Tick += (_, _) =>
         {
             QueueProgress? update;
             lock (progressGate) { update = pendingProgress; pendingProgress = null; }
-            if (update is not null) rows.FirstOrDefault(r => r.Item.Id == update.Id)?.Progress(update);
+            if (update is not null) ViewModel.ApplyProgress(update);
         };
     }
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -38,16 +39,18 @@ public sealed partial class DownloadQueuePage : Page
     }
     private void Changed(object? sender, EventArgs e) => DispatcherQueue.TryEnqueue(() => { if (active) Refresh(); });
     private void Progress(object? sender, QueueProgress e) { lock (progressGate) pendingProgress = e; }
+    private void QueueTabs_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (!args.InRecycleQueue && args.Item is DownloadQueueTab tab)
+            args.ItemContainer.SetBinding(AutomationProperties.NameProperty, new Binding
+            {
+                Source = tab, Path = new PropertyPath(nameof(DownloadQueueTab.AutomationName)), Mode = BindingMode.OneWay
+            });
+    }
     private void Refresh()
     {
         var queue = services.DownloadQueue.Snapshot;
-        for (var index = rows.Count - 1; index >= 0; index--) if (!queue.Items.Any(i => i.Id == rows[index].Item.Id)) rows.RemoveAt(index);
-        for (var index = 0; index < queue.Items.Count; index++)
-        {
-            var item = queue.Items[index]; var row = rows.FirstOrDefault(r => r.Item.Id == item.Id);
-            if (row is null) { row = new QueueRow(item); rows.Insert(index, row); }
-            else { row.Update(item); var previous = rows.IndexOf(row); if (previous != index) rows.Move(previous, index); }
-        }
+        ViewModel.ApplySnapshot(queue.Items);
         var pausing = queue.Items.Any(i => i.State == DownloadQueueState.Pausing);
         QueueStatus.Text = pausing ? "正在停止当前进程并保存状态…" : queue.Paused ? "已暂停 · 点击继续后执行" : $"共 {queue.Items.Count} 个任务 · 按顺序执行";
         PauseButton.Content = queue.Paused ? "继续" : "暂停"; PauseButton.IsEnabled = !pausing && services.DownloadQueue.Error.Length == 0;
@@ -99,35 +102,4 @@ public sealed partial class DownloadQueuePage : Page
         content.Children.Add(new ListView { ItemsSource = entries, MaxHeight = 400, SelectionMode = ListViewSelectionMode.None });
         await new ContentDialog { XamlRoot = XamlRoot, Title = item.Title, Content = content, CloseButtonText = "关闭" }.ShowAsync();
     });
-}
-
-public sealed class QueueRow(DownloadQueueItem item) : ObservableObject
-{
-    public DownloadQueueItem Item { get; private set; } = item;
-    public string Title => Item.Title;
-    public string Links => Item.Url + (Item.DualAudio is null ? "" : "  /  " + Item.DualAudio.SourceBUrl);
-    public string OutputDirectory => Item.OutputDirectory;
-    public string Summary => $"{(Item.Kind == DownloadQueueKind.Download ? "普通下载" : "多音轨封装")} · 成功 {Item.Succeeded} / 失败 {Item.Failed} / 未完成 {Math.Max(0, Item.Total - Item.Succeeded - Item.Failed)}";
-    public string Error => Item.Error;
-    public string StateText => Item.State switch
-    {
-        DownloadQueueState.Waiting => "等待", DownloadQueueState.Editing => "编辑中", DownloadQueueState.Running => "运行中",
-        DownloadQueueState.Pausing => "正在停止", DownloadQueueState.Paused => "已暂停", DownloadQueueState.Completed => "完成",
-        DownloadQueueState.PartialFailure => "部分失败", DownloadQueueState.Failed => "失败", DownloadQueueState.Cancelled => "已取消", _ => ""
-    };
-    public Visibility WaitingVisibility => Item.CanEdit ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility RunningVisibility => Item.State == DownloadQueueState.Running ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility RemoveVisibility => Item.State is DownloadQueueState.Running or DownloadQueueState.Pausing or DownloadQueueState.Editing ? Visibility.Collapsed : Visibility.Visible;
-    public Visibility RetryVisibility => Item.IsTerminal && (Item.Failed > 0 || Item.State == DownloadQueueState.Failed) ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility ProgressVisibility => Item.State is DownloadQueueState.Running or DownloadQueueState.Pausing ? Visibility.Visible : Visibility.Collapsed;
-    public double Percent { get; private set; }
-    public bool Indeterminate { get; private set; }
-    public string ProgressText { get; private set; } = "";
-    public void Update(DownloadQueueItem value) { Item = value; OnPropertyChanged(string.Empty); }
-    public void Progress(QueueProgress progress)
-    {
-        Percent = progress.Percent ?? 0; Indeterminate = progress.Percent is null;
-        ProgressText = $"P{progress.Current} · {progress.Phase} · {progress.Speed} {progress.Eta}";
-        OnPropertyChanged(nameof(Percent)); OnPropertyChanged(nameof(Indeterminate)); OnPropertyChanged(nameof(ProgressText));
-    }
 }
