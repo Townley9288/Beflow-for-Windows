@@ -7,6 +7,69 @@ namespace BBDownForWindows.Tests;
 
 public sealed class DownloadQueueViewModelTests
 {
+    [Theory]
+    [InlineData(DownloadQueueKind.Download)]
+    [InlineData(DownloadQueueKind.DualAudio)]
+    public void CompletedTaskRenamesPublishedVideosInTheirActualDirectory(DownloadQueueKind kind)
+    {
+        var directory = kind == DownloadQueueKind.Download ? @"D:\视频\有兽焉\正片" : @"D:\视频\多音轨任务\多音轨MKV";
+        var video = Path.Combine(directory, "[P01]第一集.mkv");
+        var item = new DownloadQueueItem
+        {
+            Kind = kind, State = DownloadQueueState.Completed,
+            Download = kind == DownloadQueueKind.Download ? new DownloadBatchRequest { Title = "有兽焉", Options = new() { Url = "" } } : null,
+            DualAudio = kind == DownloadQueueKind.DualAudio ? new DualAudioBatchRequest { SourceATitle = "有兽焉" } : null,
+            Checkpoint = new()
+            {
+                OutputDirectory = @"D:\视频",
+                Units =
+                [
+                    new() { Completed = true, Files = [new(video, 1, 0, ""), new(Path.ChangeExtension(video, ".ass"), 1, 0, "")],
+                        SourceA = new() { Files = [new(@"D:\视频\来源A\source.mp4", 1, 0, "")] } },
+                    new() { Completed = false, Files = [new(@"D:\视频\临时\unfinished.mp4", 1, 0, "")] }
+                ]
+            }
+        };
+
+        var row = new QueueRow(item);
+        var context = Assert.IsType<RenameNavigationContext>(row.RenameContext);
+        Assert.Equal(directory, context.DirectoryPath);
+        Assert.Equal([video], context.PreferredFiles);
+        Assert.Equal("有兽焉", context.SuggestedTitle);
+        Assert.Equal(Visibility.Visible, row.RenameVisibility);
+    }
+
+    [Theory]
+    [InlineData(@"D:\视频\audio.m4a", null)]
+    [InlineData(@"D:\视频\第一集\video.mp4", @"D:\视频\第二集\video.mp4")]
+    public void RenameEntryRequiresVideosInOneDirectory(string firstPath, string? secondPath)
+    {
+        var unit = new QueueUnitCheckpoint { Completed = true, Files = [new(firstPath, 1, 0, "")] };
+        if (secondPath is not null) unit.Files.Add(new(secondPath, 1, 0, ""));
+        var row = new QueueRow(new() { State = DownloadQueueState.Completed, Checkpoint = new() { Units = [unit] } });
+
+        Assert.Null(row.RenameContext);
+        Assert.Equal(Visibility.Collapsed, row.RenameVisibility);
+    }
+
+    [Fact]
+    public void RenameEntryBecomesAvailableWhenTaskCompletes()
+    {
+        var item = new DownloadQueueItem
+        {
+            State = DownloadQueueState.Running,
+            Checkpoint = new() { Units = [new() { Completed = true, Files = [new(@"D:\视频\video.mp4", 1, 0, "")] }] }
+        };
+        var row = new QueueRow(item);
+        Assert.Null(row.RenameContext);
+        var completed = QueueSnapshot.Copy(item);
+        completed.State = DownloadQueueState.Completed;
+        row.Update(completed);
+
+        Assert.NotNull(row.RenameContext);
+        Assert.Equal(Visibility.Visible, row.RenameVisibility);
+    }
+
     [Fact]
     public void EveryTaskAppearsInOneCategoryIncludingEditingPausedAndPartialFailures()
     {

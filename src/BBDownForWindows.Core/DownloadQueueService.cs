@@ -36,7 +36,8 @@ public sealed class DownloadQueueService
         try
         {
             document = await store.LoadAsync();
-            if (document.Items.Any(i => !i.IsTerminal)) document.Paused = true;
+            // Only unfinished work needs an explicit resume after restarting.
+            document.Paused = document.Items.Any(i => !i.IsTerminal);
             foreach (var item in document.Items)
             {
                 if (item.State == DownloadQueueState.Editing) item.State = DownloadQueueState.Waiting;

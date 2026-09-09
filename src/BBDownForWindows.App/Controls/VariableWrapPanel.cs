@@ -35,6 +35,7 @@ public sealed class VariableWrapPanel : Panel
 
         foreach (var child in Children)
         {
+            if (child.Visibility == Visibility.Collapsed) continue;
             child.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
             var size = child.DesiredSize;
             var additionalWidth = rowWidth <= 0 ? size.Width : HorizontalSpacing + size.Width;
@@ -67,6 +68,7 @@ public sealed class VariableWrapPanel : Panel
 
         foreach (var child in Children)
         {
+            if (child.Visibility == Visibility.Collapsed) continue;
             var size = child.DesiredSize;
             var additionalWidth = x <= 0 ? size.Width : HorizontalSpacing + size.Width;
             if (x > 0 && x + additionalWidth > finalSize.Width)

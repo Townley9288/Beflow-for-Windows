@@ -23,6 +23,22 @@ public sealed class QueueRow(DownloadQueueItem item) : ObservableObject
     public Visibility RemoveVisibility => Item.State is DownloadQueueState.Running or DownloadQueueState.Pausing or DownloadQueueState.Editing ? Visibility.Collapsed : Visibility.Visible;
     public Visibility RetryVisibility => Item.IsTerminal && (Item.Failed > 0 || Item.State == DownloadQueueState.Failed) ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ProgressVisibility => Item.State is DownloadQueueState.Running or DownloadQueueState.Pausing ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility RenameVisibility => RenameContext is not null ? Visibility.Visible : Visibility.Collapsed;
+    public RenameNavigationContext? RenameContext
+    {
+        get
+        {
+            if (Item.State != DownloadQueueState.Completed) return null;
+            var files = Item.Checkpoint.Units.Where(unit => unit.Completed)
+                .SelectMany(unit => unit.Files.Select(file => file.Path))
+                .Where(DownloadFileKinds.IsVideoFile)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var directories = files.Select(Path.GetDirectoryName)
+                .Where(directory => !string.IsNullOrWhiteSpace(directory))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            return directories.Count == 1 ? new RenameNavigationContext(directories[0]!, files, Item.Title) : null;
+        }
+    }
     public double Percent { get; private set; }
     public bool Indeterminate { get; private set; }
     public string ProgressText { get; private set; } = "";

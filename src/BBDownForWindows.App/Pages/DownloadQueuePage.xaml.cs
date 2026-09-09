@@ -82,6 +82,14 @@ public sealed partial class DownloadQueuePage : Page
         var directory = Item(sender).OutputDirectory;
         if (Directory.Exists(directory)) Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
     }
+    private async void GoRename_Click(object sender, RoutedEventArgs e) => await Run(() =>
+    {
+        var context = ((QueueRow)((FrameworkElement)sender).DataContext).RenameContext;
+        if (context is null) return Task.CompletedTask;
+        if (!Directory.Exists(context.DirectoryPath)) throw new DirectoryNotFoundException($"下载目录不存在：{context.DirectoryPath}");
+        ((App)Application.Current).MainWindow.Navigate("rename", context);
+        return Task.CompletedTask;
+    });
     private async void Logs_Click(object sender, RoutedEventArgs e) => await Run(async () =>
     {
         var list = new ListView { MaxHeight = 400, SelectionMode = ListViewSelectionMode.Single, ItemsSource = Item(sender).LogPaths };

@@ -46,6 +46,38 @@ public sealed class DownloadQueueTests
         await restarted.PauseAsync();
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(DownloadQueueState.Completed)]
+    [InlineData(DownloadQueueState.PartialFailure)]
+    [InlineData(DownloadQueueState.Failed)]
+    [InlineData(DownloadQueueState.Cancelled)]
+    public async Task RestartWithoutUnfinishedJobsAutomaticallyStartsNewlyAddedTask(DownloadQueueState? previousState)
+    {
+        using var f = new Fixture();
+        if (previousState is { } state)
+        {
+            var previous = Job(f.Root);
+            previous.State = state;
+            f.Store.Document.Items.Add(previous);
+        }
+        await f.Queue.InitializeAsync();
+        await f.Queue.ShutdownAsync();
+
+        var restarted = new DownloadQueueService(f.Store, f.Executor, new TaskManager(f.Paths, new ProcessRunner()), f.Work);
+        await restarted.InitializeAsync();
+        Assert.False(restarted.Snapshot.Paused);
+        Assert.False(f.Store.Document.Paused);
+        var id = await restarted.EnqueueAsync(Job(f.Root));
+        try
+        {
+            Assert.Equal(id, await f.Executor.Started.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(3)));
+            if (previousState is { } expectedState)
+                Assert.Equal(expectedState, restarted.Snapshot.Items[0].State);
+        }
+        finally { await restarted.PauseAsync(); }
+    }
+
     [Fact]
     public async Task EditingSkipsJobAndSavesSamePositionAndId()
     {

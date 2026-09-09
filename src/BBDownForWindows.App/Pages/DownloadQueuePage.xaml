@@ -49,7 +49,17 @@
                     <FontIcon Glyph="{Binding SelectedTab.IconGlyph}" FontSize="36" Opacity="0.4"/>
                     <TextBlock Text="{Binding SelectedTab.EmptyText}" FontSize="16" Opacity="0.65"/>
                 </StackPanel>
-                <ListView Grid.Row="1" x:Name="QueueList" ItemsSource="{Binding Rows}" SelectionMode="None" HorizontalContentAlignment="Stretch" AutomationProperties.Name="分类任务列表">
+                <ListView Grid.Row="1" x:Name="QueueList" ItemsSource="{Binding Rows}" SelectionMode="None" Padding="0" HorizontalContentAlignment="Stretch" AutomationProperties.Name="分类任务列表">
+                    <ListView.ItemContainerTransitions>
+                        <TransitionCollection/>
+                    </ListView.ItemContainerTransitions>
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <Border Padding="12" Margin="0,3" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
@@ -68,6 +78,7 @@
                                         <Button Content="详情" Click="Details_Click"/>
                                         <Button Content="日志" Click="Logs_Click"/>
                                         <Button Content="打开目录" Click="Folder_Click"/>
+                                        <Button Content="去重命名" Visibility="{Binding RenameVisibility}" Click="GoRename_Click"/>
                                         <Button Content="取消当前任务" Visibility="{Binding RunningVisibility}" Click="Cancel_Click"/>
                                         <Button Content="重试失败项" Visibility="{Binding RetryVisibility}" Click="Retry_Click"/>
                                         <Button Content="修改失败项" Visibility="{Binding RetryVisibility}" Click="EditFailures_Click"/>
