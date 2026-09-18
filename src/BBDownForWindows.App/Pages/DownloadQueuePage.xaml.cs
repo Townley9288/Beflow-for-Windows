@@ -30,7 +30,7 @@ public sealed partial class DownloadQueuePage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         active = true; services.DownloadQueue.Changed += Changed; services.DownloadQueue.ProgressChanged += Progress;
-        timer.Start(); await Run(services.DownloadQueue.InitializeAsync); Refresh(); base.OnNavigatedTo(e);
+        timer.Start(); await Run(services.DownloadQueue.InitializeAsync); Refresh(selectLandingTab: true); base.OnNavigatedTo(e);
     }
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
@@ -47,10 +47,11 @@ public sealed partial class DownloadQueuePage : Page
                 Source = tab, Path = new PropertyPath(nameof(DownloadQueueTab.AutomationName)), Mode = BindingMode.OneWay
             });
     }
-    private void Refresh()
+    private void Refresh(bool selectLandingTab = false)
     {
         var queue = services.DownloadQueue.Snapshot;
         ViewModel.ApplySnapshot(queue.Items);
+        if (selectLandingTab) ViewModel.SelectLandingTab();
         var pausing = queue.Items.Any(i => i.State == DownloadQueueState.Pausing);
         QueueStatus.Text = pausing ? "正在停止当前进程并保存状态…" : queue.Paused ? "已暂停 · 点击继续后执行" : $"共 {queue.Items.Count} 个任务 · 按顺序执行";
         PauseButton.Content = queue.Paused ? "继续" : "暂停"; PauseButton.IsEnabled = !pausing && services.DownloadQueue.Error.Length == 0;
@@ -60,6 +61,10 @@ public sealed partial class DownloadQueuePage : Page
     private async Task Run(Func<Task> action)
     { try { await action(); } catch (Exception exception) { ErrorBar.Message = exception.Message; ErrorBar.IsOpen = true; } }
     private async void Pause_Click(object sender, RoutedEventArgs e) => await Run(() => services.DownloadQueue.Snapshot.Paused ? services.DownloadQueue.ResumeAsync() : services.DownloadQueue.PauseAsync());
+    private void QueuePage_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.Rows.Count > 0) QueueList.ScrollIntoView(ViewModel.Rows[0]);
+    }
     private async void Clear_Click(object sender, RoutedEventArgs e) => await Run(services.DownloadQueue.ClearCompletedAsync);
     private async void Cancel_Click(object sender, RoutedEventArgs e) => await Run(services.DownloadQueue.CancelCurrentAsync);
     private async void Up_Click(object sender, RoutedEventArgs e) => await Run(() => services.DownloadQueue.MoveAsync(Item(sender).Id, -1));
@@ -105,7 +110,10 @@ public sealed partial class DownloadQueuePage : Page
     {
         var item = Item(sender);
         var content = new StackPanel { Spacing = 8, MaxWidth = 720 };
-        content.Children.Add(new TextBlock { Text = $"任务 ID：{item.Id}\n添加时间：{item.AddedAt:yyyy-MM-dd HH:mm:ss}\n{item.Url}\n{item.DualAudio?.SourceBUrl}\n{item.OutputDirectory}", TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
+        var times = $"添加时间：{item.AddedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
+        if (item.StartedAt is { } started) times += $"\n开始时间：{started.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
+        if (item.FinishedAt is { } finished) times += $"\n结束时间：{finished.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
+        content.Children.Add(new TextBlock { Text = $"任务 ID：{item.Id}\n{times}\n{item.Url}\n{item.DualAudio?.SourceBUrl}\n{item.OutputDirectory}", TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
         var entries = item.Checkpoint.Units.Select(u => $"P{u.Number} {u.Title}\n{(u.Completed ? "完成" : u.Error.Length > 0 ? "失败：" + u.Error : "未完成")}\nA：{u.SourceA.Stage}  B：{u.SourceB.Stage}\n{u.FinalPath}").ToList();
         content.Children.Add(new ListView { ItemsSource = entries, MaxHeight = 400, SelectionMode = ListViewSelectionMode.None });
         await new ContentDialog { XamlRoot = XamlRoot, Title = item.Title, Content = content, CloseButtonText = "关闭" }.ShowAsync();

@@ -42,8 +42,7 @@ public sealed class RenameService(
         var preferred = preferredFiles is null
             ? null
             : preferredFiles.Select(Path.GetFullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var files = new DirectoryInfo(directoryPath).EnumerateFiles()
-            .Where(file => VideoExtensions.Contains(file.Extension))
+        var files = EnumerateVideoFiles(directoryPath)
             .Select(file => new RenameFileEntry
             {
                 SourcePath = file.FullName,
@@ -52,10 +51,31 @@ public sealed class RenameService(
             })
             .OrderBy(file => file.DetectedEpisode is null)
             .ThenBy(file => file.DetectedEpisode ?? 0)
-            .ThenBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(file => file.SourcePath, StringComparer.OrdinalIgnoreCase)
             .ToList();
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult<IReadOnlyList<RenameFileEntry>>(files);
+    }
+
+    private static IEnumerable<FileInfo> EnumerateVideoFiles(string directoryPath)
+    {
+        var directory = new DirectoryInfo(directoryPath);
+        var options = new EnumerationOptions
+        {
+            IgnoreInaccessible = true,
+            RecurseSubdirectories = false,
+            AttributesToSkip = FileAttributes.System | FileAttributes.ReparsePoint
+        };
+        return directory.EnumerateFiles("*", options)
+            .Concat(directory.EnumerateDirectories("*", options).SelectMany(subDirectory =>
+            {
+                try { return subDirectory.EnumerateFiles("*", options); }
+                catch (Exception exception) when (exception is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
+                {
+                    return [];
+                }
+            }))
+            .Where(file => VideoExtensions.Contains(file.Extension));
     }
 
     public static void ValidateTemplatePattern(string pattern)
@@ -114,7 +134,9 @@ public sealed class RenameService(
             var episodeName = mappedEpisode?.Name
                 ?? (episode is not null && request.EpisodeNames.TryGetValue(episode.Value, out var value) ? value : string.Empty);
             var targetName = RenderFileName(request, file.SourcePath, media, season, episode, episodeName);
-            var targetPath = Path.Combine(request.DirectoryPath, targetName);
+            var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(file.SourcePath))
+                ?? throw new InvalidOperationException($"无法确定源文件目录：{file.Name}");
+            var targetPath = Path.Combine(sourceDirectory, targetName);
             var item = new RenamePreviewItem
             {
                 SourcePath = Path.GetFullPath(file.SourcePath),
@@ -132,7 +154,7 @@ public sealed class RenameService(
                 var oldStem = Path.GetFileNameWithoutExtension(file.SourcePath);
                 var newStem = Path.GetFileNameWithoutExtension(targetName);
                 var suffix = sidecar.Name[oldStem.Length..];
-                item.Operations.Add(new RenameFileOperation(sidecar.FullName, Path.Combine(request.DirectoryPath, newStem + suffix), true));
+                item.Operations.Add(new RenameFileOperation(sidecar.FullName, Path.Combine(sourceDirectory, newStem + suffix), true));
             }
             preview.Items.Add(item);
             context.AppendLog($"{file.Name}  →  {targetName}\n");
@@ -211,7 +233,7 @@ public sealed class RenameService(
         {
             @"\s*番外篇", @"\s*(番外|剧场版|剧版|外传|特別篇)", @"\s*\bSP\b",
             @"\s*(第[一二三四五六七八九十0-9]+季)", @"\s*(Season\s*[0-9IViv]+)",
-            @"\s*\([^)]*\)", @"\s*（[^）]*）"
+            @"\s*\{[^}]*\}", @"\s*\([^)]*\)", @"\s*（[^）]*）"
         }) cleaned = Regex.Replace(cleaned, pattern, string.Empty, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         var chinese = Regex.Matches(cleaned.Trim(), @"[\u4e00-\u9fff]+")
             .Select(match => match.Value)

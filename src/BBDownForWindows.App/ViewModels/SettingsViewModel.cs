@@ -269,9 +269,7 @@ public sealed class SettingsViewModel : ObservableObject
                 if (!CanApply(cancellationToken)) return;
                 WebAccount.SetChecking();
                 TvAccount.SetChecking();
-                var snapshot = await Task.Run(
-                    () => _services.AccountStatus.GetStatusAsync(cancellationToken),
-                    cancellationToken);
+                var snapshot = await Task.Run(() => _services.AccountStatus.GetStatusAsync(cancellationToken), cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!CanApply(cancellationToken)) return;
                 WebAccount.Apply(snapshot.Web);

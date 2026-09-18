@@ -87,7 +87,10 @@ public sealed class ToolLocator : IToolLocator
             RedirectStandardError = true
         };
         var fileName = Path.GetFileName(executable);
-        startInfo.ArgumentList.Add(fileName.Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase) || fileName.Equals("ffprobe.exe", StringComparison.OrdinalIgnoreCase) ? "-version" : fileName.Equals("BBDown.exe", StringComparison.OrdinalIgnoreCase) ? "--help" : "--version");
+        startInfo.ArgumentList.Add(
+            fileName.Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase) || fileName.Equals("ffprobe.exe", StringComparison.OrdinalIgnoreCase) ? "-version"
+            : fileName.Equals("BBDown.exe", StringComparison.OrdinalIgnoreCase) ? "--help"
+            : "--version");
         try
         {
             using var process = Process.Start(startInfo);

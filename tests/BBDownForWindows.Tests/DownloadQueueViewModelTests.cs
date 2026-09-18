@@ -84,7 +84,7 @@ public sealed class DownloadQueueViewModelTests
         foreach (var tab in viewModel.Tabs)
         {
             viewModel.SelectedTab = tab;
-            Assert.Equal(tab.Count, viewModel.Rows.Count);
+            Assert.Equal(viewModel.UsesPaging ? Math.Min(tab.Count, DownloadQueueViewModel.PageSize) : tab.Count, viewModel.Rows.Count);
             listed.AddRange(viewModel.Rows.Select(row => row.Item.Id));
         }
         Assert.Equal(items.Count, listed.Distinct().Count());
@@ -118,6 +118,7 @@ public sealed class DownloadQueueViewModelTests
         viewModel.SelectedTab = viewModel.Tabs.Single(tab => tab.Kind == DownloadQueueTabKind.Completed);
         Assert.Same(originalRow, Assert.Single(viewModel.Rows));
         Assert.Equal(Visibility.Collapsed, originalRow.ProgressVisibility);
+        Assert.Equal(Visibility.Collapsed, originalRow.ErrorVisibility);
         Assert.Equal(Visibility.Collapsed, viewModel.EmptyVisibility);
     }
 
@@ -142,5 +143,130 @@ public sealed class DownloadQueueViewModelTests
         Assert.Equal([2, 0, 0, 1], viewModel.Tabs.Select(tab => tab.Count));
         viewModel.SelectedTab = viewModel.Tabs.Single(tab => tab.Kind == DownloadQueueTabKind.Unsuccessful);
         Assert.Equal(failed.Id, Assert.Single(viewModel.Rows).Item.Id);
+        Assert.Equal(Visibility.Collapsed, viewModel.PagerVisibility);
+    }
+
+    [Fact]
+    public void CompletedTabPagesNewestFinishedFirstAndWaitingTabDoesNotPage()
+    {
+        var viewModel = new DownloadQueueViewModel();
+        var waiting = Enumerable.Range(0, 12).Select(_ => new DownloadQueueItem()).ToList();
+        var completed = Enumerable.Range(0, 12).Select(index => new DownloadQueueItem
+        {
+            State = DownloadQueueState.Completed,
+            AddedAt = DateTimeOffset.UnixEpoch.AddHours(index),
+            FinishedAt = DateTimeOffset.UnixEpoch.AddHours(index)
+        }).ToList();
+        viewModel.ApplySnapshot([.. waiting, .. completed]);
+        Assert.Equal(12, viewModel.Rows.Count);
+        Assert.Equal(Visibility.Collapsed, viewModel.PagerVisibility);
+        Assert.Equal(waiting[0].Id, viewModel.Rows[0].Item.Id);
+
+        viewModel.SelectedTab = viewModel.Tabs.Single(tab => tab.Kind == DownloadQueueTabKind.Completed);
+        Assert.Equal(Visibility.Visible, viewModel.PagerVisibility);
+        Assert.Equal(12, viewModel.SelectedTab.Count);
+        Assert.Equal(DownloadQueueViewModel.PageSize, viewModel.Rows.Count);
+        Assert.Equal(3, viewModel.TotalPages);
+        Assert.Equal("第 1 / 3 页 · 每页 5 条", viewModel.PageText);
+        Assert.Equal(completed[11].Id, viewModel.Rows[0].Item.Id);
+        Assert.Equal(completed[7].Id, viewModel.Rows[^1].Item.Id);
+        Assert.False(viewModel.PreviousPageCommand.CanExecute(null));
+        Assert.True(viewModel.NextPageCommand.CanExecute(null));
+
+        viewModel.NextPageCommand.Execute(null);
+        Assert.Equal(2, viewModel.PageNumber);
+        Assert.Equal(completed[6].Id, viewModel.Rows[0].Item.Id);
+        viewModel.NextPageCommand.Execute(null);
+        Assert.Equal(2, viewModel.Rows.Count);
+        Assert.Equal(completed[1].Id, viewModel.Rows[0].Item.Id);
+        Assert.Equal(completed[0].Id, viewModel.Rows[^1].Item.Id);
+        Assert.False(viewModel.NextPageCommand.CanExecute(null));
+
+        viewModel.SelectedTab = viewModel.Tabs[0];
+        viewModel.SelectedTab = viewModel.Tabs.Single(tab => tab.Kind == DownloadQueueTabKind.Completed);
+        Assert.Equal(1, viewModel.PageNumber);
+        Assert.Equal(completed[11].Id, viewModel.Rows[0].Item.Id);
+
+        viewModel.NextPageCommand.Execute(null);
+        viewModel.NextPageCommand.Execute(null);
+        viewModel.ApplySnapshot(waiting.Concat(completed.Take(6)).ToList());
+        Assert.Equal(2, viewModel.TotalPages);
+        Assert.Equal(2, viewModel.PageNumber);
+        Assert.Equal(completed[0].Id, Assert.Single(viewModel.Rows).Item.Id);
+    }
+
+    [Fact]
+    public void QueueRowShowsStateSpecificLocalTime()
+    {
+        var added = new DateTimeOffset(2026, 9, 11, 21, 0, 0, TimeSpan.FromHours(8));
+        var started = added.AddMinutes(5);
+        var finished = added.AddHours(1);
+        var waiting = new QueueRow(new() { AddedAt = added });
+        Assert.Equal("加入时间", waiting.TimeCaption);
+        Assert.Equal(added.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"), waiting.TimeText);
+
+        var running = new QueueRow(new() { State = DownloadQueueState.Running, AddedAt = added, StartedAt = started });
+        Assert.Equal("开始时间", running.TimeCaption);
+        Assert.Equal(started.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"), running.TimeText);
+
+        var completed = new QueueRow(new() { State = DownloadQueueState.Completed, AddedAt = added, FinishedAt = finished });
+        Assert.Equal("完成时间", completed.TimeCaption);
+        Assert.Equal(finished.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"), completed.TimeText);
+
+        var legacy = new QueueRow(new() { State = DownloadQueueState.Completed, AddedAt = added });
+        Assert.Equal(added.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"), legacy.TimeText);
+    }
+
+    [Theory]
+    [InlineData(DownloadQueueState.Waiting, DownloadQueueTabKind.Waiting)]
+    [InlineData(DownloadQueueState.Editing, DownloadQueueTabKind.Waiting)]
+    [InlineData(DownloadQueueState.Running, DownloadQueueTabKind.Active)]
+    [InlineData(DownloadQueueState.Paused, DownloadQueueTabKind.Active)]
+    [InlineData(DownloadQueueState.Completed, DownloadQueueTabKind.Completed)]
+    [InlineData(DownloadQueueState.Failed, DownloadQueueTabKind.Completed)]
+    public void LandingTabPrefersWaitingThenActiveThenCompleted(DownloadQueueState state, DownloadQueueTabKind expected)
+    {
+        var viewModel = new DownloadQueueViewModel();
+        var item = new DownloadQueueItem { State = state };
+        if (state == DownloadQueueState.Waiting) item.StartedAt = null;
+        viewModel.ApplySnapshot([item, new() { State = DownloadQueueState.Failed }]);
+        viewModel.SelectLandingTab();
+        Assert.Equal(expected, viewModel.SelectedTab.Kind);
+    }
+
+    [Fact]
+    public void LandingTabKeepsWaitingWhenLaterQueuesAreAlsoOccupied()
+    {
+        var viewModel = new DownloadQueueViewModel();
+        viewModel.ApplySnapshot(
+        [
+            new() { State = DownloadQueueState.Waiting },
+            new() { State = DownloadQueueState.Running },
+            new() { State = DownloadQueueState.Completed }
+        ]);
+        viewModel.SelectLandingTab();
+        Assert.Equal(DownloadQueueTabKind.Waiting, viewModel.SelectedTab.Kind);
+    }
+
+    [Fact]
+    public void EmptyQueueLandsOnCompleted()
+    {
+        var viewModel = new DownloadQueueViewModel();
+        viewModel.ApplySnapshot([]);
+        viewModel.SelectLandingTab();
+        Assert.Equal(DownloadQueueTabKind.Completed, viewModel.SelectedTab.Kind);
+    }
+
+    [Fact]
+    public void LandingTabDoesNotFollowLaterSnapshotChanges()
+    {
+        var viewModel = new DownloadQueueViewModel();
+        viewModel.ApplySnapshot([new() { State = DownloadQueueState.Completed }]);
+        viewModel.SelectLandingTab();
+        Assert.Equal(DownloadQueueTabKind.Completed, viewModel.SelectedTab.Kind);
+
+        viewModel.ApplySnapshot([new() { State = DownloadQueueState.Waiting }, new() { State = DownloadQueueState.Completed }]);
+        Assert.Equal(DownloadQueueTabKind.Completed, viewModel.SelectedTab.Kind);
+        Assert.Equal(DownloadQueueState.Completed, Assert.Single(viewModel.Rows).Item.State);
     }
 }

@@ -8,7 +8,7 @@
     <AssemblyTitle>Beflow</AssemblyTitle>
     <Product>Beflow</Product>
     <Description>A Simple Desktop Video Downloader / 基于 BBDown 构建的桌面视频下载器图形界面</Description>
-    <Version>1.1.1.12</Version>
+    <Version>1.1.1.13</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
@@ -27,6 +27,14 @@
   <ItemGroup>
     <ProjectReference Include="..\BBDownForWindows.Core\BBDownForWindows.Core.csproj" />
   </ItemGroup>
+
+  <Target Name="CopyRuntimeTools" AfterTargets="Build">
+    <ItemGroup>
+      <_RuntimeFfmpeg Include="$(MSBuildThisFileDirectory)..\..\tools\runtime\ffmpeg\ffmpeg.exe" Condition="Exists('$(MSBuildThisFileDirectory)..\..\tools\runtime\ffmpeg\ffmpeg.exe')" />
+      <_RuntimeFfprobe Include="$(MSBuildThisFileDirectory)..\..\tools\runtime\ffmpeg\ffprobe.exe" Condition="Exists('$(MSBuildThisFileDirectory)..\..\tools\runtime\ffmpeg\ffprobe.exe')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_RuntimeFfmpeg);@(_RuntimeFfprobe)" DestinationFolder="$(TargetDir)tools\ffmpeg" SkipUnchangedFiles="true" Condition="'@(_RuntimeFfmpeg)' != ''" />
+  </Target>
 
   <Target Name="CopyWinUiResourcesToPublish" AfterTargets="Publish">
     <ItemGroup>

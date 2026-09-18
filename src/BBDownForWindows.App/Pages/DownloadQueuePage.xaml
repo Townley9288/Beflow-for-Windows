@@ -40,7 +40,7 @@
                 </ListView>
             </Border>
             <Grid Grid.Column="1" RowSpacing="10">
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <StackPanel Orientation="Horizontal" Spacing="10" Padding="0,8">
                     <TextBlock Text="{Binding SelectedTab.Title}" FontSize="20" FontWeight="SemiBold"/>
                     <TextBlock Text="{Binding SelectedTab.CountText}" Opacity="0.65" VerticalAlignment="Center"/>
@@ -63,17 +63,20 @@
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <Border Padding="12" Margin="0,3" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                                <StackPanel Spacing="6">
-                                    <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding StateText}"/>
+                                <StackPanel>
+                                    <Grid ColumnSpacing="12" Margin="0,0,0,6"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding StateText}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                                     </Grid>
-                                    <TextBlock Text="{Binding Summary}" Opacity="0.7"/>
-                                    <TextBlock Text="{Binding Links}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Links}" FontSize="12"/>
-                                    <TextBlock Text="{Binding OutputDirectory}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding OutputDirectory}" FontSize="12"/>
-                                    <TextBlock Text="{Binding ProgressText}" TextTrimming="CharacterEllipsis" Visibility="{Binding ProgressVisibility}"/>
-                                    <ProgressBar Value="{Binding Percent}" IsIndeterminate="{Binding Indeterminate}" Visibility="{Binding ProgressVisibility}" Maximum="100"/>
-                                    <TextBlock Text="{Binding Error}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"/>
+                                    <Grid ColumnSpacing="12" Margin="0,0,0,6"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Summary}" Opacity="0.7" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding TimeText}" FontSize="12" Opacity="0.65" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding TimeCaption}"/>
+                                    </Grid>
+                                    <TextBlock Text="{Binding Links}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Links}" FontSize="12" Margin="0,0,0,6"/>
+                                    <TextBlock Text="{Binding OutputDirectory}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding OutputDirectory}" FontSize="12" Margin="0,0,0,6"/>
+                                    <TextBlock Text="{Binding ProgressText}" TextTrimming="CharacterEllipsis" Visibility="{Binding ProgressVisibility}" Margin="0,0,0,6"/>
+                                    <ProgressBar Value="{Binding Percent}" IsIndeterminate="{Binding Indeterminate}" Visibility="{Binding ProgressVisibility}" Maximum="100" Margin="0,0,0,6"/>
+                                    <TextBlock Text="{Binding Error}" Visibility="{Binding ErrorVisibility}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Margin="0,0,0,6"/>
                                     <controls:VariableWrapPanel HorizontalSpacing="6" VerticalSpacing="6">
                                         <Button Content="详情" Click="Details_Click"/>
                                         <Button Content="日志" Click="Logs_Click"/>
@@ -92,6 +95,12 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
+                <Grid Grid.Row="2" ColumnSpacing="8" Visibility="{Binding PagerVisibility}">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding PageText}" VerticalAlignment="Center" Opacity="0.65"/>
+                    <Button Grid.Column="1" Content="上一页" Command="{Binding PreviousPageCommand}" Click="QueuePage_Click"/>
+                    <Button Grid.Column="2" Content="下一页" Command="{Binding NextPageCommand}" Click="QueuePage_Click"/>
+                </Grid>
             </Grid>
         </Grid>
     </Grid>

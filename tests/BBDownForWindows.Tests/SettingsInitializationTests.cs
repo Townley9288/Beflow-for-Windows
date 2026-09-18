@@ -119,6 +119,8 @@ public sealed class SettingsInitializationTests
             State = TaskState.Running
         }, loginTaskId));
         Assert.False(SettingsPage.CanCancelQrTask(null, loginTaskId));
+        Assert.Contains("哔哩哔哩", SettingsPage.QrScanHint(TaskKind.LoginWeb), StringComparison.Ordinal);
+        Assert.Contains("TV", SettingsPage.QrGeneratingText(TaskKind.LoginTv), StringComparison.Ordinal);
     }
 
     private sealed class RecordingToolLocator : IToolLocator
@@ -146,7 +148,8 @@ public sealed class SettingsInitializationTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             lock (VersionThreads) VersionThreads.Add(Environment.CurrentManagedThreadId);
-            return Task.FromResult($"{Path.GetFileNameWithoutExtension(executable)} 1");
+            var name = Path.GetFileNameWithoutExtension(executable);
+            return Task.FromResult($"{name} 1");
         }
     }
 

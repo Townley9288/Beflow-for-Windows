@@ -18,11 +18,26 @@ public sealed class QueueRow(DownloadQueueItem item) : ObservableObject
         DownloadQueueState.Pausing => "正在停止", DownloadQueueState.Paused => "已暂停", DownloadQueueState.Completed => "完成",
         DownloadQueueState.PartialFailure => "部分失败", DownloadQueueState.Failed => "失败", DownloadQueueState.Cancelled => "已取消", _ => ""
     };
+    public string TimeCaption => Item.State switch
+    {
+        DownloadQueueState.Waiting or DownloadQueueState.Editing => "加入时间",
+        DownloadQueueState.Running or DownloadQueueState.Pausing or DownloadQueueState.Paused => "开始时间",
+        DownloadQueueState.Completed => "完成时间",
+        _ => "结束时间"
+    };
+    public string TimeText => DisplayTime(Item).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+    private static DateTimeOffset DisplayTime(DownloadQueueItem item) => item.State switch
+    {
+        DownloadQueueState.Waiting or DownloadQueueState.Editing => item.AddedAt,
+        DownloadQueueState.Running or DownloadQueueState.Pausing or DownloadQueueState.Paused => item.StartedAt ?? item.AddedAt,
+        _ => item.FinishedAt ?? item.AddedAt
+    };
     public Visibility WaitingVisibility => Item.CanEdit ? Visibility.Visible : Visibility.Collapsed;
     public Visibility RunningVisibility => Item.State == DownloadQueueState.Running ? Visibility.Visible : Visibility.Collapsed;
     public Visibility RemoveVisibility => Item.State is DownloadQueueState.Running or DownloadQueueState.Pausing or DownloadQueueState.Editing ? Visibility.Collapsed : Visibility.Visible;
     public Visibility RetryVisibility => Item.IsTerminal && (Item.Failed > 0 || Item.State == DownloadQueueState.Failed) ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ProgressVisibility => Item.State is DownloadQueueState.Running or DownloadQueueState.Pausing ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(Item.Error) ? Visibility.Collapsed : Visibility.Visible;
     public Visibility RenameVisibility => RenameContext is not null ? Visibility.Visible : Visibility.Collapsed;
     public RenameNavigationContext? RenameContext
     {

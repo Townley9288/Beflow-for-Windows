@@ -10,18 +10,27 @@ namespace BBDownForWindows.App.ViewModels;
 public sealed class RenameFileItemViewModel : ObservableObject
 {
     private bool _isSelected;
-    public RenameFileItemViewModel(RenameFileEntry entry)
+    public RenameFileItemViewModel(RenameFileEntry entry, string? directoryPath = null)
     {
         SourcePath = entry.SourcePath;
+        Name = FormatDisplayName(entry.SourcePath, directoryPath);
         DetectedEpisode = entry.DetectedEpisode;
         _isSelected = entry.IsSelected;
     }
     public string SourcePath { get; }
-    public string Name => Path.GetFileName(SourcePath);
+    public string Name { get; }
     public int? DetectedEpisode { get; }
     public string EpisodeText => DetectedEpisode is null ? "未识别" : $"E{DetectedEpisode:00}";
     public bool IsSelected { get => _isSelected; set => SetProperty(ref _isSelected, value); }
     public RenameFileEntry ToModel() => new() { SourcePath = SourcePath, DetectedEpisode = DetectedEpisode, IsSelected = IsSelected };
+
+    private static string FormatDisplayName(string path, string? directoryPath)
+    {
+        var fileName = Path.GetFileName(path);
+        if (string.IsNullOrWhiteSpace(directoryPath)) return fileName;
+        var relative = Path.GetRelativePath(directoryPath, path);
+        return string.IsNullOrWhiteSpace(relative) || relative.StartsWith("..", StringComparison.Ordinal) ? fileName : relative;
+    }
 }
 
 public sealed class RenameViewModel : ObservableObject
@@ -343,7 +352,7 @@ public sealed class RenameViewModel : ObservableObject
         Files.Clear();
         foreach (var file in await _services.Rename.ScanAsync(DirectoryPath, preferredFiles))
         {
-            var item = new RenameFileItemViewModel(file);
+            var item = new RenameFileItemViewModel(file, DirectoryPath);
             item.PropertyChanged += File_PropertyChanged;
             Files.Add(item);
         }

@@ -265,7 +265,7 @@
             <StackPanel MinWidth="300" Spacing="10" HorizontalAlignment="Center">
                 <Image x:Name="QrImage" Width="240" Height="240" Stretch="Uniform"/>
                 <TextBlock x:Name="QrStatus" Text="等待二维码生成…" HorizontalAlignment="Center" TextWrapping="Wrap"/>
-                <TextBlock Text="请使用哔哩哔哩客户端扫描并确认" Opacity="0.65" HorizontalAlignment="Center" TextWrapping="Wrap"/>
+                <TextBlock x:Name="QrHint" Text="请使用对应客户端扫描并确认" Opacity="0.65" HorizontalAlignment="Center" TextWrapping="Wrap"/>
             </StackPanel>
         </ContentDialog>
         <InfoBar x:Name="SettingsNotification"

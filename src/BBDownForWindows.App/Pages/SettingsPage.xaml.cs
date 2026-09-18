@@ -72,7 +72,7 @@ public sealed partial class SettingsPage : Page
     {
         var services = ((App)Application.Current).Services;
         var task = services.TaskManager.ActiveTask;
-        if (task is null || task.Kind is not (TaskKind.LoginWeb or TaskKind.LoginTv))
+        if (task is null || !IsQrLoginKind(task.Kind))
         {
             _qrTaskId = Guid.Empty;
             _qrCancelRequested = false;
@@ -89,10 +89,11 @@ public sealed partial class SettingsPage : Page
         if (task.State == TaskState.Running)
         {
             if (!_qrCancelRequested) ShowQrDialog();
+            QrHint.Text = QrScanHint(task.Kind);
             if (!File.Exists(services.Paths.QrCodeFile))
             {
                 QrImage.Source = null;
-                QrStatus.Text = task.Kind == TaskKind.LoginTv ? "正在生成 TV 登录二维码…" : "正在生成 WEB 登录二维码…";
+                QrStatus.Text = QrGeneratingText(task.Kind);
                 return;
             }
 
@@ -102,7 +103,7 @@ public sealed partial class SettingsPage : Page
                 _qrTimestamp = timestamp;
                 QrImage.Source = new BitmapImage(new Uri(services.Paths.QrCodeFile));
             }
-            QrStatus.Text = task.Kind == TaskKind.LoginTv ? "请使用哔哩哔哩客户端扫描 TV 登录二维码并确认" : "请使用哔哩哔哩客户端扫描 WEB 登录二维码并确认";
+            QrStatus.Text = QrWaitingText(task.Kind);
             return;
         }
 
@@ -164,5 +165,23 @@ public sealed partial class SettingsPage : Page
     internal static bool CanCancelQrTask(TaskSnapshot? task, Guid qrTaskId) =>
         task is { State: TaskState.Running }
         && task.Id == qrTaskId
-        && task.Kind is TaskKind.LoginWeb or TaskKind.LoginTv;
+        && IsQrLoginKind(task.Kind);
+
+    internal static bool IsQrLoginKind(TaskKind kind) =>
+        kind is TaskKind.LoginWeb or TaskKind.LoginTv;
+
+    internal static string QrGeneratingText(TaskKind kind) => kind switch
+    {
+        TaskKind.LoginTv => "正在生成 TV 登录二维码…",
+        _ => "正在生成 WEB 登录二维码…"
+    };
+
+    internal static string QrWaitingText(TaskKind kind) => kind switch
+    {
+        TaskKind.LoginTv => "请使用哔哩哔哩客户端扫描 TV 登录二维码并确认",
+        _ => "请使用哔哩哔哩客户端扫描 WEB 登录二维码并确认"
+    };
+
+    internal static string QrScanHint(TaskKind _) =>
+        "请使用哔哩哔哩客户端扫描并确认";
 }

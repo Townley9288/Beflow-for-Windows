@@ -171,7 +171,7 @@
                                     <Grid Padding="2,6" ColumnSpacing="6">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <CheckBox IsChecked="{x:Bind IsSelected, Mode=TwoWay}" MinWidth="0" Width="32" Padding="0" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                                        <TextBlock Grid.Column="1" Text="{x:Bind Name}" FontFamily="Consolas" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Name}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Name}" FontFamily="Consolas" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind SourcePath}" VerticalAlignment="Center"/>
                                         <TextBlock Grid.Column="2" Text="{x:Bind EpisodeText}" HorizontalAlignment="Right" Opacity="0.6" VerticalAlignment="Center"/>
                                     </Grid>
                                 </DataTemplate>

@@ -38,6 +38,7 @@ public sealed class RenameTests
     public void ExtractsChineseFolderTitleAndSanitizesWindowsDirectoryName()
     {
         Assert.Equal("流人", RenameService.ExtractTitleFromFolder("流人 第四季 (2024)"));
+        Assert.Equal("东大高武学院", RenameService.ExtractTitleFromFolder("东大高武学院.2026 {tmdb-323839}"));
         Assert.Equal("测试_标题", RenameService.SanitizeTitleDirectoryName("测试:标题."));
         Assert.Equal("_CON", RenameService.SanitizeTitleDirectoryName("CON"));
     }
@@ -184,6 +185,56 @@ public sealed class RenameTests
         Assert.Equal(RenameTemplate.SeriesDefault().Pattern, builtIn.Pattern);
         Assert.True(builtIn.BuiltIn);
         Assert.Contains(settings.Templates, template => template.Id == custom.Id && template.Pattern == custom.Pattern);
+    }
+
+    [Fact]
+    public async Task ScanFindsVideosInSeasonSubfoldersAndRenamesInPlace()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var season = Directory.CreateDirectory(Path.Combine(root.FullName, "Season 01"));
+            var nested = Directory.CreateDirectory(Path.Combine(season.FullName, "nested"));
+            var video = Path.Combine(season.FullName, "Show.S01E01.mkv");
+            File.WriteAllText(Path.Combine(root.FullName, "tvshow.nfo"), "show");
+            File.WriteAllText(video, "video");
+            File.WriteAllText(Path.Combine(season.FullName, "Show.S01E01.nfo"), "nfo");
+            File.WriteAllText(Path.Combine(nested.FullName, "too-deep.mkv"), "skip");
+
+            var harness = CreateHarness(root.FullName);
+            var files = await harness.Service.ScanAsync(root.FullName);
+            var file = Assert.Single(files);
+            Assert.Equal(video, file.SourcePath);
+            Assert.Equal(1, file.DetectedEpisode);
+
+            RenamePreview? preview = null;
+            await harness.TaskManager.RunExclusiveAsync(TaskKind.RenamePreview, false, "preview", async (context, token) =>
+            {
+                preview = await harness.Service.BuildPreviewAsync(new RenamePreviewRequest
+                {
+                    DirectoryPath = root.FullName,
+                    ChineseTitle = "东大高武学院",
+                    Year = "2026",
+                    Season = 1,
+                    TemplateName = "test",
+                    TemplatePattern = "{中文名}.{季}{集}{扩展名}",
+                    Files = files
+                }, context, token);
+            });
+
+            Assert.True(preview!.CanExecute);
+            var item = Assert.Single(preview.Items);
+            Assert.Equal(Path.Combine(season.FullName, "东大高武学院.S01E01.mkv"), item.TargetPath);
+
+            await harness.TaskManager.RunExclusiveAsync(TaskKind.RenameExecute, false, "rename", async (context, token) =>
+            {
+                await harness.Service.ExecuteAsync(preview, context, token);
+            });
+            Assert.True(File.Exists(Path.Combine(season.FullName, "东大高武学院.S01E01.mkv")));
+            Assert.True(File.Exists(Path.Combine(season.FullName, "东大高武学院.S01E01.nfo")));
+            Assert.True(File.Exists(Path.Combine(nested.FullName, "too-deep.mkv")));
+        }
+        finally { root.Delete(true); }
     }
 
     [Fact]

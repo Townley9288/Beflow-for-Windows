@@ -1,3 +1,4 @@
+using System.Net;
 using BBDownForWindows.Core;
 
 namespace BBDownForWindows.App;
@@ -7,8 +8,8 @@ public sealed class AppServices
     public AppServices(ApplicationPaths paths)
     {
         Paths = paths;
-        HttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        UpdateHttpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
+        HttpClient = CreateHttpClient(TimeSpan.FromSeconds(15));
+        UpdateHttpClient = CreateHttpClient(TimeSpan.FromMinutes(30));
         Settings = new SettingsStore(paths);
         History = new HistoryStore(paths);
         RenameSettings = new RenameSettingsStore(paths);
@@ -64,4 +65,14 @@ public sealed class AppServices
     public IAccountStatusService AccountStatus { get; }
     public IUpdateService Updates { get; }
     public UpdateCoordinator UpdateCoordinator { get; }
+
+    private static HttpClient CreateHttpClient(TimeSpan timeout) =>
+        new(new HttpClientHandler
+        {
+            AutomaticDecompression = DecompressionMethods.All,
+            UseCookies = false
+        }, disposeHandler: true)
+        {
+            Timeout = timeout
+        };
 }

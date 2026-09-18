@@ -583,6 +583,19 @@ public sealed class AppViewModelTests
     }
 
     [Fact]
+    public void RenameFileListShowsSeasonSubfolderRelativePath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "东大高武学院.2026 {tmdb-323839}");
+        var item = new RenameFileItemViewModel(new RenameFileEntry
+        {
+            SourcePath = Path.Combine(root, "Season 01", "Show.S01E01.mkv"),
+            DetectedEpisode = 1
+        }, root);
+
+        Assert.Equal(Path.Combine("Season 01", "Show.S01E01.mkv"), item.Name);
+    }
+
+    [Fact]
     public async Task RepeatedPreviewInvocationIsIgnoredWhileFirstPreviewIsStarting()
     {
         using var fixture = new AppFixture();
