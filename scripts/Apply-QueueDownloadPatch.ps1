@@ -47,8 +47,26 @@ Replace-QueueSource 'BBDown/Program.cs' '                    var files = GetFile
                         ? Enumerable.Range(0, clips.Count).Select(i => $"{p.aid}/{p.aid}.P{p.index}.{p.cid}.{i.ToString(pad)}.mp4").ToArray()
                         : GetFiles(Path.GetDirectoryName(videoPath)!, ".mp4");
 '@
+# Capture the user's choice before BBDown replaces an empty UposHost on the first page.
+# Every page and retry must retain that original choice.
+Replace-QueueSource 'BBDown/Program.cs' '            bool cheese = vInfo.IsCheese;' @'
+            bool cheese = vInfo.IsCheese;
+            bool beflowUseDefaultMirrors = myOption.ForceReplaceHost && string.IsNullOrEmpty(myOption.UposHost);
+'@
+Replace-QueueSource 'BBDown/Program.cs' 'downloadDanmaku, input, savePathFormat, lang, aidOri, apiType, relatedTask);' 'downloadDanmaku, input, savePathFormat, lang, aidOri, apiType, beflowUseDefaultMirrors, relatedTask);'
+Replace-QueueSource 'BBDown/Program.cs' 'string lang, string aidOri, string apiType, DownloadTask? relatedTask = null)' 'string lang, string aidOri, string apiType, bool beflowUseDefaultMirrors, DownloadTask? relatedTask = null)'
+Replace-QueueSource 'BBDown/Program.cs' '                    UseAria2c = myOption.UseAria2c,' @'
+                    UseAria2c = myOption.UseAria2c,
+                    BeflowUseDefaultMirrors = beflowUseDefaultMirrors,
+'@
+Replace-QueueSource 'BBDown/BBDownDownloadUtil.cs' '            public bool UseAria2c { get; set; } = false;' @'
+            public bool UseAria2c { get; set; } = false;
+            public bool BeflowUseDefaultMirrors { get; set; } = false;
+'@
+Replace-QueueSource 'BBDown/BBDownDownloadUtil.cs' 'DownloadFileByAria2cAsync(url, path, config.Aria2cArgs)' 'DownloadFileByAria2cAsync(url, path, config.Aria2cArgs, config.BeflowUseDefaultMirrors)' 2
 Replace-QueueSource 'BBDown/BBDownAria2c.cs' '            await RunCommandCodeAsync(ARIA2C,' '            var code = await RunCommandCodeAsync(ARIA2C,'
-Replace-QueueSource 'BBDown/BBDownAria2c.cs' '{extraArgs} \"{url}\" -d' '{extraArgs} {BeflowMirrorUris(url)} -d'
+Replace-QueueSource 'BBDown/BBDownAria2c.cs' '(string url, string path, string extraArgs)' '(string url, string path, string extraArgs, bool useDefaultMirrors)'
+Replace-QueueSource 'BBDown/BBDownAria2c.cs' '{extraArgs} \"{url}\" -d' '{extraArgs} {BeflowMirrorUris(url, useDefaultMirrors)} -d'
 Replace-QueueSource 'BBDown/BBDownAria2c.cs' '        public static async Task DownloadFileByAria2cAsync(' @'
         // BBDown pins every stream to one default mirror, which congests when a popular episode goes live.
         // The signed path is valid on the other upos mirrors, so aria2 can spread connections and favor the fastest node.
@@ -58,10 +76,10 @@ Replace-QueueSource 'BBDown/BBDownAria2c.cs' '        public static async Task D
             "upos-sz-mirrorhw.bilivideo.com", "upos-sz-mirrorcos.bilivideo.com"
         };
 
-        internal static string BeflowMirrorUris(string url)
+        internal static string BeflowMirrorUris(string url, bool useDefaultMirrors)
         {
             var pinned = $"://{BeflowMirrorHosts[0]}/";
-            if (!url.Contains(pinned)) return $"\"{url}\"";
+            if (!useDefaultMirrors || !url.Contains(pinned)) return $"\"{url}\"";
             return string.Join(" ", System.Array.ConvertAll(BeflowMirrorHosts, host => $"\"{url.Replace(pinned, $"://{host}/")}\""));
         }
 

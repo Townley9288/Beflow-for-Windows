@@ -19,12 +19,12 @@ namespace BBDown
     internal static class BBDownDownloadUtil
     {
         public sealed class DownloadConfig
-        { public bool ForceHttp; public bool MultiThread; public bool UseAria2c; public string Aria2cArgs = ""; public object? RelatedTask; }
+        { public bool ForceHttp; public bool MultiThread; public bool UseAria2c; public bool BeflowUseDefaultMirrors; public string Aria2cArgs = ""; public object? RelatedTask; }
     }
     internal static class BBDownAria2c
     {
         public static string Executable = "";
-        public static async Task DownloadFileByAria2cAsync(string url, string path, string extraArgs)
+        public static async Task DownloadFileByAria2cAsync(string url, string path, string extraArgs, bool useDefaultMirrors)
         {
             var start = new ProcessStartInfo(Executable) { UseShellExecute = false, CreateNoWindow = true,
                 Arguments = $"{extraArgs} --console-log-level=error --summary-interval=0 \"{url}\" -d \"{Path.GetDirectoryName(path)}\" -o \"{Path.GetFileName(path)}\"" };
