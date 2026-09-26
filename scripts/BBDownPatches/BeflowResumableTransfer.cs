@@ -78,7 +78,7 @@ internal static class BeflowResumableTransfer
         {
             if (File.Exists(path) && !File.Exists(path + ".aria2"))
                 throw new IOException("aria2 文件缺少控制文件且尚未确认完成，请保留现场");
-            await BBDownAria2c.DownloadFileByAria2cAsync(url, path, config.Aria2cArgs);
+            await BBDownAria2c.DownloadFileByAria2cAsync(url, path, config.Aria2cArgs, config.BeflowUseDefaultMirrors);
             if (File.Exists(path + ".aria2") || !File.Exists(path) || new FileInfo(path).Length != manifest.Size)
                 throw new IOException("aria2 未确认完整传输");
             manifest.FinalHash = HashFile(path); manifest.Completed = true; Save(manifestPath, manifest);
