@@ -48,6 +48,25 @@ Replace-QueueSource 'BBDown/Program.cs' '                    var files = GetFile
                         : GetFiles(Path.GetDirectoryName(videoPath)!, ".mp4");
 '@
 Replace-QueueSource 'BBDown/BBDownAria2c.cs' '            await RunCommandCodeAsync(ARIA2C,' '            var code = await RunCommandCodeAsync(ARIA2C,'
+Replace-QueueSource 'BBDown/BBDownAria2c.cs' '{extraArgs} \"{url}\" -d' '{extraArgs} {BeflowMirrorUris(url)} -d'
+Replace-QueueSource 'BBDown/BBDownAria2c.cs' '        public static async Task DownloadFileByAria2cAsync(' @'
+        // BBDown pins every stream to one default mirror, which congests when a popular episode goes live.
+        // The signed path is valid on the other upos mirrors, so aria2 can spread connections and favor the fastest node.
+        private static readonly string[] BeflowMirrorHosts =
+        {
+            "upos-sz-mirrorcoso1.bilivideo.com", "upos-sz-mirrorali.bilivideo.com",
+            "upos-sz-mirrorhw.bilivideo.com", "upos-sz-mirrorcos.bilivideo.com"
+        };
+
+        internal static string BeflowMirrorUris(string url)
+        {
+            var pinned = $"://{BeflowMirrorHosts[0]}/";
+            if (!url.Contains(pinned)) return $"\"{url}\"";
+            return string.Join(" ", System.Array.ConvertAll(BeflowMirrorHosts, host => $"\"{url.Replace(pinned, $"://{host}/")}\""));
+        }
+
+        public static async Task DownloadFileByAria2cAsync(
+'@
 Replace-QueueSource 'BBDown/BBDownAria2c.cs' @'
         }
     }
