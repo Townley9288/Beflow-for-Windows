@@ -9,21 +9,36 @@ namespace BBDownForWindows.Tests;
 
 public sealed class BilibiliSpaceTests
 {
+    private const string WbiNav = """{"code":0,"data":{"wbi_img":{"img_url":"https://image.test/0123456789abcdef0123456789abcdef.png","sub_url":"https://image.test/fedcba9876543210fedcba9876543210.png"}}}""";
+    private const string EmptySearch = """{"code":0,"data":{"page":1,"pagesize":20,"numResults":0,"numPages":0,"result":[]}}""";
+
     [Fact]
     public async Task UserSearchEscapesKeywordUsesWebCredentialAndReturnsPublicDetails()
     {
         using var fixture = new Fixture();
         await File.WriteAllTextAsync(fixture.Paths.WebCredentialFile, "session=test-only");
+        var requests = new List<string>();
         using var client = new HttpClient(new Handler(request =>
         {
-            Assert.Equal("/x/web-interface/search/type", request.RequestUri!.AbsolutePath);
-            Assert.Contains("keyword=" + Uri.EscapeDataString("UP & 中文"), request.RequestUri.Query);
-            Assert.Contains("page=2", request.RequestUri.Query);
+            requests.Add(request.RequestUri!.AbsolutePath);
+            Assert.Equal("api.bilibili.com", request.RequestUri.Host);
             Assert.Equal("https://search.bilibili.com/", request.Headers.Referrer!.AbsoluteUri);
             Assert.Equal("session=test-only", request.Headers.GetValues("Cookie").Single());
+            if (request.RequestUri.AbsolutePath == "/x/web-interface/nav") return WbiNav;
+            Assert.Equal("/x/web-interface/wbi/search/type", request.RequestUri.AbsolutePath);
+            Assert.Contains("keyword=" + Uri.EscapeDataString("UP & 中文"), request.RequestUri.Query);
+            Assert.Contains("page=2", request.RequestUri.Query);
+            Assert.Contains("web_location=1430654", request.RequestUri.Query);
+            var signedQuery = request.RequestUri.Query[1..].Split("&w_rid=");
+            Assert.Equal(2, signedQuery.Length);
+            Assert.Contains("wts=1702204169", signedQuery[0]);
+            // Independently calculated from the nav response's WBI material.
+            const string mixin = "1022a87ffdaf532cb45ee953dce8c96d";
+            var hash = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(signedQuery[0] + mixin))).ToLowerInvariant();
+            Assert.Equal(hash, signedQuery[1]);
             return """{"code":0,"data":{"page":2,"pagesize":20,"numResults":21,"numPages":2,"result":[{"mid":123,"uname":"<em class=\"keyword\">UP</em> &amp; 中文","upic":"//image.test/avatar","usign":"简介 &amp; 签名","fans":1000,"videos":70,"official_verify":{"type":0,"desc":"认证信息"}}]}}""";
         }));
-        var page = await new BilibiliSpaceService(client, fixture.Paths).SearchUsersAsync(" UP & 中文 ", 2);
+        var page = await new BilibiliSpaceService(client, fixture.Paths, new FixedClock()).SearchUsersAsync(" UP & 中文 ", 2);
         var user = Assert.Single(page.Items);
         Assert.Equal("UP & 中文", user.Name);
         Assert.Equal("https://image.test/avatar", user.AvatarUrl);
@@ -34,17 +49,22 @@ public sealed class BilibiliSpaceTests
         Assert.False(page.HasMore);
         Assert.Equal(21, page.Total);
         Assert.Empty(client.DefaultRequestHeaders);
+        Assert.Equal(["/x/web-interface/nav", "/x/web-interface/wbi/search/type"], requests);
     }
 
     [Theory]
     [InlineData("{\"page\":1,\"pagesize\":20,\"numResults\":0,\"numPages\":0,\"result\":[]}", true)]
-    [InlineData("{\"page\":1,\"pagesize\":20,\"numResults\":0,\"numPages\":0}", false)]
+    [InlineData("{\"page\":1,\"pagesize\":20,\"numResults\":0,\"numPages\":0}", true)]
+    [InlineData("{\"page\":1,\"pagesize\":20,\"numResults\":0,\"numPages\":0,\"result\":null}", false)]
+    [InlineData("{\"page\":1,\"pagesize\":20,\"numResults\":0,\"numPages\":1,\"result\":[]}", false)]
+    [InlineData("{\"page\":1,\"pagesize\":20,\"numResults\":21,\"numPages\":2}", false)]
     [InlineData("{\"page\":1,\"pagesize\":20,\"numResults\":21,\"numPages\":2,\"result\":[]}", false)]
     [InlineData("{\"page\":2,\"pagesize\":20,\"numResults\":0,\"numPages\":0,\"result\":[]}", false)]
     public async Task SearchRequiresValidPageAndResultShape(string data, bool empty)
     {
         using var fixture = new Fixture();
-        using var client = new HttpClient(new Handler(_ => "{\"code\":0,\"data\":" + data + "}"));
+        using var client = new HttpClient(new Handler(request => request.RequestUri!.AbsolutePath == "/x/web-interface/nav"
+            ? WbiNav : "{\"code\":0,\"data\":" + data + "}"));
         var service = new BilibiliSpaceService(client, fixture.Paths);
         if (empty) Assert.Empty((await service.SearchUsersAsync("UP", 1)).Items);
         else await Assert.ThrowsAsync<InvalidDataException>(() => service.SearchUsersAsync("UP", 1));
@@ -56,10 +76,16 @@ public sealed class BilibiliSpaceTests
     public async Task SearchApiFailureIsNotAnEmptyResult(int code, string hint)
     {
         using var fixture = new Fixture();
-        using var client = new HttpClient(new Handler(_ => JsonSerializer.Serialize(new { code, message = "failure" })));
+        var requests = new List<string>();
+        using var client = new HttpClient(new Handler(request =>
+        {
+            requests.Add(request.RequestUri!.AbsolutePath);
+            return request.RequestUri.AbsolutePath == "/x/web-interface/nav" ? WbiNav : JsonSerializer.Serialize(new { code, message = "failure" });
+        }));
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new BilibiliSpaceService(client, fixture.Paths).SearchUsersAsync("UP", 1));
         Assert.Contains("UP 主搜索", ex.Message);
         Assert.Contains(hint, ex.Message);
+        Assert.Equal(["/x/web-interface/nav", "/x/web-interface/wbi/search/type"], requests);
     }
 
     [Fact]
@@ -74,6 +100,48 @@ public sealed class BilibiliSpaceTests
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.SearchUsersAsync("UP", 1, cancellation.Token));
+    }
+
+    [Fact]
+    public async Task SearchSharesKeyAcrossKeywordsAndRefreshesAfterCredentialChangeOrExpiry()
+    {
+        using var fixture = new Fixture();
+        var time = new FixedClock();
+        var navCalls = 0;
+        var searchCalls = 0;
+        using var client = new HttpClient(new Handler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/x/web-interface/nav") { navCalls++; return WbiNav; }
+            Assert.Equal("/x/web-interface/wbi/search/type", request.RequestUri.AbsolutePath);
+            searchCalls++;
+            return EmptySearch;
+        }));
+        var service = new BilibiliSpaceService(client, fixture.Paths, time);
+        await service.SearchUsersAsync("UP", 1);
+        await service.SearchUsersAsync("UP 二", 1);
+        Assert.Equal(1, navCalls);
+        await File.WriteAllTextAsync(fixture.Paths.WebCredentialFile, "session=changed");
+        await service.SearchUsersAsync("UP 三", 1);
+        Assert.Equal(2, navCalls);
+        time.Now = time.Now.AddMinutes(11);
+        await service.SearchUsersAsync("UP 四", 1);
+        Assert.Equal(3, navCalls);
+        Assert.Equal(4, searchCalls);
+    }
+
+    [Fact]
+    public async Task InvalidSearchSignatureMaterialStopsWithoutUnsignedRequest()
+    {
+        using var fixture = new Fixture();
+        var calls = 0;
+        using var client = new HttpClient(new Handler(request =>
+        {
+            calls++;
+            Assert.Equal("/x/web-interface/nav", request.RequestUri!.AbsolutePath);
+            return """{"code":0,"data":{"wbi_img":{}}}""";
+        }));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new BilibiliSpaceService(client, fixture.Paths).SearchUsersAsync("UP", 1));
+        Assert.Equal(1, calls);
     }
 
     [Fact]
@@ -201,6 +269,11 @@ public sealed class BilibiliSpaceTests
         Assert.Throws<InvalidOperationException>(() => BilibiliSpaceBatchService.OutputRoot(root, profile with { Uid = "../bad" }));
     }
 
+    private sealed class FixedClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = DateTimeOffset.FromUnixTimeSeconds(1702204169);
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
     private sealed class Handler(Func<HttpRequestMessage, string> response, HttpStatusCode status = HttpStatusCode.OK) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

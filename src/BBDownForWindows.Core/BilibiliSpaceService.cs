@@ -20,20 +20,31 @@ public sealed class BilibiliSpaceService(HttpClient httpClient, ApplicationPaths
     {
         if (string.IsNullOrWhiteSpace(keyword)) throw new ArgumentException("请输入 UP 主名称。", nameof(keyword));
         if (page < 1) throw new ArgumentOutOfRangeException(nameof(page));
-        using var json = await GetAsync($"x/web-interface/search/type?search_type=bili_user&keyword={Uri.EscapeDataString(keyword.Trim())}&page={page}&page_size=20",
-            "https://search.bilibili.com/", cancellationToken, operation: "UP 主搜索");
+        const string referer = "https://search.bilibili.com/";
+        var credential = await ReadCredentialAsync(cancellationToken);
+        var key = await GetKeyAsync(referer, credential, cancellationToken, "UP 主搜索");
+        var query = Sign(new Dictionary<string, string>
+        {
+            ["search_type"] = "bili_user", ["keyword"] = keyword.Trim(),
+            ["page"] = page.ToString(CultureInfo.InvariantCulture), ["page_size"] = "20", ["web_location"] = "1430654"
+        }, key, clock.GetUtcNow().ToUnixTimeSeconds());
+        using var json = await GetAsync("x/web-interface/wbi/search/type?" + query,
+            referer, cancellationToken, credential, operation: "UP 主搜索");
         var data = json.RootElement.GetProperty("data");
         var number = Number(data, "page");
         var size = Number(data, "pagesize");
         var total = Number(data, "numResults");
         var pages = Number(data, "numPages");
-        var users = Required(data, "result", JsonValueKind.Array).EnumerateArray().Select(user => new BilibiliSpaceUser(
+        // The WEB search response omits result when both result and page counts are zero.
+        var users = total == 0 && pages == 0 && !data.TryGetProperty("result", out _)
+            ? new List<BilibiliSpaceUser>()
+            : Required(data, "result", JsonValueKind.Array).EnumerateArray().Select(user => new BilibiliSpaceUser(
             Scalar(user, "mid"), PlainSearchText(Text(user, "uname", true)), Image(user, "upic"), PlainSearchText(Text(user, "usign")),
             Long(user, "fans"), Number(user, "videos"),
             user.TryGetProperty("official_verify", out var verification) && verification.ValueKind == JsonValueKind.Object
                 ? PlainSearchText(Text(verification, "desc")) : "")).DistinctBy(user => user.Uid).ToList();
         if (number != page || size <= 0 || total < 0 || pages < 0
-            || (total == 0 && users.Count != 0) || (total > 0 && (users.Count == 0 || pages < page)))
+            || (total == 0 && (users.Count != 0 || pages != 0)) || (total > 0 && (users.Count == 0 || pages < page)))
             throw new InvalidDataException("UP 主搜索分页数据不完整，请手动重试。");
         return new(users, number, size, total, pages);
     }
@@ -53,7 +64,7 @@ public sealed class BilibiliSpaceService(HttpClient httpClient, ApplicationPaths
     {
         ValidatePage(uid, page);
         var credential = await ReadCredentialAsync(cancellationToken);
-        var key = await GetKeyAsync(uid, credential, cancellationToken);
+        var key = await GetKeyAsync($"https://space.bilibili.com/{uid}/", credential, cancellationToken);
         var query = Sign(new Dictionary<string, string>
         {
             ["mid"] = uid, ["order"] = "pubdate", ["pn"] = page.ToString(CultureInfo.InvariantCulture),
@@ -106,13 +117,13 @@ public sealed class BilibiliSpaceService(HttpClient httpClient, ApplicationPaths
         return new(videos, Number(paging, season ? "page_num" : "num"), Number(paging, season ? "page_size" : "size"), Number(paging, "total"));
     }
 
-    private async Task<string> GetKeyAsync(string uid, string credential, CancellationToken token)
+    private async Task<string> GetKeyAsync(string referer, string credential, CancellationToken token, string operation = "主页")
     {
         await signatureGate.WaitAsync(token);
         try
         {
             if (mixinKey.Length > 0 && keyExpires > clock.GetUtcNow() && signedCredential == credential) return mixinKey;
-            using var json = await GetAsync("x/web-interface/nav", $"https://space.bilibili.com/{uid}/", token, credential, allowAnonymousNav: true);
+            using var json = await GetAsync("x/web-interface/nav", referer, token, credential, allowAnonymousNav: true, operation: operation);
             var images = Required(json.RootElement.GetProperty("data"), "wbi_img", JsonValueKind.Object);
             var raw = Path.GetFileNameWithoutExtension(new Uri(Text(images, "img_url", true)).AbsolutePath)
                 + Path.GetFileNameWithoutExtension(new Uri(Text(images, "sub_url", true)).AbsolutePath);
