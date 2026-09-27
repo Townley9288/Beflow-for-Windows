@@ -105,6 +105,9 @@
                         <TextBlock Grid.Column="7" Text="状态" VerticalAlignment="Center" FontWeight="SemiBold"/>
                     </Grid>
                     <ListView Grid.Row="1" ItemsSource="{Binding VisibleRows}" SelectionMode="None" HorizontalContentAlignment="Stretch">
+                        <ListView.ItemContainerTransitions>
+                            <TransitionCollection/>
+                        </ListView.ItemContainerTransitions>
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="0"/><Setter Property="Height" Value="50"/></Style>
                         </ListView.ItemContainerStyle>

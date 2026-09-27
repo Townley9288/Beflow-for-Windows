@@ -671,6 +671,43 @@ public sealed class AppViewModelTests
             0);
     }
 
+    [Fact]
+    public void StreamingParseResultsUpdateEpisodeListIncrementallyWithoutResettingRows()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DownloadViewModel(fixture.Services);
+        var changes = new List<System.Collections.Specialized.NotifyCollectionChangedAction>();
+        viewModel.VisibleRows.CollectionChanged += (_, args) => changes.Add(args.Action);
+        void Report(DownloadEpisodeInfo episode) =>
+            viewModel.OnParseProgress(new DownloadParseProgress(1, 4, episode.Page.Number, episode.Page.Title, episode, string.Empty));
+
+        Report(ReadyEpisode(3, "第三集"));
+        Report(ReadyEpisode(1, "第一集"));
+        Report(new DownloadEpisodeInfo { Page = new PageInfo(2, "2", "第二集", "24m"), State = DownloadEpisodeParseState.Failed, Error = "超时" });
+        var first = viewModel.VisibleRows[0];
+        var third = viewModel.VisibleRows[2];
+        Report(ReadyEpisode(2, "第二集"));
+        Report(ReadyEpisode(4, "第四集"));
+        Report(ReadyEpisode(1, "第一集重复"));
+
+        Assert.Equal([1, 2, 3, 4], viewModel.VisibleRows.Select(row => row.PageNumber));
+        Assert.All(viewModel.VisibleRows, row => Assert.True(row.IsReady));
+        Assert.Same(first, viewModel.VisibleRows[0]);
+        Assert.Same(third, viewModel.VisibleRows[2]);
+        Assert.DoesNotContain(System.Collections.Specialized.NotifyCollectionChangedAction.Reset, changes);
+        // 4 次新增 + 失败行替换为就绪行（1 删 1 增），已有行不会被清空重建。
+        Assert.Equal(6, changes.Count);
+
+        changes.Clear();
+        viewModel.SearchText = "第二";
+        Assert.Equal([2], viewModel.VisibleRows.Select(row => row.PageNumber));
+        viewModel.SearchText = string.Empty;
+        Assert.Equal([1, 2, 3, 4], viewModel.VisibleRows.Select(row => row.PageNumber));
+        Assert.Same(first, viewModel.VisibleRows[0]);
+        Assert.DoesNotContain(System.Collections.Specialized.NotifyCollectionChangedAction.Reset, changes);
+        Assert.Equal("已选择 4/4 集 · 预计 480 MB", viewModel.SelectionSummary);
+    }
+
     private static DownloadEpisodeInfo ReadyEpisode(int page, string title) => new()
     {
         Page = new PageInfo(page, page.ToString(), title, "24m"),

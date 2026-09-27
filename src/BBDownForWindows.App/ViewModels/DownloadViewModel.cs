@@ -423,7 +423,7 @@ public sealed class DownloadViewModel : ObservableObject
         NotifyCommands();
     }
 
-    private void OnParseProgress(DownloadParseProgress update)
+    internal void OnParseProgress(DownloadParseProgress update)
     {
         ShowProgress = true;
         ProgressTitle = "正在解析视频规格";
@@ -481,41 +481,37 @@ public sealed class DownloadViewModel : ObservableObject
 
     private void AddOrReplaceEpisode(DownloadEpisodeInfo episode)
     {
-        var existing = Rows.FirstOrDefault(row => row.PageNumber == episode.Page.Number);
-        if (existing is not null)
-        {
-            if (existing.IsReady || !episode.State.Equals(DownloadEpisodeParseState.Ready)) return;
-            existing.SelectionChanged -= Row_SelectionChanged;
-            Rows.Remove(existing);
-        }
-        AddEpisode(episode);
-        SortRows();
-    }
-
-    private void AddEpisode(DownloadEpisodeInfo episode)
-    {
+        // Rows 始终按分集号有序；原地插入/替换单行，避免解析过程中整表重排导致列表闪烁。
+        var index = FindRowIndex(episode.Page.Number);
+        var exists = index < Rows.Count && Rows[index].PageNumber == episode.Page.Number;
+        if (exists && (Rows[index].IsReady || !episode.State.Equals(DownloadEpisodeParseState.Ready))) return;
         var row = new DownloadEpisodeViewModel(episode);
-        row.SelectionChanged += Row_SelectionChanged;
         if (row.IsReady)
         {
             row.ApplyRule(CurrentRule, CurrentDownloadMode);
             row.IsSelected = true;
         }
-        Rows.Add(row);
+        row.SelectionChanged += Row_SelectionChanged;
+        if (exists)
+        {
+            Rows[index].SelectionChanged -= Row_SelectionChanged;
+            Rows[index] = row;
+        }
+        else Rows.Insert(index, row);
         ApplyFilter();
         OnPropertyChanged(nameof(EpisodeCountText));
         OnSelectionChanged();
     }
 
-    private void SortRows()
+    private int FindRowIndex(int pageNumber)
     {
-        var ordered = Rows.OrderBy(row => row.PageNumber).ToList();
-        for (var target = 0; target < ordered.Count; target++)
+        int low = 0, high = Rows.Count;
+        while (low < high)
         {
-            var current = Rows.IndexOf(ordered[target]);
-            if (current != target) Rows.Move(current, target);
+            var middle = (low + high) / 2;
+            if (Rows[middle].PageNumber < pageNumber) low = middle + 1; else high = middle;
         }
-        ApplyFilter();
+        return low;
     }
 
     private void ApplyRuleToAll()
@@ -701,12 +697,21 @@ public sealed class DownloadViewModel : ObservableObject
 
     private void ApplyFilter()
     {
-        VisibleRows.Clear();
+        // 按差异增量同步可见行：只增删变化的行，不清空重建，已有行的容器与下拉框状态得以保留。
         var filter = SearchText.Trim();
-        foreach (var row in Rows.Where(row => string.IsNullOrWhiteSpace(filter)
-                                              || row.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)
-                                              || row.PageNumberText.Contains(filter, StringComparison.OrdinalIgnoreCase)))
-            VisibleRows.Add(row);
+        var visible = Rows.Where(row => string.IsNullOrWhiteSpace(filter)
+                                        || row.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                                        || row.PageNumberText.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+        var keep = visible.ToHashSet();
+        for (var index = VisibleRows.Count - 1; index >= 0; index--)
+            if (!keep.Contains(VisibleRows[index])) VisibleRows.RemoveAt(index);
+        for (var index = 0; index < visible.Count; index++)
+        {
+            if (index < VisibleRows.Count && ReferenceEquals(VisibleRows[index], visible[index])) continue;
+            var current = VisibleRows.IndexOf(visible[index]);
+            if (current >= 0) VisibleRows.Move(current, index);
+            else VisibleRows.Insert(index, visible[index]);
+        }
     }
 
     private void Row_SelectionChanged(object? sender, EventArgs e) => OnSelectionChanged();
