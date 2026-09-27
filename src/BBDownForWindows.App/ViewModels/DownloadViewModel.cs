@@ -49,6 +49,10 @@ public sealed class DownloadViewModel : ObservableObject
     private DownloadNamingProfileKind _restoredNamingProfileKind;
     private bool _loadingRestore;
     private int _parseGeneration;
+    private bool _sortDescending;
+    private bool _defaultSortDescending;
+    private bool _parseCurrentOnly;
+    private bool _defaultParseCurrentOnly;
 
     public DownloadViewModel(AppServices services) : this(services, TimeSpan.FromSeconds(3))
     {
@@ -62,12 +66,14 @@ public sealed class DownloadViewModel : ObservableObject
         Console = services.TaskConsole;
         ParseCurrentCommand = new AsyncRelayCommand(() => ParseAsync(DownloadParseMode.Current), CanParse);
         ParseAllCommand = new AsyncRelayCommand(() => ParseAsync(DownloadParseMode.All), CanParse);
+        StartParseCommand = new AsyncRelayCommand(() => ParseAsync(ParseCurrentOnly ? DownloadParseMode.Current : DownloadParseMode.All), CanParse);
         ContinueParseCommand = new AsyncRelayCommand(ContinueParseAsync, CanContinueParse);
         ApplyRuleCommand = new RelayCommand(ApplyRuleToAll, () => Rows.Count > 0 && !Console.IsBusy);
         SelectAllCommand = new RelayCommand(SelectAll, () => Rows.Count > 0 && !Console.IsBusy);
         InvertSelectionCommand = new RelayCommand(InvertSelection, () => Rows.Count > 0 && !Console.IsBusy);
         DownloadSelectedCommand = new AsyncRelayCommand(StartDownloadAsync, CanDownload);
         RetryFailedCommand = new AsyncRelayCommand(RetryFailedAsync, () => _failedPages.Count > 0 && !Console.IsBusy);
+        ToggleSortCommand = new RelayCommand(() => SortDescending = !SortDescending);
     }
 
     public IReadOnlyList<OptionItem> QualityRuleOptions { get; } =
@@ -123,6 +129,35 @@ public sealed class DownloadViewModel : ObservableObject
         }
     }
     public string SearchText { get => _searchText; set { if (SetProperty(ref _searchText, value)) ApplyFilter(); } }
+    public bool SortDescending
+    {
+        get => _sortDescending;
+        set
+        {
+            if (_sortDescending == value) return;
+            OnPropertyChanging();
+            _sortDescending = value;
+            ApplyFilter();
+            // Observers such as the page's scroll handler must see the new first row.
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SortGlyph));
+            OnPropertyChanged(nameof(SortToolTip));
+        }
+    }
+    public string SortGlyph => SortDescending ? "\uE74B" : "\uE74A";
+    internal static readonly IReadOnlyList<string> ParseScopeChoices = ["全部分集", "仅链接中的这一集"];
+    public IReadOnlyList<string> ParseScopeOptions => ParseScopeChoices;
+    public bool ParseCurrentOnly
+    {
+        get => _parseCurrentOnly;
+        set { if (SetProperty(ref _parseCurrentOnly, value)) OnPropertyChanged(nameof(ParseScopeText)); }
+    }
+    public string ParseScopeText
+    {
+        get => ParseScopeOptions[ParseCurrentOnly ? 1 : 0];
+        set { if (value is not null) ParseCurrentOnly = value == ParseScopeOptions[1]; }
+    }
+    public string SortToolTip => SortDescending ? "当前倒序（最新集在前），点击切换为正序" : "当前正序（第 1 集在前），点击切换为倒序";
     public string QualityRule { get => _qualityRule; set => SetProperty(ref _qualityRule, value); }
     public string Encoding { get => _encoding; set => SetProperty(ref _encoding, value); }
     public string AudioCodec { get => _audioCodec; set => SetProperty(ref _audioCodec, value); }
@@ -267,11 +302,13 @@ public sealed class DownloadViewModel : ObservableObject
     public IAsyncRelayCommand ParseCurrentCommand { get; }
     public IAsyncRelayCommand ParseAllCommand { get; }
     public IAsyncRelayCommand ContinueParseCommand { get; }
+    public IAsyncRelayCommand StartParseCommand { get; }
     public IRelayCommand ApplyRuleCommand { get; }
     public IRelayCommand SelectAllCommand { get; }
     public IRelayCommand InvertSelectionCommand { get; }
     public IAsyncRelayCommand DownloadSelectedCommand { get; }
     public IAsyncRelayCommand RetryFailedCommand { get; }
+    public IRelayCommand ToggleSortCommand { get; }
 
     public void Activate()
     {
@@ -299,6 +336,17 @@ public sealed class DownloadViewModel : ObservableObject
     {
         var latestSettings = await _services.Settings.LoadAsync();
         _downloadNaming = latestSettings.DownloadNaming.Clone();
+        // 默认排序只在首次进入或设置里的默认值变化时套用，不覆盖本次会话中手动切换的顺序。
+        if (!_initialized || latestSettings.EpisodeSortDescending != _defaultSortDescending)
+        {
+            _defaultSortDescending = latestSettings.EpisodeSortDescending;
+            SortDescending = _defaultSortDescending;
+        }
+        if (!_initialized || latestSettings.ParseCurrentEpisodeOnly != _defaultParseCurrentOnly)
+        {
+            _defaultParseCurrentOnly = latestSettings.ParseCurrentEpisodeOnly;
+            ParseCurrentOnly = _defaultParseCurrentOnly;
+        }
         if (!_initialized)
         {
             Apply(latestSettings);
@@ -419,11 +467,12 @@ public sealed class DownloadViewModel : ObservableObject
             ProgressDetail = $"成功解析 {Rows.Count(row => row.IsReady)}/{Rows.Count} 集";
         }
         ShowProgress = false;
-        _continueAvailable = mode == DownloadParseMode.All && Catalog is not null && Catalog.AllPages.Any(page => Rows.All(row => row.PageNumber != page.Number || !row.IsReady));
+        // 只解析了当前集时同样允许「继续解析」补齐目录中的其余分集。
+        _continueAvailable = Catalog is not null && Catalog.AllPages.Any(page => Rows.All(row => row.PageNumber != page.Number || !row.IsReady));
         NotifyCommands();
     }
 
-    private void OnParseProgress(DownloadParseProgress update)
+    internal void OnParseProgress(DownloadParseProgress update)
     {
         ShowProgress = true;
         ProgressTitle = "正在解析视频规格";
@@ -481,41 +530,37 @@ public sealed class DownloadViewModel : ObservableObject
 
     private void AddOrReplaceEpisode(DownloadEpisodeInfo episode)
     {
-        var existing = Rows.FirstOrDefault(row => row.PageNumber == episode.Page.Number);
-        if (existing is not null)
-        {
-            if (existing.IsReady || !episode.State.Equals(DownloadEpisodeParseState.Ready)) return;
-            existing.SelectionChanged -= Row_SelectionChanged;
-            Rows.Remove(existing);
-        }
-        AddEpisode(episode);
-        SortRows();
-    }
-
-    private void AddEpisode(DownloadEpisodeInfo episode)
-    {
+        // Rows 始终按分集号有序；原地插入/替换单行，避免解析过程中整表重排导致列表闪烁。
+        var index = FindRowIndex(episode.Page.Number);
+        var exists = index < Rows.Count && Rows[index].PageNumber == episode.Page.Number;
+        if (exists && (Rows[index].IsReady || !episode.State.Equals(DownloadEpisodeParseState.Ready))) return;
         var row = new DownloadEpisodeViewModel(episode);
-        row.SelectionChanged += Row_SelectionChanged;
         if (row.IsReady)
         {
             row.ApplyRule(CurrentRule, CurrentDownloadMode);
             row.IsSelected = true;
         }
-        Rows.Add(row);
+        row.SelectionChanged += Row_SelectionChanged;
+        if (exists)
+        {
+            Rows[index].SelectionChanged -= Row_SelectionChanged;
+            Rows[index] = row;
+        }
+        else Rows.Insert(index, row);
         ApplyFilter();
         OnPropertyChanged(nameof(EpisodeCountText));
         OnSelectionChanged();
     }
 
-    private void SortRows()
+    private int FindRowIndex(int pageNumber)
     {
-        var ordered = Rows.OrderBy(row => row.PageNumber).ToList();
-        for (var target = 0; target < ordered.Count; target++)
+        int low = 0, high = Rows.Count;
+        while (low < high)
         {
-            var current = Rows.IndexOf(ordered[target]);
-            if (current != target) Rows.Move(current, target);
+            var middle = (low + high) / 2;
+            if (Rows[middle].PageNumber < pageNumber) low = middle + 1; else high = middle;
         }
-        ApplyFilter();
+        return low;
     }
 
     private void ApplyRuleToAll()
@@ -701,12 +746,22 @@ public sealed class DownloadViewModel : ObservableObject
 
     private void ApplyFilter()
     {
-        VisibleRows.Clear();
+        // 按差异增量同步可见行：只增删变化的行，不清空重建，已有行的容器与下拉框状态得以保留。
         var filter = SearchText.Trim();
-        foreach (var row in Rows.Where(row => string.IsNullOrWhiteSpace(filter)
-                                              || row.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)
-                                              || row.PageNumberText.Contains(filter, StringComparison.OrdinalIgnoreCase)))
-            VisibleRows.Add(row);
+        var ordered = SortDescending ? Rows.Reverse() : Rows;
+        var visible = ordered.Where(row => string.IsNullOrWhiteSpace(filter)
+                                        || row.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                                        || row.PageNumberText.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+        var keep = visible.ToHashSet();
+        for (var index = VisibleRows.Count - 1; index >= 0; index--)
+            if (!keep.Contains(VisibleRows[index])) VisibleRows.RemoveAt(index);
+        for (var index = 0; index < visible.Count; index++)
+        {
+            if (index < VisibleRows.Count && ReferenceEquals(VisibleRows[index], visible[index])) continue;
+            var current = VisibleRows.IndexOf(visible[index]);
+            if (current >= 0) VisibleRows.Move(current, index);
+            else VisibleRows.Insert(index, visible[index]);
+        }
     }
 
     private void Row_SelectionChanged(object? sender, EventArgs e) => OnSelectionChanged();
@@ -726,6 +781,7 @@ public sealed class DownloadViewModel : ObservableObject
         ParseCurrentCommand.NotifyCanExecuteChanged();
         ParseAllCommand.NotifyCanExecuteChanged();
         ContinueParseCommand.NotifyCanExecuteChanged();
+        StartParseCommand.NotifyCanExecuteChanged();
         ApplyRuleCommand.NotifyCanExecuteChanged();
         SelectAllCommand.NotifyCanExecuteChanged();
         InvertSelectionCommand.NotifyCanExecuteChanged();

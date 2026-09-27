@@ -77,7 +77,42 @@ public sealed class SettingsViewModel : ObservableObject
     ];
     public IReadOnlyList<OptionItem> AudioBitrateOptions { get; } =
     [new("highest", "最高码率"), new("lowest", "最低码率")];
-    public AppSettings Settings { get => _settings; private set => SetProperty(ref _settings, value); }
+    public AppSettings Settings
+    {
+        get => _settings;
+        private set
+        {
+            if (!SetProperty(ref _settings, value)) return;
+            OnPropertyChanged(nameof(EpisodeSortText));
+            OnPropertyChanged(nameof(ParseScopeText));
+        }
+    }
+    public IReadOnlyList<string> EpisodeSortOptions { get; } = ["正序（第 1 集在前）", "倒序（最新集在前）"];
+    public IReadOnlyList<string> ParseScopeOptions => DownloadViewModel.ParseScopeChoices;
+    public string ParseScopeText
+    {
+        get => ParseScopeOptions[Settings.ParseCurrentEpisodeOnly ? 1 : 0];
+        set
+        {
+            if (value is null) return;
+            var currentOnly = value == ParseScopeOptions[1];
+            if (Settings.ParseCurrentEpisodeOnly == currentOnly) return;
+            Settings.ParseCurrentEpisodeOnly = currentOnly;
+            OnPropertyChanged();
+        }
+    }
+    public string EpisodeSortText
+    {
+        get => Settings.EpisodeSortDescending ? EpisodeSortOptions[1] : EpisodeSortOptions[0];
+        set
+        {
+            if (value is null) return;
+            var descending = value == EpisodeSortOptions[1];
+            if (Settings.EpisodeSortDescending == descending) return;
+            Settings.EpisodeSortDescending = descending;
+            OnPropertyChanged();
+        }
+    }
     public RenameSettings RenameSettings
     {
         get => _renameSettings;
@@ -349,8 +384,15 @@ public sealed class SettingsViewModel : ObservableObject
         try
         {
             var concurrency = Settings.ParseConcurrency;
+            var sortDescending = Settings.EpisodeSortDescending;
+            var currentEpisodeOnly = Settings.ParseCurrentEpisodeOnly;
             ParseConcurrencyPolicy.Validate(concurrency);
-            await UpdateStoredSettingsAsync(settings => settings.ParseConcurrency = concurrency);
+            await UpdateStoredSettingsAsync(settings =>
+            {
+                settings.ParseConcurrency = concurrency;
+                settings.EpisodeSortDescending = sortDescending;
+                settings.ParseCurrentEpisodeOnly = currentEpisodeOnly;
+            });
             SetMessage("解析设置已保存，下次解析生效", InfoBarSeverity.Success);
         }
         catch (InvalidOperationException exception)

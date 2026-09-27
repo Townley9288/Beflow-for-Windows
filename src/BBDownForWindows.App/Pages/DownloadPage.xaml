@@ -47,12 +47,14 @@
             <Border Grid.Row="1" Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     AllowDrop="True" DragOver="BilibiliInput_DragOver" Drop="BilibiliInput_Drop">
                 <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBox Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="输入 B站链接、BV、AV、EP 或 SS 号" VerticalAlignment="Center"
                              AllowDrop="True" DragOver="BilibiliInput_DragOver" Drop="BilibiliInput_Drop"/>
-                    <Button Grid.Column="1" Content="开始解析" Command="{Binding ParseAllCommand}" Style="{StaticResource AccentButtonStyle}"/>
-                    <Button Grid.Column="2" Content="继续解析" Command="{Binding ContinueParseCommand}"/>
-                    <Button Grid.Column="3" Content="取消" Command="{Binding Console.CancelCommand}"/>
+                    <ComboBox Grid.Column="1" MinWidth="160" VerticalAlignment="Center" ItemsSource="{Binding ParseScopeOptions}" SelectedItem="{Binding ParseScopeText, Mode=TwoWay}"
+                              ToolTipService.ToolTip="解析范围：全部分集，或只解析链接中指向的那一集" AutomationProperties.Name="解析范围"/>
+                    <Button Grid.Column="2" Content="开始解析" Command="{Binding StartParseCommand}" Style="{StaticResource AccentButtonStyle}"/>
+                    <Button Grid.Column="3" Content="继续解析" Command="{Binding ContinueParseCommand}"/>
+                    <Button Grid.Column="4" Content="取消" Command="{Binding Console.CancelCommand}"/>
                 </Grid>
             </Border>
 
@@ -96,7 +98,12 @@
                     <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <Grid Padding="10,0" ColumnSpacing="8" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="50"/><ColumnDefinition Width="1.6*"/><ColumnDefinition Width="100"/><ColumnDefinition Width="2.5*"/><ColumnDefinition Width="100"/><ColumnDefinition Width="1.4*"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="1" Text="分集" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        <Button Grid.Column="1" Padding="4,2" Margin="-4,0,0,0" Background="Transparent" BorderThickness="0" VerticalAlignment="Center" Command="{Binding ToggleSortCommand}" ToolTipService.ToolTip="{Binding SortToolTip}" AutomationProperties.Name="切换分集排序">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="分集" FontWeight="SemiBold"/>
+                                <FontIcon Glyph="{Binding SortGlyph}" FontSize="12"/>
+                            </StackPanel>
+                        </Button>
                         <TextBlock Grid.Column="2" Text="名称" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         <TextBlock Grid.Column="3" Text="大小" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         <TextBlock Grid.Column="4" Text="画质 / 分辨率 / 码率" VerticalAlignment="Center" FontWeight="SemiBold"/>
@@ -104,7 +111,10 @@
                         <TextBlock Grid.Column="6" Text="音频规格" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         <TextBlock Grid.Column="7" Text="状态" VerticalAlignment="Center" FontWeight="SemiBold"/>
                     </Grid>
-                    <ListView Grid.Row="1" ItemsSource="{Binding VisibleRows}" SelectionMode="None" HorizontalContentAlignment="Stretch">
+                    <ListView x:Name="EpisodeList" Grid.Row="1" ItemsSource="{Binding VisibleRows}" SelectionMode="None" HorizontalContentAlignment="Stretch">
+                        <ListView.ItemContainerTransitions>
+                            <TransitionCollection/>
+                        </ListView.ItemContainerTransitions>
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="0"/><Setter Property="Height" Value="50"/></Style>
                         </ListView.ItemContainerStyle>

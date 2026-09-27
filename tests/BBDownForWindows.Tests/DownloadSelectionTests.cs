@@ -379,6 +379,8 @@ public sealed class DownloadSelectionTests
 
         Assert.Single(catalog!.Episodes);
         Assert.Equal(1, catalog.Episodes[0].Page.Number);
+        // 目录仍包含全部分集，供「继续解析」补齐其余集。
+        Assert.Equal([1, 2], catalog.AllPages.Select(page => page.Number));
         Assert.DoesNotContain("-p", fixture.Runner.Requests[0].Arguments);
     }
 

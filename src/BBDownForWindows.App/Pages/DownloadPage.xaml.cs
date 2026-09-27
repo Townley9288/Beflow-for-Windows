@@ -18,6 +18,17 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
     {
         ViewModel = new DownloadViewModel(((App)Application.Current).Services);
         InitializeComponent();
+        ViewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName != nameof(DownloadViewModel.SortDescending)) return;
+            // Let collection moves and layout settle before overriding the old scroll anchor.
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (!IsLoaded || ViewModel.VisibleRows.Count == 0) return;
+                EpisodeList.UpdateLayout();
+                EpisodeList.ScrollIntoView(ViewModel.VisibleRows[0], ScrollIntoViewAlignment.Leading);
+            });
+        };
     }
 
     public DownloadViewModel ViewModel { get; }
@@ -38,8 +49,8 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
         if (e.Parameter is DownloadInputNavigationContext input
             && ViewModel.ApplyExternalInput(input.Input)
             && input.ParseAutomatically
-            && ViewModel.ParseAllCommand.CanExecute(null))
-            await ViewModel.ParseAllCommand.ExecuteAsync(null);
+            && ViewModel.StartParseCommand.CanExecute(null))
+            await ViewModel.StartParseCommand.ExecuteAsync(null);
         base.OnNavigatedTo(e);
     }
 
