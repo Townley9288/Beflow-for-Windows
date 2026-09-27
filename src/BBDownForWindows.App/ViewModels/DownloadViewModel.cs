@@ -49,6 +49,8 @@ public sealed class DownloadViewModel : ObservableObject
     private DownloadNamingProfileKind _restoredNamingProfileKind;
     private bool _loadingRestore;
     private int _parseGeneration;
+    private bool _sortDescending;
+    private bool _defaultSortDescending;
 
     public DownloadViewModel(AppServices services) : this(services, TimeSpan.FromSeconds(3))
     {
@@ -68,6 +70,7 @@ public sealed class DownloadViewModel : ObservableObject
         InvertSelectionCommand = new RelayCommand(InvertSelection, () => Rows.Count > 0 && !Console.IsBusy);
         DownloadSelectedCommand = new AsyncRelayCommand(StartDownloadAsync, CanDownload);
         RetryFailedCommand = new AsyncRelayCommand(RetryFailedAsync, () => _failedPages.Count > 0 && !Console.IsBusy);
+        ToggleSortCommand = new RelayCommand(() => SortDescending = !SortDescending);
     }
 
     public IReadOnlyList<OptionItem> QualityRuleOptions { get; } =
@@ -123,6 +126,19 @@ public sealed class DownloadViewModel : ObservableObject
         }
     }
     public string SearchText { get => _searchText; set { if (SetProperty(ref _searchText, value)) ApplyFilter(); } }
+    public bool SortDescending
+    {
+        get => _sortDescending;
+        set
+        {
+            if (!SetProperty(ref _sortDescending, value)) return;
+            OnPropertyChanged(nameof(SortGlyph));
+            OnPropertyChanged(nameof(SortToolTip));
+            ApplyFilter();
+        }
+    }
+    public string SortGlyph => SortDescending ? "\uE74B" : "\uE74A";
+    public string SortToolTip => SortDescending ? "当前倒序（最新集在前），点击切换为正序" : "当前正序（第 1 集在前），点击切换为倒序";
     public string QualityRule { get => _qualityRule; set => SetProperty(ref _qualityRule, value); }
     public string Encoding { get => _encoding; set => SetProperty(ref _encoding, value); }
     public string AudioCodec { get => _audioCodec; set => SetProperty(ref _audioCodec, value); }
@@ -272,6 +288,7 @@ public sealed class DownloadViewModel : ObservableObject
     public IRelayCommand InvertSelectionCommand { get; }
     public IAsyncRelayCommand DownloadSelectedCommand { get; }
     public IAsyncRelayCommand RetryFailedCommand { get; }
+    public IRelayCommand ToggleSortCommand { get; }
 
     public void Activate()
     {
@@ -299,6 +316,12 @@ public sealed class DownloadViewModel : ObservableObject
     {
         var latestSettings = await _services.Settings.LoadAsync();
         _downloadNaming = latestSettings.DownloadNaming.Clone();
+        // 默认排序只在首次进入或设置里的默认值变化时套用，不覆盖本次会话中手动切换的顺序。
+        if (!_initialized || latestSettings.EpisodeSortDescending != _defaultSortDescending)
+        {
+            _defaultSortDescending = latestSettings.EpisodeSortDescending;
+            SortDescending = _defaultSortDescending;
+        }
         if (!_initialized)
         {
             Apply(latestSettings);
@@ -699,7 +722,8 @@ public sealed class DownloadViewModel : ObservableObject
     {
         // 按差异增量同步可见行：只增删变化的行，不清空重建，已有行的容器与下拉框状态得以保留。
         var filter = SearchText.Trim();
-        var visible = Rows.Where(row => string.IsNullOrWhiteSpace(filter)
+        var ordered = SortDescending ? Rows.Reverse() : Rows;
+        var visible = ordered.Where(row => string.IsNullOrWhiteSpace(filter)
                                         || row.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)
                                         || row.PageNumberText.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
         var keep = visible.ToHashSet();

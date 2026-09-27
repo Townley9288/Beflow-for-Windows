@@ -708,6 +708,60 @@ public sealed class AppViewModelTests
         Assert.Equal("已选择 4/4 集 · 预计 480 MB", viewModel.SelectionSummary);
     }
 
+    [Fact]
+    public void EpisodeSortToggleReordersVisibleRowsWithoutResetting()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DownloadViewModel(fixture.Services);
+        void Report(DownloadEpisodeInfo episode) =>
+            viewModel.OnParseProgress(new DownloadParseProgress(1, 4, episode.Page.Number, episode.Page.Title, episode, string.Empty));
+
+        viewModel.ToggleSortCommand.Execute(null);
+        Assert.True(viewModel.SortDescending);
+        Report(ReadyEpisode(2, "第二集"));
+        Report(ReadyEpisode(4, "第四集"));
+        Report(ReadyEpisode(1, "第一集"));
+        Report(ReadyEpisode(3, "第三集"));
+        Assert.Equal([4, 3, 2, 1], viewModel.VisibleRows.Select(row => row.PageNumber));
+
+        var rows = viewModel.VisibleRows.ToHashSet();
+        var changes = new List<System.Collections.Specialized.NotifyCollectionChangedAction>();
+        viewModel.VisibleRows.CollectionChanged += (_, args) => changes.Add(args.Action);
+        viewModel.ToggleSortCommand.Execute(null);
+
+        Assert.False(viewModel.SortDescending);
+        Assert.Equal([1, 2, 3, 4], viewModel.VisibleRows.Select(row => row.PageNumber));
+        Assert.True(rows.SetEquals(viewModel.VisibleRows));
+        Assert.All(changes, action => Assert.Equal(System.Collections.Specialized.NotifyCollectionChangedAction.Move, action));
+        // 行本身始终按正序保存，下载顺序不受显示顺序影响。
+        Assert.Equal([1, 2, 3, 4], viewModel.Rows.Select(row => row.PageNumber));
+    }
+
+    [Fact]
+    public async Task DefaultEpisodeSortIsSavedAndAppliedToDownloadPage()
+    {
+        using var fixture = new AppFixture();
+        var settings = new SettingsViewModel(fixture.Services);
+        settings.EpisodeSortText = settings.EpisodeSortOptions[1];
+        await settings.SaveParseCommand.ExecuteAsync(null);
+        Assert.True((await fixture.Services.Settings.LoadAsync()).EpisodeSortDescending);
+
+        var viewModel = new DownloadViewModel(fixture.Services);
+        await viewModel.InitializeAsync(null);
+        Assert.True(viewModel.SortDescending);
+
+        // 会话内手动切换的顺序在返回下载页时保留，只有默认值改变时才重新套用。
+        viewModel.ToggleSortCommand.Execute(null);
+        await viewModel.InitializeAsync(null);
+        Assert.False(viewModel.SortDescending);
+
+        settings.EpisodeSortText = settings.EpisodeSortOptions[0];
+        await settings.SaveParseCommand.ExecuteAsync(null);
+        viewModel.ToggleSortCommand.Execute(null);
+        await viewModel.InitializeAsync(null);
+        Assert.False(viewModel.SortDescending);
+    }
+
     private static DownloadEpisodeInfo ReadyEpisode(int page, string title) => new()
     {
         Page = new PageInfo(page, page.ToString(), title, "24m"),

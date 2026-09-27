@@ -158,6 +158,11 @@
                     <ComboBox Header="解析并发数" HorizontalAlignment="Stretch" ItemsSource="{Binding ParseConcurrencyOptions}" SelectedItem="{Binding Settings.ParseConcurrency, Mode=TwoWay}"/>
                     <TextBlock Grid.Column="1" Text="默认 4 路，可选择 6 或 8 路。较高并发可能触发 B 站限流；保存后从下次解析生效。" Opacity="0.65" TextWrapping="Wrap" VerticalAlignment="Bottom"/>
                 </Grid>
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <ComboBox Header="默认分集排序" HorizontalAlignment="Stretch" ItemsSource="{Binding EpisodeSortOptions}" SelectedItem="{Binding EpisodeSortText, Mode=TwoWay}"/>
+                    <TextBlock Grid.Column="1" Text="连载番剧通常只需要最新几集，可设为倒序；下载页点击「分集」表头也可随时切换。" Opacity="0.65" TextWrapping="Wrap" VerticalAlignment="Bottom"/>
+                </Grid>
             </StackPanel>
         </Border>
         <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">

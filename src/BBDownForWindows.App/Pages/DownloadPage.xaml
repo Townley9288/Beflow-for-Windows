@@ -96,7 +96,12 @@
                     <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <Grid Padding="10,0" ColumnSpacing="8" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="50"/><ColumnDefinition Width="1.6*"/><ColumnDefinition Width="100"/><ColumnDefinition Width="2.5*"/><ColumnDefinition Width="100"/><ColumnDefinition Width="1.4*"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="1" Text="分集" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        <Button Grid.Column="1" Padding="4,2" Margin="-4,0,0,0" Background="Transparent" BorderThickness="0" VerticalAlignment="Center" Command="{Binding ToggleSortCommand}" ToolTipService.ToolTip="{Binding SortToolTip}" AutomationProperties.Name="切换分集排序">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="分集" FontWeight="SemiBold"/>
+                                <FontIcon Glyph="{Binding SortGlyph}" FontSize="12"/>
+                            </StackPanel>
+                        </Button>
                         <TextBlock Grid.Column="2" Text="名称" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         <TextBlock Grid.Column="3" Text="大小" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         <TextBlock Grid.Column="4" Text="画质 / 分辨率 / 码率" VerticalAlignment="Center" FontWeight="SemiBold"/>
