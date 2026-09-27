@@ -738,6 +738,33 @@ public sealed class AppViewModelTests
     }
 
     [Fact]
+    public void SortNotificationExposesTheNewFirstRowForScrolling()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DownloadViewModel(fixture.Services);
+        foreach (var number in Enumerable.Range(1, 40))
+            viewModel.OnParseProgress(new(number, 40, number, $"第 {number} 集", ReadyEpisode(number, $"第 {number} 集"), ""));
+
+        var firstRows = new List<int?>();
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(DownloadViewModel.SortDescending))
+                firstRows.Add(viewModel.VisibleRows.FirstOrDefault()?.PageNumber);
+        };
+        viewModel.ToggleSortCommand.Execute(null);
+        viewModel.ToggleSortCommand.Execute(null);
+        viewModel.SearchText = "P2";
+        viewModel.ToggleSortCommand.Execute(null);
+        viewModel.ToggleSortCommand.Execute(null);
+        viewModel.SearchText = "no matching episodes";
+        viewModel.ToggleSortCommand.Execute(null);
+
+        Assert.Equal(new int?[] { 40, 1, 29, 2, null }, firstRows);
+        Assert.Equal(40, viewModel.Rows.Count);
+        Assert.All(viewModel.Rows, row => Assert.True(row.IsSelected));
+    }
+
+    [Fact]
     public async Task DefaultEpisodeSortIsSavedAndAppliedToDownloadPage()
     {
         using var fixture = new AppFixture();

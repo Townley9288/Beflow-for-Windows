@@ -134,10 +134,14 @@ public sealed class DownloadViewModel : ObservableObject
         get => _sortDescending;
         set
         {
-            if (!SetProperty(ref _sortDescending, value)) return;
+            if (_sortDescending == value) return;
+            OnPropertyChanging();
+            _sortDescending = value;
+            ApplyFilter();
+            // Observers such as the page's scroll handler must see the new first row.
+            OnPropertyChanged();
             OnPropertyChanged(nameof(SortGlyph));
             OnPropertyChanged(nameof(SortToolTip));
-            ApplyFilter();
         }
     }
     public string SortGlyph => SortDescending ? "\uE74B" : "\uE74A";

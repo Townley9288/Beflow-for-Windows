@@ -20,9 +20,14 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
         InitializeComponent();
         ViewModel.PropertyChanged += (_, args) =>
         {
-            // 切换排序后回到列表顶部，否则滚动锚定会让首行（最新集）停在可视区外。
-            if (args.PropertyName == nameof(DownloadViewModel.SortDescending) && ViewModel.VisibleRows.Count > 0)
+            if (args.PropertyName != nameof(DownloadViewModel.SortDescending)) return;
+            // Let collection moves and layout settle before overriding the old scroll anchor.
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (!IsLoaded || ViewModel.VisibleRows.Count == 0) return;
+                EpisodeList.UpdateLayout();
                 EpisodeList.ScrollIntoView(ViewModel.VisibleRows[0], ScrollIntoViewAlignment.Leading);
+            });
         };
     }
 
