@@ -7,6 +7,29 @@ namespace BBDownForWindows.Tests;
 public sealed class DownloadQueueTests
 {
     [Fact]
+    public async Task BatchValidationIsAtomicAndPreservesIndependentP1Tasks()
+    {
+        using var f = new Fixture(); await f.Queue.PauseAsync();
+        var first = Job(f.Root); var invalid = Job(f.Root); invalid.Download!.Episodes.Clear();
+        await Assert.ThrowsAsync<InvalidDataException>(() => f.Queue.EnqueueManyAsync([first, invalid]));
+        Assert.Empty(f.Queue.Snapshot.Items);
+        var second = Job(f.Root); second.Download!.Options.Url = "https://www.bilibili.com/video/av2";
+        var ids = await f.Queue.EnqueueManyAsync([first, second]);
+        first.Download!.Episodes.Clear();
+        Assert.Equal(2, ids.Distinct().Count());
+        Assert.All(f.Queue.Snapshot.Items, item => Assert.Equal(1, Assert.Single(item.Download!.Episodes).PageNumber));
+        Assert.Equal("https://www.bilibili.com/video/av2", f.Queue.Snapshot.Items[1].Url);
+        Assert.Empty(f.Executor.Order);
+    }
+
+    [Fact]
+    public async Task BatchSaveFailurePublishesNothingAndStartsNoDownloads()
+    {
+        using var f = new Fixture(); await f.Queue.InitializeAsync(); f.Store.Fail = true;
+        await Assert.ThrowsAsync<IOException>(() => f.Queue.EnqueueManyAsync([Job(f.Root), Job(f.Root)]));
+        Assert.Empty(f.Queue.Snapshot.Items); Assert.Empty(f.Executor.Order); Assert.NotEmpty(f.Queue.Error);
+    }
+    [Fact]
     public async Task MixedQueueIsFifoSnapshotsAreIndependentAndParsingCanOverlap()
     {
         using var fixture = new Fixture();

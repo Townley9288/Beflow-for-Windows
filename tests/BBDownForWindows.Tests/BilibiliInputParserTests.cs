@@ -42,7 +42,6 @@ public sealed class BilibiliInputParserTests
     [InlineData("https://bilibili.com.evil.example/video/BV1xx411c7mD")]
     [InlineData("https://example.com/watch/BV1xx411c7mD")]
     [InlineData("https://www.bilibili.com/")]
-    [InlineData("https://space.bilibili.com/12345")]
     [InlineData("https://b23.tv/")]
     [InlineData("普通剪贴板文字")]
     public void RejectsUnsupportedClipboardContent(string text)
@@ -56,4 +55,27 @@ public sealed class BilibiliInputParserTests
         Assert.True(BilibiliInputParser.TryExtract("bv1XX411C7Md", out var found));
         Assert.Equal("BV1XX411C7Md", found);
     }
+
+    [Theory]
+    [InlineData("https://space.bilibili.com/538596213?spm_id_from=333.337.0.0")]
+    [InlineData("https://space.bilibili.com/538596213/upload/video")]
+    [InlineData("http://space.bilibili.com/538596213/video/")]
+    public void RecognizesAndNormalizesSpaceUrls(string input)
+    {
+        Assert.True(BilibiliInputParser.TryExtract(input, out var value));
+        Assert.Equal("https://space.bilibili.com/538596213", value);
+        Assert.True(BilibiliInputParser.TryGetSpaceUid(value, out var uid));
+        Assert.Equal("538596213", uid);
+    }
+
+    [Theory]
+    [InlineData("https://space.bilibili.com/0")]
+    [InlineData("https://space.bilibili.com/-1")]
+    [InlineData("https://space.bilibili.com/123/favlist")]
+    [InlineData("https://space.bilibili.com/123?fake=BV1xx411c7mD", true)]
+    [InlineData("https://space.bilibili.com.evil.example/123")]
+    [InlineData("https://evil.example@space.bilibili.com/123")]
+    [InlineData("https://space.bilibili.com:444/123")]
+    public void SpaceUrlsRequireExactHostAndValidUid(string input, bool valid = false)
+        => Assert.Equal(valid, BilibiliInputParser.TryGetSpaceUid(input, out _));
 }

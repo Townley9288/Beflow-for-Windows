@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.1.1.13',
+    [string]$Version = '1.1.1.14',
     [string]$FfmpegArchiveUrl = $env:FFMPEG_ARCHIVE_URL
 )
 
@@ -47,6 +47,7 @@ $RequiredPublishFiles = @(
     'MainWindow.xbf',
     'Controls\RenameHistoryDetailContent.xbf',
     'Pages\DownloadPage.xbf',
+    'Pages\PersonalSpacePage.xbf',
     'Pages\DownloadQueuePage.xbf',
     'Pages\DualAudioPage.xbf',
     'Pages\RenamePage.xbf',

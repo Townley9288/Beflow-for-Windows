@@ -418,6 +418,11 @@ public sealed class DownloadViewModel : ObservableObject
 
     private async Task ParseAsync(DownloadParseMode mode, string pages = "", bool reset = true)
     {
+        if (BilibiliInputParser.TryGetSpaceUid(Url, out _))
+        {
+            ((App)Application.Current).MainWindow.Navigate("space", new Pages.DownloadInputNavigationContext(Url, ParseAutomatically: true));
+            return;
+        }
         var parseGeneration = ++_parseGeneration;
         var parsedUrl = Url.Trim();
         if (reset)

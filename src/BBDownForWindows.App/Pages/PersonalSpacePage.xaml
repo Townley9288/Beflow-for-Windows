@@ -1,0 +1,174 @@
+<Page
+    x:Class="BBDownForWindows.App.Pages.PersonalSpacePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:BBDownForWindows.App.Controls"
+    xmlns:vm="using:BBDownForWindows.App.ViewModels">
+    <Grid Padding="24,20" RowSpacing="12" DataContext="{x:Bind ViewModel}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <TextBlock Text="个人主页" Style="{ThemeResource TitleTextBlockStyle}"/>
+        <Grid Grid.Row="1" ColumnSpacing="8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBox Text="{Binding Input, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="输入 UP 主名称搜索，或粘贴个人主页链接" IsEnabled="{Binding IsIdle}" AllowDrop="True" DragOver="Input_DragOver" Drop="Input_Drop" KeyDown="Input_KeyDown" AutomationProperties.Name="个人主页链接" AutomationProperties.HelpText="支持输入 UP 主名称，按回车搜索；主页链接可直接读取。"/>
+            <Button Grid.Column="1" Content="{Binding InputActionText}" Command="{Binding ReadCommand}"/>
+            <Button Grid.Column="2" Content="刷新当前目录" Command="{Binding RefreshCommand}"/>
+            <Button Grid.Column="3" Content="取消" Command="{Binding CancelCommand}"/>
+        </Grid>
+        <Border Grid.Row="2" Padding="14" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <Grid ColumnSpacing="14"><Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <PersonPicture Width="56" Height="56" DisplayName="{Binding ProfileName}" ProfilePicture="{Binding AvatarUrl}"/>
+                <StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="{Binding ProfileName}" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="{Binding ProfileDetail}" TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" Opacity="0.7" ToolTipService.ToolTip="{Binding ProfileDetail}"/></StackPanel>
+            </Grid>
+        </Border>
+        <StackPanel Grid.Row="3" Spacing="5">
+            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" MaxLines="3" IsTextSelectionEnabled="True"/>
+            <ProgressBar IsIndeterminate="{Binding IsBusy}" Height="3"/>
+        </StackPanel>
+        <Grid Grid.Row="4" RowSpacing="10" Visibility="{Binding UserSearchVisibility}">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding UserSearchSummary}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Content="关闭搜索" Command="{Binding CloseUserSearchCommand}"/>
+            </Grid>
+            <ListView Grid.Row="1" ItemsSource="{Binding UserResults}" SelectionMode="None" IsItemClickEnabled="True" ItemClick="User_ItemClick" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="UP 主搜索结果">
+                <ListView.ItemContainerStyle><Style TargetType="ListViewItem"><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,0,0,8"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/></Style></ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SpaceUserViewModel">
+                        <Border Padding="14" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <PersonPicture Width="56" Height="56" DisplayName="{Binding Name}" ProfilePicture="{Binding AvatarUrl}" VerticalAlignment="Top"/>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Detail}" Opacity="0.7" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Verification}" Visibility="{x:Bind HasVerification}" TextWrapping="Wrap" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding Description}" MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Description}"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="读取主页 →" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                <Button Content="加载更多 UP 主" Command="{Binding MoreUsersCommand}" Visibility="{Binding MoreUsersVisibility}"/>
+                <Button Content="重试搜索" Command="{Binding RetryUserSearchCommand}" Visibility="{Binding RetryUserSearchVisibility}"/>
+            </StackPanel>
+        </Grid>
+        <Grid Grid.Row="4" RowSpacing="10" Visibility="{Binding BrowseVisibility}">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <RadioButton x:Name="UploadsTab" Content="投稿视频" GroupName="SpaceTabs" IsChecked="True" Checked="Uploads_Checked" IsEnabled="{Binding IsIdle}"/>
+                <RadioButton Content="合集和列表" GroupName="SpaceTabs" Checked="Collections_Checked" IsEnabled="{Binding IsIdle}"/>
+                <Button Content="返回合集和列表" Command="{Binding BackToCollectionsCommand}" Visibility="{Binding BackVisibility}"/>
+            </StackPanel>
+            <Grid Grid.Row="1" ColumnSpacing="8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="150"/><ColumnDefinition Width="130"/><ColumnDefinition Width="220"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel><TextBlock Text="{Binding DirectoryTitle}" FontWeight="SemiBold"/><TextBlock Text="{Binding DirectoryStatus}" FontSize="12" Opacity="0.7"/></StackPanel>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding Categories}" DisplayMemberPath="Name" SelectedValuePath="Id" SelectedValue="{Binding CategoryId, Mode=TwoWay}" HorizontalAlignment="Stretch" Visibility="{Binding CategoryVisibility}" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="投稿分类"/>
+                <ComboBox Grid.Column="2" ItemsSource="{Binding SortOptions}" SelectedItem="{Binding SortOrder, Mode=TwoWay}" HorizontalAlignment="Stretch" Visibility="{Binding VideoVisibility}" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="排序"/>
+                <TextBox Grid.Column="3" Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="搜索当前目录标题" AutomationProperties.Name="搜索标题"/>
+                <Button Grid.Column="4" Content="继续读取" Command="{Binding ContinueCommand}"/>
+            </Grid>
+            <GridView Grid.Row="2" ItemsSource="{Binding VisibleVideos}" SelectionMode="None" Visibility="{Binding VideoVisibility}" IsEnabled="{Binding IsIdle}" Padding="0,0,4,0">
+                <GridView.ItemsPanel><ItemsPanelTemplate><controls:AdaptiveCardPanel/></ItemsPanelTemplate></GridView.ItemsPanel>
+                <GridView.ItemContainerStyle><Style TargetType="GridViewItem"><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="VerticalContentAlignment" Value="Stretch"/></Style></GridView.ItemContainerStyle>
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SpaceVideoViewModel">
+                        <Border Padding="10" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Grid Height="122" SizeChanged="Cover_SizeChanged" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                    <Image Source="{Binding CoverUrl}" Stretch="UniformToFill"/>
+                                    <Border Background="#CC000000" HorizontalAlignment="Right" VerticalAlignment="Bottom" Padding="5,2"><TextBlock Text="{Binding DurationText}" Foreground="White" FontSize="12"/></Border>
+                                </Grid>
+                                <TextBlock Grid.Row="1" Margin="0,7,0,0" MinHeight="60" LineHeight="20" LineStackingStrategy="BlockLineHeight" Text="{Binding Title}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxLines="3" ToolTipService.ToolTip="{Binding Title}"/>
+                                <TextBlock Grid.Row="2" Margin="0,7,0,0" Text="{Binding Status}" Visibility="{x:Bind HasStatus, Mode=OneWay}" TextTrimming="CharacterEllipsis" FontSize="12" ToolTipService.ToolTip="{Binding Status}"/>
+                                <Grid Grid.Row="3" Margin="0,7,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" IsEnabled="{Binding CanSelect}" Content="选择" AutomationProperties.Name="{Binding Title}"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding PublishedText}" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Opacity="0.65"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+            <GridView Grid.Row="2" ItemsSource="{Binding VisibleCollections}" SelectionMode="None" IsItemClickEnabled="True" ItemClick="Collection_ItemClick" Visibility="{Binding CollectionVisibility}" IsEnabled="{Binding IsIdle}" Padding="0,0,4,0">
+                <GridView.ItemsPanel><ItemsPanelTemplate><controls:AdaptiveCardPanel/></ItemsPanelTemplate></GridView.ItemsPanel>
+                <GridView.ItemContainerStyle><Style TargetType="GridViewItem"><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="VerticalContentAlignment" Value="Stretch"/></Style></GridView.ItemContainerStyle>
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SpaceCollectionViewModel">
+                        <Border Padding="10" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Grid Height="122" SizeChanged="Cover_SizeChanged"><Image Source="{Binding CoverUrl}" Stretch="UniformToFill"/></Grid>
+                                <TextBlock Grid.Row="1" Margin="0,7,0,0" MinHeight="60" LineHeight="20" LineStackingStrategy="BlockLineHeight" Text="{Binding Title}" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Title}"/>
+                                <TextBlock Grid.Row="2" Margin="0,7,0,0" Text="{Binding Detail}" Opacity="0.65"/>
+                                <TextBlock Grid.Row="3" Margin="0,7,0,0" Text="打开目录 →"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center"><Button Content="上一页" Command="{Binding PreviousPageCommand}"/><TextBlock Text="{Binding PageText}" VerticalAlignment="Center"/><Button Content="下一页" Command="{Binding NextPageCommand}"/></StackPanel>
+            <Grid Grid.Row="4" ColumnSpacing="8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Button Content="选择本页" Command="{Binding SelectPageCommand}"/><Button Grid.Column="1" Content="选择全部筛选结果" Command="{Binding SelectFilteredCommand}"/><Button Grid.Column="2" Content="清空选择" Command="{Binding ClearSelectionCommand}"/>
+                <TextBlock Grid.Column="3" Text="{Binding SelectionSummary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <Button Grid.Column="4" Content="查看选流" Command="{Binding ShowSelectionCommand}"/><Button Grid.Column="5" Content="解析所选视频" Command="{Binding ParseCommand}" Style="{ThemeResource AccentButtonStyle}"/>
+            </Grid>
+        </Grid>
+        <Grid Grid.Row="4" RowSpacing="10" Visibility="{Binding SelectionVisibility}">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="← 返回视频目录" Command="{Binding BrowseCommand}"/><TextBlock Text="确认所选视频的实际规格" FontSize="18" VerticalAlignment="Center"/><Button Content="继续解析／重试" Command="{Binding ParseCommand}"/></StackPanel>
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <ContentControl IsEnabled="{Binding IsIdle}"><StackPanel Orientation="Horizontal" Spacing="8">
+                    <ComboBox Header="下载内容" ItemsSource="{Binding ModeOptions}" SelectedItem="{Binding DownloadModeText, Mode=TwoWay}" Width="130"/>
+                    <ComboBox Header="批量画质规则" ItemsSource="{Binding QualityOptions}" SelectedItem="{Binding QualityRule, Mode=TwoWay}" Width="155"/>
+                    <ComboBox Header="视频编码" ItemsSource="{Binding EncodingOptions}" SelectedItem="{Binding Encoding, Mode=TwoWay}" Width="105"/>
+                    <ComboBox Header="音频编码" ItemsSource="{Binding AudioOptions}" SelectedItem="{Binding AudioCodec, Mode=TwoWay}" Width="110"/>
+                    <ComboBox Header="音频码率" ItemsSource="{Binding BitrateOptions}" SelectedItem="{Binding AudioBitrate, Mode=TwoWay}" Width="125"/>
+                    <Button Content="应用到全部未入队视频" Command="{Binding ApplyRuleCommand}" VerticalAlignment="Bottom"/>
+                </StackPanel></ContentControl>
+            </ScrollViewer>
+            <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding SelectedVideos}" IsEnabled="{Binding IsIdle}" HorizontalContentAlignment="Stretch" MinWidth="1030">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SpaceVideoViewModel">
+                            <Border Margin="0,0,0,8" Padding="12,8" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <ContentControl IsEnabled="{Binding CanSelect}" HorizontalContentAlignment="Stretch"><StackPanel Spacing="6">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Status}" Visibility="{x:Bind HasStatus, Mode=OneWay}" TextWrapping="Wrap"/>
+                                    <ItemsControl ItemsSource="{Binding Rows}" HorizontalContentAlignment="Stretch">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:DownloadEpisodeViewModel">
+                                                <Grid ColumnSpacing="8" Margin="0,2"><Grid.ColumnDefinitions><ColumnDefinition Width="35"/><ColumnDefinition Width="45"/><ColumnDefinition Width="180"/><ColumnDefinition Width="310"/><ColumnDefinition Width="100"/><ColumnDefinition Width="180"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" IsEnabled="{Binding IsReady}" AutomationProperties.Name="选择分P"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding PageNumberText}" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="2" Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Title}" VerticalAlignment="Center"/>
+                                                    <ComboBox Grid.Column="3" ItemsSource="{Binding QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SelectedQuality, Mode=TwoWay}" IsEnabled="{Binding VideoSelectionEnabled}" HorizontalAlignment="Stretch" AutomationProperties.Name="画质和分辨率"/>
+                                                    <ComboBox Grid.Column="4" ItemsSource="{Binding EncodingOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding VideoSelectionEnabled}" HorizontalAlignment="Stretch" AutomationProperties.Name="视频编码"/>
+                                                    <ComboBox Grid.Column="5" ItemsSource="{Binding AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SelectedAudio, Mode=TwoWay}" IsEnabled="{Binding AudioSelectionEnabled}" HorizontalAlignment="Stretch" AutomationProperties.Name="音频规格"/>
+                                                    <StackPanel Grid.Column="6" MaxWidth="160"><TextBlock Text="{Binding StatusText}" FontSize="12" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding StatusText}"/><TextBlock Text="{Binding EstimatedSizeText}" FontSize="12" Opacity="0.6"/></StackPanel>
+                                                    <TextBlock Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="5" Text="{Binding FallbackText}" Visibility="{x:Bind HasFallback, Mode=OneWay}" TextWrapping="Wrap" FontSize="12" Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel></ContentControl>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <Grid Grid.Row="3" ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="下载根目录" VerticalAlignment="Center"/><TextBox Grid.Column="1" Text="{Binding WorkDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="下载根目录"/><Button Grid.Column="2" Content="浏览…" Click="BrowseFolder_Click" IsEnabled="{Binding IsIdle}"/><Button Grid.Column="3" Content="下载设置" Click="Settings_Click" IsEnabled="{Binding IsIdle}"/><Button Grid.Column="4" Content="命名规则" Click="Naming_Click" IsEnabled="{Binding IsIdle}"/>
+            </Grid>
+            <Grid Grid.Row="4" ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel><TextBlock Text="{Binding ReadySummary}" TextWrapping="Wrap"/><TextBlock Text="按视频独立入队 · 保存到 UP名（UID）目录 · 沿用现有下载和命名设置" FontSize="12" Opacity="0.65"/></StackPanel>
+                <Button Grid.Column="1" Content="查看队列" Click="Queue_Click"/><Button Grid.Column="2" Content="将就绪项加入队列" Command="{Binding EnqueueCommand}" Style="{ThemeResource AccentButtonStyle}"/>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

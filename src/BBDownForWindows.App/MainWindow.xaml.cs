@@ -70,7 +70,7 @@ public sealed partial class MainWindow : Window
         var resolvedTag = tag switch
         {
             "rename-history" => "history",
-            "queue" or "dual" or "rename" or "rename-templates" or "history" or "history-detail" or "settings" or "about" or "download" => tag,
+            "space" or "queue" or "dual" or "rename" or "rename-templates" or "history" or "history-detail" or "settings" or "about" or "download" => tag,
             _ => "download"
         };
         if (parameter is null && string.Equals(resolvedTag, _currentNavigationTag, StringComparison.Ordinal))
@@ -95,6 +95,7 @@ public sealed partial class MainWindow : Window
 
             var page = resolvedTag switch
             {
+                "space" => typeof(Pages.PersonalSpacePage),
                 "queue" => typeof(Pages.DownloadQueuePage),
                 "dual" => typeof(Pages.DualAudioPage),
                 "rename" => typeof(Pages.RenamePage),
@@ -227,6 +228,15 @@ public sealed partial class MainWindow : Window
 
     private async Task ShowClipboardInputAsync(string input)
     {
+        if (BilibiliInputParser.TryGetSpaceUid(input, out _))
+        {
+            if (ContentFrame.Content is Pages.PersonalSpacePage spacePage && IsDuplicateClipboardInput(spacePage.ViewModel.Input, input)) return;
+            if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } spacePresenter)
+                spacePresenter.Restore();
+            Activate();
+            Navigate("space", new Pages.DownloadInputNavigationContext(input, ParseAutomatically: true));
+            return;
+        }
         if (ContentFrame.Content is Pages.DownloadPage page && IsDuplicateClipboardInput(page.ViewModel.Url, input)) return;
         var dualPage = ContentFrame.Content as Pages.DualAudioPage;
         if (dualPage?.ViewModel.IsDuplicateClipboardInput(input) == true) return;

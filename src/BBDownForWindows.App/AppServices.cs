@@ -25,6 +25,7 @@ public sealed class AppServices
         QueueTaskManager = new TaskManager(paths, QueueProcessRunner);
         TaskConsole = new ViewModels.TaskConsoleViewModel(TaskManager);
         BilibiliMetadata = new BilibiliMetadataService(HttpClient);
+        BilibiliSpace = new BilibiliSpaceService(HttpClient, paths);
         DownloadNaming = new DownloadNamingService();
         BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata, DownloadNaming, ParseLimiter);
         DownloadQueue = new DownloadQueueService(new DownloadQueueStore(paths),
@@ -57,6 +58,9 @@ public sealed class AppServices
     public ITaskManager TaskManager { get; }
     public ViewModels.TaskConsoleViewModel TaskConsole { get; }
     public IBilibiliMetadataService BilibiliMetadata { get; }
+    public IBilibiliSpaceService BilibiliSpace { get; }
+    private ViewModels.PersonalSpaceViewModel? personalSpace;
+    public ViewModels.PersonalSpaceViewModel PersonalSpace => personalSpace ??= new(this);
     public IDownloadNamingService DownloadNaming { get; }
     public IBBDownService BBDown { get; }
     public IDualAudioService DualAudio { get; }

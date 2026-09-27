@@ -288,6 +288,7 @@ public sealed class DualAudioViewModel : ObservableObject
     {
         var inputs = values
             .SelectMany(BilibiliInputParser.ExtractAll)
+            .Where(input => !BilibiliInputParser.TryGetSpaceUid(input, out _))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(2)
             .ToList();
@@ -331,6 +332,7 @@ public sealed class DualAudioViewModel : ObservableObject
     public bool ApplyClipboardInput(string value, DualAudioSource target)
     {
         if (Console.IsBusy || IsParsing || !BilibiliInputParser.TryExtract(value, out var input)
+            || BilibiliInputParser.TryGetSpaceUid(input, out _)
             || IsDuplicateClipboardInput(input)) return false;
         if (CurrentSourceMode == DualAudioSourceMode.Interleaved)
             return target == DualAudioSource.A && ApplyExternalInputs([input]);
@@ -416,6 +418,8 @@ public sealed class DualAudioViewModel : ObservableObject
 
     private async Task ParseAsync(DownloadParseMode mode, DualAudioBatchHistory? restore = null)
     {
+        if (BilibiliInputParser.TryGetSpaceUid(SourceAUrl, out _) || BilibiliInputParser.TryGetSpaceUid(SourceBUrl, out _))
+            throw new InvalidOperationException("个人主页包含多个视频，请先在个人主页页面选择具体视频，再用于多音轨封装。");
         var parseGeneration = ++_parseGeneration;
         var sourceMode = CurrentSourceMode;
         var sourceAUrl = SourceAUrl.Trim();
