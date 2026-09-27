@@ -18,6 +18,12 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
     {
         ViewModel = new DownloadViewModel(((App)Application.Current).Services);
         InitializeComponent();
+        ViewModel.PropertyChanged += (_, args) =>
+        {
+            // 切换排序后回到列表顶部，否则滚动锚定会让首行（最新集）停在可视区外。
+            if (args.PropertyName == nameof(DownloadViewModel.SortDescending) && ViewModel.VisibleRows.Count > 0)
+                EpisodeList.ScrollIntoView(ViewModel.VisibleRows[0], ScrollIntoViewAlignment.Leading);
+        };
     }
 
     public DownloadViewModel ViewModel { get; }
@@ -38,8 +44,8 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
         if (e.Parameter is DownloadInputNavigationContext input
             && ViewModel.ApplyExternalInput(input.Input)
             && input.ParseAutomatically
-            && ViewModel.ParseAllCommand.CanExecute(null))
-            await ViewModel.ParseAllCommand.ExecuteAsync(null);
+            && ViewModel.StartParseCommand.CanExecute(null))
+            await ViewModel.StartParseCommand.ExecuteAsync(null);
         base.OnNavigatedTo(e);
     }
 

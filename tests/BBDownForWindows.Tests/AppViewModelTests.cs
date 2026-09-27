@@ -762,6 +762,30 @@ public sealed class AppViewModelTests
         Assert.False(viewModel.SortDescending);
     }
 
+    [Fact]
+    public async Task DefaultParseScopeIsSavedAndAppliedToDownloadPage()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DownloadViewModel(fixture.Services);
+        await viewModel.InitializeAsync(null);
+        Assert.False(viewModel.ParseCurrentOnly);
+        Assert.Equal("全部分集", viewModel.ParseScopeText);
+
+        var settings = new SettingsViewModel(fixture.Services);
+        settings.ParseScopeText = settings.ParseScopeOptions[1];
+        await settings.SaveParseCommand.ExecuteAsync(null);
+        Assert.True((await fixture.Services.Settings.LoadAsync()).ParseCurrentEpisodeOnly);
+
+        await viewModel.InitializeAsync(null);
+        Assert.True(viewModel.ParseCurrentOnly);
+        Assert.Equal("仅链接中的这一集", viewModel.ParseScopeText);
+
+        // 下载页上临时切换的范围在默认值未变时保留。
+        viewModel.ParseScopeText = viewModel.ParseScopeOptions[0];
+        await viewModel.InitializeAsync(null);
+        Assert.False(viewModel.ParseCurrentOnly);
+    }
+
     private static DownloadEpisodeInfo ReadyEpisode(int page, string title) => new()
     {
         Page = new PageInfo(page, page.ToString(), title, "24m"),

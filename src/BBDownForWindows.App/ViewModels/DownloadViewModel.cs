@@ -51,6 +51,8 @@ public sealed class DownloadViewModel : ObservableObject
     private int _parseGeneration;
     private bool _sortDescending;
     private bool _defaultSortDescending;
+    private bool _parseCurrentOnly;
+    private bool _defaultParseCurrentOnly;
 
     public DownloadViewModel(AppServices services) : this(services, TimeSpan.FromSeconds(3))
     {
@@ -64,6 +66,7 @@ public sealed class DownloadViewModel : ObservableObject
         Console = services.TaskConsole;
         ParseCurrentCommand = new AsyncRelayCommand(() => ParseAsync(DownloadParseMode.Current), CanParse);
         ParseAllCommand = new AsyncRelayCommand(() => ParseAsync(DownloadParseMode.All), CanParse);
+        StartParseCommand = new AsyncRelayCommand(() => ParseAsync(ParseCurrentOnly ? DownloadParseMode.Current : DownloadParseMode.All), CanParse);
         ContinueParseCommand = new AsyncRelayCommand(ContinueParseAsync, CanContinueParse);
         ApplyRuleCommand = new RelayCommand(ApplyRuleToAll, () => Rows.Count > 0 && !Console.IsBusy);
         SelectAllCommand = new RelayCommand(SelectAll, () => Rows.Count > 0 && !Console.IsBusy);
@@ -138,6 +141,18 @@ public sealed class DownloadViewModel : ObservableObject
         }
     }
     public string SortGlyph => SortDescending ? "\uE74B" : "\uE74A";
+    internal static readonly IReadOnlyList<string> ParseScopeChoices = ["全部分集", "仅链接中的这一集"];
+    public IReadOnlyList<string> ParseScopeOptions => ParseScopeChoices;
+    public bool ParseCurrentOnly
+    {
+        get => _parseCurrentOnly;
+        set { if (SetProperty(ref _parseCurrentOnly, value)) OnPropertyChanged(nameof(ParseScopeText)); }
+    }
+    public string ParseScopeText
+    {
+        get => ParseScopeOptions[ParseCurrentOnly ? 1 : 0];
+        set { if (value is not null) ParseCurrentOnly = value == ParseScopeOptions[1]; }
+    }
     public string SortToolTip => SortDescending ? "当前倒序（最新集在前），点击切换为正序" : "当前正序（第 1 集在前），点击切换为倒序";
     public string QualityRule { get => _qualityRule; set => SetProperty(ref _qualityRule, value); }
     public string Encoding { get => _encoding; set => SetProperty(ref _encoding, value); }
@@ -283,6 +298,7 @@ public sealed class DownloadViewModel : ObservableObject
     public IAsyncRelayCommand ParseCurrentCommand { get; }
     public IAsyncRelayCommand ParseAllCommand { get; }
     public IAsyncRelayCommand ContinueParseCommand { get; }
+    public IAsyncRelayCommand StartParseCommand { get; }
     public IRelayCommand ApplyRuleCommand { get; }
     public IRelayCommand SelectAllCommand { get; }
     public IRelayCommand InvertSelectionCommand { get; }
@@ -321,6 +337,11 @@ public sealed class DownloadViewModel : ObservableObject
         {
             _defaultSortDescending = latestSettings.EpisodeSortDescending;
             SortDescending = _defaultSortDescending;
+        }
+        if (!_initialized || latestSettings.ParseCurrentEpisodeOnly != _defaultParseCurrentOnly)
+        {
+            _defaultParseCurrentOnly = latestSettings.ParseCurrentEpisodeOnly;
+            ParseCurrentOnly = _defaultParseCurrentOnly;
         }
         if (!_initialized)
         {
@@ -442,7 +463,8 @@ public sealed class DownloadViewModel : ObservableObject
             ProgressDetail = $"成功解析 {Rows.Count(row => row.IsReady)}/{Rows.Count} 集";
         }
         ShowProgress = false;
-        _continueAvailable = mode == DownloadParseMode.All && Catalog is not null && Catalog.AllPages.Any(page => Rows.All(row => row.PageNumber != page.Number || !row.IsReady));
+        // 只解析了当前集时同样允许「继续解析」补齐目录中的其余分集。
+        _continueAvailable = Catalog is not null && Catalog.AllPages.Any(page => Rows.All(row => row.PageNumber != page.Number || !row.IsReady));
         NotifyCommands();
     }
 
@@ -755,6 +777,7 @@ public sealed class DownloadViewModel : ObservableObject
         ParseCurrentCommand.NotifyCanExecuteChanged();
         ParseAllCommand.NotifyCanExecuteChanged();
         ContinueParseCommand.NotifyCanExecuteChanged();
+        StartParseCommand.NotifyCanExecuteChanged();
         ApplyRuleCommand.NotifyCanExecuteChanged();
         SelectAllCommand.NotifyCanExecuteChanged();
         InvertSelectionCommand.NotifyCanExecuteChanged();

@@ -47,12 +47,14 @@
             <Border Grid.Row="1" Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     AllowDrop="True" DragOver="BilibiliInput_DragOver" Drop="BilibiliInput_Drop">
                 <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBox Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="输入 B站链接、BV、AV、EP 或 SS 号" VerticalAlignment="Center"
                              AllowDrop="True" DragOver="BilibiliInput_DragOver" Drop="BilibiliInput_Drop"/>
-                    <Button Grid.Column="1" Content="开始解析" Command="{Binding ParseAllCommand}" Style="{StaticResource AccentButtonStyle}"/>
-                    <Button Grid.Column="2" Content="继续解析" Command="{Binding ContinueParseCommand}"/>
-                    <Button Grid.Column="3" Content="取消" Command="{Binding Console.CancelCommand}"/>
+                    <ComboBox Grid.Column="1" MinWidth="160" VerticalAlignment="Center" ItemsSource="{Binding ParseScopeOptions}" SelectedItem="{Binding ParseScopeText, Mode=TwoWay}"
+                              ToolTipService.ToolTip="解析范围：全部分集，或只解析链接中指向的那一集" AutomationProperties.Name="解析范围"/>
+                    <Button Grid.Column="2" Content="开始解析" Command="{Binding StartParseCommand}" Style="{StaticResource AccentButtonStyle}"/>
+                    <Button Grid.Column="3" Content="继续解析" Command="{Binding ContinueParseCommand}"/>
+                    <Button Grid.Column="4" Content="取消" Command="{Binding Console.CancelCommand}"/>
                 </Grid>
             </Border>
 
@@ -109,7 +111,7 @@
                         <TextBlock Grid.Column="6" Text="音频规格" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         <TextBlock Grid.Column="7" Text="状态" VerticalAlignment="Center" FontWeight="SemiBold"/>
                     </Grid>
-                    <ListView Grid.Row="1" ItemsSource="{Binding VisibleRows}" SelectionMode="None" HorizontalContentAlignment="Stretch">
+                    <ListView x:Name="EpisodeList" Grid.Row="1" ItemsSource="{Binding VisibleRows}" SelectionMode="None" HorizontalContentAlignment="Stretch">
                         <ListView.ItemContainerTransitions>
                             <TransitionCollection/>
                         </ListView.ItemContainerTransitions>

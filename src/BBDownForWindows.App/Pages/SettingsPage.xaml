@@ -163,6 +163,11 @@
                     <ComboBox Header="默认分集排序" HorizontalAlignment="Stretch" ItemsSource="{Binding EpisodeSortOptions}" SelectedItem="{Binding EpisodeSortText, Mode=TwoWay}"/>
                     <TextBlock Grid.Column="1" Text="连载番剧通常只需要最新几集，可设为倒序；下载页点击「分集」表头也可随时切换。" Opacity="0.65" TextWrapping="Wrap" VerticalAlignment="Bottom"/>
                 </Grid>
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <ComboBox Header="默认解析范围" HorizontalAlignment="Stretch" ItemsSource="{Binding ParseScopeOptions}" SelectedItem="{Binding ParseScopeText, Mode=TwoWay}"/>
+                    <TextBlock Grid.Column="1" Text="「仅链接中的这一集」只解析 EP 链接或 ?p= 指向的那一集，通常一秒内完成；需要其他集时点「继续解析」补齐。下载页也可临时切换。" Opacity="0.65" TextWrapping="Wrap" VerticalAlignment="Bottom"/>
+                </Grid>
             </StackPanel>
         </Border>
         <Border Padding="16,12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">

@@ -96,6 +96,7 @@ public sealed class AppSettings
     [JsonPropertyName("saveTaskLogs")] public bool SaveTaskLogs { get; set; } = true;
     [JsonPropertyName("parseConcurrency")] public int ParseConcurrency { get; set; } = ParseConcurrencyPolicy.Default;
     [JsonPropertyName("episodeSortDescending")] public bool EpisodeSortDescending { get; set; }
+    [JsonPropertyName("parseCurrentEpisodeOnly")] public bool ParseCurrentEpisodeOnly { get; set; }
     [JsonPropertyName("apiMode")] public string ApiMode { get; set; } = "WEB";
     [JsonPropertyName("danmaku")] public bool Danmaku { get; set; }
     [JsonPropertyName("subtitle")] public bool Subtitle { get; set; }
