@@ -105,7 +105,7 @@ aria2 使用默认 CDN 时会并行使用多个镜像；手动指定 CDN 时只�
 生成发行包：
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 1.1.1.13
+.\scripts\Build-Release.ps1 -Version 1.1.1.14
 ```
 
 BBDown 与 aria2 由脚本从官方 Release 下载。固定 FFmpeg 历史归档可通过 `-FfmpegArchiveUrl`、环境变量 `FFMPEG_ARCHIVE_URL` 或本地归档提供，所有工具下载均校验 SHA-256。
