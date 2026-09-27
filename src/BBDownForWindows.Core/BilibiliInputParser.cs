@@ -26,7 +26,9 @@ public static partial class BilibiliInputParser
         foreach (var match in urlMatches)
         {
             var candidate = match.Value.TrimEnd(TrailingUrlPunctuation);
-            if (!IsSupportedUrl(candidate) || !seen.Add(candidate)) continue;
+            if (!IsSupportedUrl(candidate)) continue;
+            if (TryGetSpaceUid(candidate, out var uid)) candidate = $"https://space.bilibili.com/{uid}";
+            if (!seen.Add(candidate)) continue;
             result.Add(candidate);
         }
 
@@ -45,10 +47,26 @@ public static partial class BilibiliInputParser
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return false;
         if (uri.Scheme is not ("http" or "https")) return false;
+        if (uri.Host.Equals("space.bilibili.com", StringComparison.OrdinalIgnoreCase)) return TryGetSpaceUid(value, out _);
         if (IsHostOrSubdomain(uri.Host, "b23.tv")) return uri.AbsolutePath.Length > 1;
         if (!IsHostOrSubdomain(uri.Host, "bilibili.com")) return false;
         return IdentifierRegex().IsMatch(Uri.UnescapeDataString(uri.PathAndQuery));
     }
+
+    public static bool TryGetSpaceUid(string? value, out string uid)
+    {
+        uid = string.Empty;
+        if (!Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https") || !uri.IsDefaultPort || uri.UserInfo.Length != 0
+            || !uri.Host.Equals("space.bilibili.com", StringComparison.OrdinalIgnoreCase)) return false;
+        var match = SpacePathRegex().Match(uri.AbsolutePath);
+        if (!match.Success || !long.TryParse(match.Groups[1].Value, out var id) || id <= 0) return false;
+        uid = id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return true;
+    }
+
+    [GeneratedRegex(@"^/(\d+)(?:/(?:upload(?:/video)?|video))?/?$", RegexOptions.CultureInvariant)]
+    private static partial Regex SpacePathRegex();
 
     private static bool IsHostOrSubdomain(string host, string expected) =>
         host.Equals(expected, StringComparison.OrdinalIgnoreCase)

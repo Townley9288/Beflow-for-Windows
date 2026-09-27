@@ -68,13 +68,22 @@ public sealed class DownloadQueueService
 
     public async Task<Guid> EnqueueAsync(DownloadQueueItem item)
     {
-        var copy = QueueSnapshot.Copy(item);
-        copy.Id = Guid.NewGuid(); copy.State = DownloadQueueState.Waiting;
-        copy.AddedAt = DateTimeOffset.Now; copy.StartedAt = copy.FinishedAt = null;
-        copy.Checkpoint = new(); copy.LogPaths = []; copy.Error = string.Empty;
-        ValidateItem(copy);
-        await ChangeAsync(doc => doc.Items.Add(copy));
-        return copy.Id;
+        return (await EnqueueManyAsync([item]))[0];
+    }
+    public async Task<IReadOnlyList<Guid>> EnqueueManyAsync(IEnumerable<DownloadQueueItem> items)
+    {
+        var copies = items.Select(item =>
+        {
+            var copy = QueueSnapshot.Copy(item);
+            copy.Id = Guid.NewGuid(); copy.State = DownloadQueueState.Waiting;
+            copy.AddedAt = DateTimeOffset.Now; copy.StartedAt = copy.FinishedAt = null;
+            copy.Checkpoint = new(); copy.LogPaths = []; copy.Error = string.Empty;
+            ValidateItem(copy);
+            return copy;
+        }).ToList();
+        if (copies.Count == 0) throw new InvalidOperationException("没有可加入队列的视频。");
+        await ChangeAsync(doc => doc.Items.AddRange(copies));
+        return copies.Select(item => item.Id).ToArray();
     }
     public async Task<DownloadQueueItem> BeginEditAsync(Guid id)
     {

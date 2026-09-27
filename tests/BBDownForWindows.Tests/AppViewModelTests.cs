@@ -7,6 +7,23 @@ namespace BBDownForWindows.Tests;
 
 public sealed class AppViewModelTests
 {
+    [Fact]
+    public async Task PersonalSpaceLinksCannotBecomeDualAudioSources()
+    {
+        using var fixture = new AppFixture();
+        var vm = new DualAudioViewModel(fixture.Services);
+        const string space = "https://space.bilibili.com/538596213?spm_id_from=test";
+        Assert.False(vm.ApplyExternalInputs([space]));
+        Assert.False(vm.ApplyClipboardInput(space, DualAudioSource.A));
+        Assert.True(vm.ApplyExternalInputs([space, "av170001"]));
+        Assert.Equal("av170001", vm.SourceAUrl);
+        Assert.Empty(vm.SourceBUrl);
+        vm.SourceAUrl = space;
+        await vm.ParseAllCommand.ExecuteAsync(null);
+        Assert.Contains("个人主页", vm.Message);
+        Assert.Null(fixture.Services.TaskManager.ActiveTask);
+    }
+
     [Theory]
     [InlineData(4)]
     [InlineData(6)]

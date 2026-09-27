@@ -130,7 +130,12 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
         try
         {
             var inputs = await BilibiliDataTransfer.ExtractInputsAsync(e.DataView);
-            if (inputs.Count > 0) ViewModel.ApplyExternalInput(inputs[0]);
+            if (inputs.Count > 0)
+            {
+                if (BilibiliInputParser.TryGetSpaceUid(inputs[0], out _))
+                    ((App)Application.Current).MainWindow.Navigate("space", new DownloadInputNavigationContext(inputs[0], true));
+                else ViewModel.ApplyExternalInput(inputs[0]);
+            }
         }
         catch (Exception)
         {
