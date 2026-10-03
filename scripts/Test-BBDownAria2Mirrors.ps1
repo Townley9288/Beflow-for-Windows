@@ -15,8 +15,8 @@ namespace BBDown.Core
 }
 public static class BeflowMirrorRegression
 {
-    public static string GetUris(string url, bool useDefaultMirrors)
-        => BBDown.BBDownAria2c.BeflowMirrorUris(url, useDefaultMirrors);
+    public static string GetUris(string url, bool useDefaultMirrors, string extraArgs = "-x16 -s16 -j4 -k 5M")
+        => BBDown.BBDownAria2c.BeflowMirrorUris(url, extraArgs, useDefaultMirrors);
 }
 '@
 Add-Type -TypeDefinition $Source
@@ -29,14 +29,22 @@ $Suffix = '/upgcxcode/123/video.m4s?deadline=123&sign=a%2Bb%2Fc&platform=pc'
 $Checked = 0
 foreach ($Scheme in @('http', 'https')) {
     $Url = "${Scheme}://$($Mirrors[0])$Suffix"
-    $Expanded = [regex]::Matches([BeflowMirrorRegression]::GetUris($Url, $true), '"([^"]+)"')
+    $Uris = [BeflowMirrorRegression]::GetUris($Url, $true)
+    $Expanded = [regex]::Matches($Uris, '"([^"]+)"')
     if ($Expanded.Count -ne 4) { throw 'Default CDN must use four mirrors.' }
+    # The configured split applies per mirror; otherwise four mirrors share 16 connections.
+    if (-not $Uris.StartsWith('--split=64 ')) { throw "Mirrored download must keep 16 connections per mirror: $Uris" }
     for ($Index = 0; $Index -lt $Mirrors.Count; $Index++) {
         if ($Expanded[$Index].Groups[1].Value -cne "${Scheme}://$($Mirrors[$Index])$Suffix") {
             throw 'Default CDN expansion changed the signed path or used the wrong mirror.'
         }
     }
     $Checked++
+    foreach ($Case in @(@('-x16 -s8 -k 5M', 32), @('-x16 -s16 --split=4', 16), @('-x16 --split 2', 8), @('-x16 -k 5M', 20))) {
+        $Split = [BeflowMirrorRegression]::GetUris($Url, $true, $Case[0]).Split(' ')[0]
+        if ($Split -cne "--split=$($Case[1])") { throw "Unexpected mirrored split for '$($Case[0])': $Split" }
+        $Checked++
+    }
 
     foreach ($Cdn in ($Mirrors + @('upos-sz-mirroralib.bilivideo.com', 'pcdn.example.test'))) {
         $Url = "${Scheme}://${Cdn}$Suffix"
