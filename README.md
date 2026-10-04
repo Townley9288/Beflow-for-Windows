@@ -99,7 +99,7 @@ python scripts/Test-QueueTransfers.py
 aria2 使用默认 CDN 时会并行使用多个镜像，并按镜像数放大分片数，让每个节点都保持设置的连接数；手动指定 CDN 时只使用所选节点。完成工具构建后，可对本次生成的 BBDown 源码运行镜像选择回归检查（将路径替换为本次构建目录）：
 
 ```powershell
-.\scripts\Test-BBDownAria2Mirrors.ps1 -WorkingDirectory tools/cache/work/bbdown-1.6.3-beflow.15-<构建进程ID>
+.\scripts\Test-BBDownAria2Mirrors.ps1 -WorkingDirectory tools/cache/work/bbdown-1.6.3-beflow.16-<构建进程ID>
 ```
 
 生成发行包：

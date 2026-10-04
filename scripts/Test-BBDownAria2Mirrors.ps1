@@ -40,7 +40,7 @@ foreach ($Scheme in @('http', 'https')) {
         }
     }
     $Checked++
-    foreach ($Case in @(@('-x16 -s8 -k 5M', 32), @('-x16 -s16 --split=4', 16), @('-x16 --split 2', 8), @('-x16 -k 5M', 20))) {
+    foreach ($Case in @(@('-x16 -s8 -k 5M', 32), @('-x16 -s16 --split=4', 16), @('-x16 --split 2', 8), @('-x16 -k 5M', 64), @('', 64))) {
         $Split = [BeflowMirrorRegression]::GetUris($Url, $true, $Case[0]).Split(' ')[0]
         if ($Split -cne "--split=$($Case[1])") { throw "Unexpected mirrored split for '$($Case[0])': $Split" }
         $Checked++

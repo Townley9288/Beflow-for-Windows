@@ -57,7 +57,7 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $PatchSignature = 'interactive_selection=preserve_across_retry'
     $EncodingSignature = 'console_output_encoding=utf-8'
     $MediaDirectSignature = 'media_http_client=direct_no_proxy'
-    $PreparationSignature = 'download_preparation=pipe_v2_queue_resume_v2_cleanup_aria2_mirrors_explicit_cdn'
+    $PreparationSignature = 'download_preparation=pipe_v2_queue_resume_v2_cleanup_aria2_mirrors_explicit_cdn_split_per_mirror'
     $ParseChaptersSignature = 'info_parse=skip_chapter_request'
     if ((Test-Path -LiteralPath $Executable -PathType Leaf) -and
         (Test-Path -LiteralPath $Marker -PathType Leaf) -and
@@ -416,6 +416,7 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     if ($LASTEXITCODE -ne 0) { throw "Patched BBDown build failed with exit code $LASTEXITCODE" }
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Patched BBDown build did not produce BBDown.exe.' }
     & (Join-Path $PSScriptRoot 'Test-BBDownOutputEncoding.ps1') -ExecutablePath $Executable | Out-Host
+    & (Join-Path $PSScriptRoot 'Test-BBDownAria2Mirrors.ps1') -WorkingDirectory $WorkingDirectory | Out-Host
     [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`nquality=100:智能修复`nquality_lookup=support_formats_then_safe_fallback`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`nweb_login=cookie_container_with_trusted_callback_fallback`n$PatchSignature`n$EncodingSignature`n$MediaDirectSignature`n$PreparationSignature`n$ParseChaptersSignature`n", [Text.UTF8Encoding]::new($false))
     return $Publish
 }

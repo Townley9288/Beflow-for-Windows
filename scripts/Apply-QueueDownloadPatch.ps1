@@ -83,7 +83,8 @@ Replace-QueueSource 'BBDown/BBDownAria2c.cs' '        public static async Task D
             var pinned = $"://{BeflowMirrorHosts[0]}/";
             if (!useDefaultMirrors || !url.Contains(pinned)) return $"\"{url}\"";
             var splits = System.Text.RegularExpressions.Regex.Matches(extraArgs ?? "", @"(?:^|\s)(?:-s\s*|--split[=\s]\s*)(\d+)");
-            var split = splits.Count > 0 ? int.Parse(splits[splits.Count - 1].Groups[1].Value) : 5;
+            // The adapter's command line already sets -s16 before extraArgs.
+            var split = splits.Count > 0 ? int.Parse(splits[splits.Count - 1].Groups[1].Value) : 16;
             var uris = string.Join(" ", System.Array.ConvertAll(BeflowMirrorHosts, host => $"\"{url.Replace(pinned, $"://{host}/")}\""));
             return $"--split={split * BeflowMirrorHosts.Length} {uris}";
         }
