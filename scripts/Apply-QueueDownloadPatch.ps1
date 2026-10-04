@@ -66,7 +66,7 @@ Replace-QueueSource 'BBDown/BBDownDownloadUtil.cs' '            public bool UseA
 Replace-QueueSource 'BBDown/BBDownDownloadUtil.cs' 'DownloadFileByAria2cAsync(url, path, config.Aria2cArgs)' 'DownloadFileByAria2cAsync(url, path, config.Aria2cArgs, config.BeflowUseDefaultMirrors)' 2
 Replace-QueueSource 'BBDown/BBDownAria2c.cs' '            await RunCommandCodeAsync(ARIA2C,' '            var code = await RunCommandCodeAsync(ARIA2C,'
 Replace-QueueSource 'BBDown/BBDownAria2c.cs' '(string url, string path, string extraArgs)' '(string url, string path, string extraArgs, bool useDefaultMirrors)'
-Replace-QueueSource 'BBDown/BBDownAria2c.cs' '{extraArgs} \"{url}\" -d' '{extraArgs} {BeflowMirrorUris(url, useDefaultMirrors)} -d'
+Replace-QueueSource 'BBDown/BBDownAria2c.cs' '{extraArgs} \"{url}\" -d' '{extraArgs} {BeflowMirrorUris(url, extraArgs, useDefaultMirrors)} -d'
 Replace-QueueSource 'BBDown/BBDownAria2c.cs' '        public static async Task DownloadFileByAria2cAsync(' @'
         // BBDown pins every stream to one default mirror, which congests when a popular episode goes live.
         // The signed path is valid on the other upos mirrors, so aria2 can spread connections and favor the fastest node.
@@ -76,11 +76,17 @@ Replace-QueueSource 'BBDown/BBDownAria2c.cs' '        public static async Task D
             "upos-sz-mirrorhw.bilivideo.com", "upos-sz-mirrorcos.bilivideo.com"
         };
 
-        internal static string BeflowMirrorUris(string url, bool useDefaultMirrors)
+        // aria2 shares --split connections across all URIs, so 16 connections over four mirrors leaves only four per node.
+        // Congested nodes throttle each connection, so keep the configured count per mirror; the later option wins.
+        internal static string BeflowMirrorUris(string url, string extraArgs, bool useDefaultMirrors)
         {
             var pinned = $"://{BeflowMirrorHosts[0]}/";
             if (!useDefaultMirrors || !url.Contains(pinned)) return $"\"{url}\"";
-            return string.Join(" ", System.Array.ConvertAll(BeflowMirrorHosts, host => $"\"{url.Replace(pinned, $"://{host}/")}\""));
+            var splits = System.Text.RegularExpressions.Regex.Matches(extraArgs ?? "", @"(?:^|\s)(?:-s\s*|--split[=\s]\s*)(\d+)");
+            // The adapter's command line already sets -s16 before extraArgs.
+            var split = splits.Count > 0 ? int.Parse(splits[splits.Count - 1].Groups[1].Value) : 16;
+            var uris = string.Join(" ", System.Array.ConvertAll(BeflowMirrorHosts, host => $"\"{url.Replace(pinned, $"://{host}/")}\""));
+            return $"--split={split * BeflowMirrorHosts.Length} {uris}";
         }
 
         public static async Task DownloadFileByAria2cAsync(
