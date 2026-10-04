@@ -7,6 +7,71 @@ namespace BBDownForWindows.Tests;
 
 public sealed class DownloadQueueViewModelTests
 {
+    [Fact]
+    public void SingleEpisodeUsesItsSavedNumberAndTitleInsteadOfTheTaskCount()
+    {
+        var row = new QueueRow(new()
+        {
+            State = DownloadQueueState.Completed,
+            Download = new() { Options = new() { Url = "" }, Title = "凡人修仙传", Episodes = [new() { PageNumber = 194, PageTitle = "194 慕兰之战18" }] }
+        });
+
+        Assert.Equal("P194 · 194 慕兰之战18", row.EpisodeSummary);
+        Assert.Equal("普通下载 · P194 · 194 慕兰之战18 · 成功 0 / 失败 0 / 未完成 1", row.Summary);
+        Assert.Equal("P194 · 194 慕兰之战18", row.EpisodeDetails);
+        Assert.Equal(Visibility.Visible, row.EpisodeVisibility);
+    }
+
+    [Fact]
+    public void MultipleEpisodesCompressOnlySelectedContiguousNumbersAndKeepFullTitles()
+    {
+        var numbers = new[] { 7, 3, 1, 2, 5, 8 };
+        var row = new QueueRow(new()
+        {
+            Download = new() { Options = new() { Url = "" }, TotalPages = 100,
+                Episodes = numbers.Select(number => new EpisodeStreamSelection { PageNumber = number, PageTitle = $"标题{number}" }).ToList() }
+        });
+
+        Assert.Equal("P1–P3、P5、P7–P8", row.EpisodeSummary);
+        Assert.Equal("普通下载 · P1–P3、P5、P7–P8 · 成功 0 / 失败 0 / 未完成 6", row.Summary);
+        Assert.Equal(string.Join(Environment.NewLine, numbers.Order().Select(number => $"P{number} · 标题{number}")), row.EpisodeDetails);
+    }
+
+    [Fact]
+    public void DualAudioUsesSelectedSourcePageNumbersNotPairNumbers()
+    {
+        var row = new QueueRow(new()
+        {
+            Kind = DownloadQueueKind.DualAudio,
+            DualAudio = new() { Pairs =
+            [
+                new() { PairNumber = 1, SourceAPageNumber = 190, SourceAPageTitle = "国语第190集", SourceBPageNumber = 10, SourceBPageTitle = "粤语第10集" },
+                new() { PairNumber = 2, SourceAPageNumber = 191, SourceAPageTitle = "国语第191集", SourceBPageNumber = 12, SourceBPageTitle = "粤语第12集" },
+                new() { PairNumber = 3, SourceAPageNumber = 192, SourceBPageNumber = 13, IsSelected = false }
+            ] }
+        });
+
+        Assert.Equal("A P190–P191 / B P10、P12", row.EpisodeSummary);
+        Assert.Equal($"A P190 · 国语第190集 / B P10 · 粤语第10集{Environment.NewLine}A P191 · 国语第191集 / B P12 · 粤语第12集", row.EpisodeDetails);
+    }
+
+    [Fact]
+    public void EpisodeSummaryRefreshesAfterEditingAndDoesNotInventMissingEpisodes()
+    {
+        var row = new QueueRow(new());
+        Assert.Equal(Visibility.Collapsed, row.EpisodeVisibility);
+        Assert.Empty(row.EpisodeDetails);
+        Assert.Equal("普通下载 · 成功 0 / 失败 0 / 未完成 0", row.Summary);
+        var notified = false;
+        row.PropertyChanged += (_, args) => notified |= string.IsNullOrEmpty(args.PropertyName) || args.PropertyName == nameof(QueueRow.EpisodeSummary);
+        row.Update(new() { Download = new() { Options = new() { Url = "" }, Episodes = [new() { PageNumber = 5, PageTitle = "第五集" }] } });
+
+        Assert.True(notified);
+        Assert.Equal("P5 · 第五集", row.EpisodeSummary);
+        Assert.Equal("普通下载 · P5 · 第五集 · 成功 0 / 失败 0 / 未完成 1", row.Summary);
+        Assert.Equal(Visibility.Visible, row.EpisodeVisibility);
+    }
+
     [Theory]
     [InlineData(DownloadQueueKind.Download)]
     [InlineData(DownloadQueueKind.DualAudio)]
