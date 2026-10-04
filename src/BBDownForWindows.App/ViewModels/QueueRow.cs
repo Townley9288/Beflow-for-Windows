@@ -10,20 +10,23 @@ public sealed class QueueRow(DownloadQueueItem item) : ObservableObject
     public string Title => Item.Title;
     public string Links => Item.Url + (Item.DualAudio is null ? "" : "  /  " + Item.DualAudio.SourceBUrl);
     public string OutputDirectory => Item.OutputDirectory;
-    public string Summary => $"{(Item.Kind == DownloadQueueKind.Download ? "普通下载" : "多音轨封装")} · 成功 {Item.Succeeded} / 失败 {Item.Failed} / 未完成 {Math.Max(0, Item.Total - Item.Succeeded - Item.Failed)}";
+    public string KindText => Item.Kind == DownloadQueueKind.Download ? "普通下载" : "多音轨封装";
+    public string OutcomeSummary => $" · 成功 {Item.Succeeded} / 失败 {Item.Failed} / 未完成 {Math.Max(0, Item.Total - Item.Succeeded - Item.Failed)}";
+    public string EpisodeInlineText => EpisodeSummary.Length > 0 ? " · " + EpisodeSummary : string.Empty;
+    public string Summary => KindText + EpisodeInlineText + OutcomeSummary;
     public string EpisodeSummary
     {
         get
         {
             if (Item.Kind == DownloadQueueKind.Download && Item.Download is { Episodes.Count: > 0 } download)
-                return "下载分集：" + (download.Episodes.Count == 1
+                return download.Episodes.Count == 1
                     ? EpisodeLabel(download.Episodes[0].PageNumber, download.Episodes[0].PageTitle)
-                    : PageRanges(download.Episodes.Select(episode => episode.PageNumber)));
+                    : PageRanges(download.Episodes.Select(episode => episode.PageNumber));
             if (Item.Kind == DownloadQueueKind.DualAudio && Item.DualAudio is { } dual)
             {
                 var pairs = dual.Pairs.Where(pair => pair.IsSelected).ToList();
                 if (pairs.Count > 0)
-                    return $"下载分集：A {PageRanges(pairs.Select(pair => pair.SourceAPageNumber))} / B {PageRanges(pairs.Select(pair => pair.SourceBPageNumber))}";
+                    return $"A {PageRanges(pairs.Select(pair => pair.SourceAPageNumber))} / B {PageRanges(pairs.Select(pair => pair.SourceBPageNumber))}";
             }
             return string.Empty;
         }

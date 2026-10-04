@@ -16,7 +16,8 @@ public sealed class DownloadQueueViewModelTests
             Download = new() { Options = new() { Url = "" }, Title = "凡人修仙传", Episodes = [new() { PageNumber = 194, PageTitle = "194 慕兰之战18" }] }
         });
 
-        Assert.Equal("下载分集：P194 · 194 慕兰之战18", row.EpisodeSummary);
+        Assert.Equal("P194 · 194 慕兰之战18", row.EpisodeSummary);
+        Assert.Equal("普通下载 · P194 · 194 慕兰之战18 · 成功 0 / 失败 0 / 未完成 1", row.Summary);
         Assert.Equal("P194 · 194 慕兰之战18", row.EpisodeDetails);
         Assert.Equal(Visibility.Visible, row.EpisodeVisibility);
     }
@@ -31,7 +32,8 @@ public sealed class DownloadQueueViewModelTests
                 Episodes = numbers.Select(number => new EpisodeStreamSelection { PageNumber = number, PageTitle = $"标题{number}" }).ToList() }
         });
 
-        Assert.Equal("下载分集：P1–P3、P5、P7–P8", row.EpisodeSummary);
+        Assert.Equal("P1–P3、P5、P7–P8", row.EpisodeSummary);
+        Assert.Equal("普通下载 · P1–P3、P5、P7–P8 · 成功 0 / 失败 0 / 未完成 6", row.Summary);
         Assert.Equal(string.Join(Environment.NewLine, numbers.Order().Select(number => $"P{number} · 标题{number}")), row.EpisodeDetails);
     }
 
@@ -49,7 +51,7 @@ public sealed class DownloadQueueViewModelTests
             ] }
         });
 
-        Assert.Equal("下载分集：A P190–P191 / B P10、P12", row.EpisodeSummary);
+        Assert.Equal("A P190–P191 / B P10、P12", row.EpisodeSummary);
         Assert.Equal($"A P190 · 国语第190集 / B P10 · 粤语第10集{Environment.NewLine}A P191 · 国语第191集 / B P12 · 粤语第12集", row.EpisodeDetails);
     }
 
@@ -59,12 +61,14 @@ public sealed class DownloadQueueViewModelTests
         var row = new QueueRow(new());
         Assert.Equal(Visibility.Collapsed, row.EpisodeVisibility);
         Assert.Empty(row.EpisodeDetails);
+        Assert.Equal("普通下载 · 成功 0 / 失败 0 / 未完成 0", row.Summary);
         var notified = false;
         row.PropertyChanged += (_, args) => notified |= string.IsNullOrEmpty(args.PropertyName) || args.PropertyName == nameof(QueueRow.EpisodeSummary);
         row.Update(new() { Download = new() { Options = new() { Url = "" }, Episodes = [new() { PageNumber = 5, PageTitle = "第五集" }] } });
 
         Assert.True(notified);
-        Assert.Equal("下载分集：P5 · 第五集", row.EpisodeSummary);
+        Assert.Equal("P5 · 第五集", row.EpisodeSummary);
+        Assert.Equal("普通下载 · P5 · 第五集 · 成功 0 / 失败 0 / 未完成 1", row.Summary);
         Assert.Equal(Visibility.Visible, row.EpisodeVisibility);
     }
 
