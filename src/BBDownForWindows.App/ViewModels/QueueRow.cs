@@ -11,6 +11,51 @@ public sealed class QueueRow(DownloadQueueItem item) : ObservableObject
     public string Links => Item.Url + (Item.DualAudio is null ? "" : "  /  " + Item.DualAudio.SourceBUrl);
     public string OutputDirectory => Item.OutputDirectory;
     public string Summary => $"{(Item.Kind == DownloadQueueKind.Download ? "普通下载" : "多音轨封装")} · 成功 {Item.Succeeded} / 失败 {Item.Failed} / 未完成 {Math.Max(0, Item.Total - Item.Succeeded - Item.Failed)}";
+    public string EpisodeSummary
+    {
+        get
+        {
+            if (Item.Kind == DownloadQueueKind.Download && Item.Download is { Episodes.Count: > 0 } download)
+                return "下载分集：" + (download.Episodes.Count == 1
+                    ? EpisodeLabel(download.Episodes[0].PageNumber, download.Episodes[0].PageTitle)
+                    : PageRanges(download.Episodes.Select(episode => episode.PageNumber)));
+            if (Item.Kind == DownloadQueueKind.DualAudio && Item.DualAudio is { } dual)
+            {
+                var pairs = dual.Pairs.Where(pair => pair.IsSelected).ToList();
+                if (pairs.Count > 0)
+                    return $"下载分集：A {PageRanges(pairs.Select(pair => pair.SourceAPageNumber))} / B {PageRanges(pairs.Select(pair => pair.SourceBPageNumber))}";
+            }
+            return string.Empty;
+        }
+    }
+    public string EpisodeDetails
+    {
+        get
+        {
+            if (Item.Kind == DownloadQueueKind.Download && Item.Download is { } download)
+                return string.Join(Environment.NewLine, download.Episodes.OrderBy(episode => episode.PageNumber)
+                    .Select(episode => EpisodeLabel(episode.PageNumber, episode.PageTitle)));
+            if (Item.Kind == DownloadQueueKind.DualAudio && Item.DualAudio is { } dual)
+                return string.Join(Environment.NewLine, dual.Pairs.Where(pair => pair.IsSelected).OrderBy(pair => pair.PairNumber)
+                    .Select(pair => $"A {EpisodeLabel(pair.SourceAPageNumber, pair.SourceAPageTitle)} / B {EpisodeLabel(pair.SourceBPageNumber, pair.SourceBPageTitle)}"));
+            return string.Empty;
+        }
+    }
+    public Visibility EpisodeVisibility => EpisodeSummary.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    private static string EpisodeLabel(int number, string title) => $"P{number} · {title}";
+    private static string PageRanges(IEnumerable<int> pages)
+    {
+        var numbers = pages.Distinct().Order().ToArray();
+        var ranges = new List<string>();
+        for (var index = 0; index < numbers.Length; index++)
+        {
+            var start = numbers[index];
+            var end = start;
+            while (index + 1 < numbers.Length && (long)numbers[index + 1] == (long)end + 1) end = numbers[++index];
+            ranges.Add(start == end ? $"P{start}" : $"P{start}–P{end}");
+        }
+        return string.Join("、", ranges);
+    }
     public string Error => Item.Error;
     public string StateText => Item.State switch
     {

@@ -72,6 +72,15 @@
                                         <TextBlock Text="{Binding Summary}" Opacity="0.7" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                                         <TextBlock Grid.Column="1" Text="{Binding TimeText}" FontSize="12" Opacity="0.65" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding TimeCaption}"/>
                                     </Grid>
+                                    <TextBlock Text="{Binding EpisodeSummary}" Visibility="{Binding EpisodeVisibility}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6">
+                                        <ToolTipService.ToolTip>
+                                            <ToolTip MaxWidth="640">
+                                                <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                                    <TextBlock Text="{Binding EpisodeDetails}" TextWrapping="Wrap"/>
+                                                </ScrollViewer>
+                                            </ToolTip>
+                                        </ToolTipService.ToolTip>
+                                    </TextBlock>
                                     <TextBlock Text="{Binding Links}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Links}" FontSize="12" Margin="0,0,0,6"/>
                                     <TextBlock Text="{Binding OutputDirectory}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding OutputDirectory}" FontSize="12" Margin="0,0,0,6"/>
                                     <TextBlock Text="{Binding ProgressText}" TextTrimming="CharacterEllipsis" Visibility="{Binding ProgressVisibility}" Margin="0,0,0,6"/>
