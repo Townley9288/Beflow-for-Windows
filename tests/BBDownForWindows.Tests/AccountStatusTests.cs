@@ -66,6 +66,34 @@ public sealed class AccountStatusTests
         Assert.Contains("sign=f972c23f4230160a0cc56a4c70ac6cee", tvRequest.Query, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("""{"status":1,"label":{"text":"年度大会员"},"tv_vip_status":1,"super_vip":{"is_super_vip":true}}""", "超级大会员")]
+    [InlineData("""{"status":0,"label":{"text":""},"tv_vip_status":1}""", "超级大会员")]
+    [InlineData("""{"status":1,"label":{"text":"年度大会员"},"tv_vip_status":"1"}""", "超级大会员")]
+    [InlineData("""{"status":1,"label":{"text":"年度大会员"},"tv_vip_status":0}""", "年度大会员")]
+    [InlineData("""{"status":0,"label":{"text":""},"tv_vip_status":0}""", "普通用户")]
+    [InlineData("""{"status":1,"label":{"text":"年度大会员"}}""", "年度大会员")]
+    public async Task TvMembershipUsesExplicitTvEntitlementWithoutAnotherRequest(string vipJson, string expectedLabel)
+    {
+        using var temp = new TempDirectory();
+        var paths = CreatePaths(temp.Info);
+        const string credential = "access_token=tv-test-token";
+        File.WriteAllText(paths.TvCredentialFile, credential);
+        var handler = new StubHandler(_ => Json(
+            """{"code":0,"data":{"name":"TV用户","mid":456,"level":6,"vip":__VIP__}}"""
+                .Replace("__VIP__", vipJson, StringComparison.Ordinal)));
+        using var http = new HttpClient(handler);
+        var service = new AccountStatusService(paths, http);
+
+        var status = await service.GetStatusAsync(AccountChannel.Tv);
+
+        Assert.Equal(AccountLoginState.LoggedIn, status.State);
+        Assert.Equal(expectedLabel, status.Profile!.VipLabel);
+        Assert.Equal("456", status.Profile.UserId);
+        Assert.Equal("/x/v2/account/myinfo", Assert.Single(handler.Requests).AbsolutePath);
+        Assert.Equal(credential, File.ReadAllText(paths.TvCredentialFile));
+    }
+
     [Fact]
     public async Task ExplicitAuthenticationFailuresAreExpired()
     {

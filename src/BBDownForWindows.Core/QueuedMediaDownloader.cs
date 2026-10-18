@@ -37,6 +37,8 @@ public sealed class QueuedMediaDownloader(ApplicationPaths paths, IProcessRunner
         }
         await save();
         var request = QueueSnapshot.Copy(options);
+        if (!string.IsNullOrWhiteSpace(desired.ApiMode)) request.ApiMode = desired.ApiMode;
+        context.AppendLog($"P{desired.PageNumber} 下载会话：{request.ApiMode}。\n");
         request.Pages = desired.PageNumber.ToString(); request.Season = false;
         request.WorkDirectory = checkpoint.Directory; request.MultiFilePattern = string.Empty;
         var args = BBDownCommandBuilder.BuildExactDownloadArguments(request, tools);

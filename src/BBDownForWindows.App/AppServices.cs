@@ -27,14 +27,14 @@ public sealed class AppServices
         BilibiliMetadata = new BilibiliMetadataService(HttpClient);
         BilibiliSpace = new BilibiliSpaceService(HttpClient, paths);
         DownloadNaming = new DownloadNamingService();
-        BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata, DownloadNaming, ParseLimiter);
+        AccountStatus = new AccountStatusService(paths, HttpClient);
+        BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata, DownloadNaming, ParseLimiter, AccountStatus);
         DownloadQueue = new DownloadQueueService(new DownloadQueueStore(paths),
             new DownloadQueueExecutor(new QueuedMediaDownloader(paths, QueueProcessRunner, ToolLocator, ParseLimiter),
                 QueueProcessRunner, ToolLocator, DownloadNaming, History), QueueTaskManager, Work);
         DualAudio = new DualAudioService(paths, BBDown, ProcessRunner, Settings, ToolLocator);
         Tmdb = new TmdbService(RenameSettings);
         Rename = new RenameService(ProcessRunner, ToolLocator, Settings, RenameHistory);
-        AccountStatus = new AccountStatusService(paths, HttpClient);
         Updates = new UpdateService(UpdateHttpClient);
         UpdateCoordinator = new UpdateCoordinator(this);
     }

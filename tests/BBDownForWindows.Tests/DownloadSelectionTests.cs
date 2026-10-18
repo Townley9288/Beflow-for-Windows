@@ -311,8 +311,37 @@ public sealed class DownloadSelectionTests
         Assert.Equal(2, updates.Count(item => item.Episode is not null));
         Assert.Equal(2, fixture.Runner.Requests.Count);
         Assert.All(fixture.Runner.Requests, item => Assert.DoesNotContain("ALL", item.Arguments));
-        Assert.DoesNotContain("-p", fixture.Runner.Requests[0].Arguments);
+        Assert.Contains("-p", fixture.Runner.Requests[0].Arguments);
+        Assert.Contains("1", fixture.Runner.Requests[0].Arguments);
         Assert.Contains("2", fixture.Runner.Requests[1].Arguments);
+    }
+
+    [Theory]
+    [InlineData(DownloadParseMode.Current, "chosen.bilivideo.com")]
+    [InlineData(DownloadParseMode.All, "chosen.bilivideo.com")]
+    [InlineData(DownloadParseMode.Current, "")]
+    [InlineData(DownloadParseMode.All, "")]
+    public async Task ParsePreservesManualCdnForMediaHeaderProbe(DownloadParseMode mode, string host)
+    {
+        using var fixture = new ServiceFixture(new ScriptedRunner());
+        await fixture.Settings.SaveAsync(new AppSettings { UposHost = host });
+        var manager = new TaskManager(fixture.Paths, fixture.Runner);
+        var result = await manager.RunExclusiveAsync(TaskKind.DownloadParse, false, "parse", async (context, token) =>
+            await fixture.Service.ParseDownloadAsync(new("ss1", mode, "TV"), null, context, token));
+
+        Assert.Equal(TaskState.Completed, result.State);
+        Assert.NotEmpty(fixture.Runner.Requests);
+        Assert.All(fixture.Runner.Requests, request =>
+        {
+            Assert.Contains("-tv", request.Arguments);
+            var hostIndex = request.Arguments.ToList().IndexOf("--upos-host");
+            if (host.Length == 0) Assert.Equal(-1, hostIndex);
+            else
+            {
+                Assert.True(hostIndex >= 0);
+                Assert.Equal(host, request.Arguments[hostIndex + 1]);
+            }
+        });
     }
 
     [Theory]
@@ -321,6 +350,7 @@ public sealed class DownloadSelectionTests
     [InlineData(6, 17, 6)]
     [InlineData(8, 17, 8)]
     [InlineData(8, 3, 2)]
+    [InlineData(8, 123, 8)]
     public async Task AllPageParseUsesSavedConcurrencyAndKeepsEpisodeOrder(int? concurrency, int totalPages, int expectedWorkers)
     {
         var runner = new ScriptedRunner { TotalPages = totalPages, ParseDelay = TimeSpan.FromMilliseconds(60) };
@@ -344,6 +374,10 @@ public sealed class DownloadSelectionTests
         Assert.Equal(expectedWorkers + 1, runner.Requests.Count);
         Assert.Equal(expectedWorkers, runner.MaximumActiveParses);
         Assert.All(runner.Requests, item => Assert.DoesNotContain("ALL", item.Arguments));
+        var discoveryArguments = runner.Requests[0].Arguments.ToList();
+        Assert.Equal("1", discoveryArguments[discoveryArguments.IndexOf("-p") + 1]);
+        Assert.Contains("--show-all", discoveryArguments);
+        Assert.Equal(Enumerable.Range(1, totalPages), catalog.AllPages.Select(page => page.Number));
         var parsedPages = runner.Requests.Skip(1).SelectMany(item =>
             BBDownParser.ExpandPageExpression(item.Arguments[item.Arguments.ToList().IndexOf("-p") + 1])).Order().ToArray();
         Assert.Equal(Enumerable.Range(2, totalPages - 1), parsedPages);
@@ -365,6 +399,47 @@ public sealed class DownloadSelectionTests
         Assert.Equal(0, (await fixture.Settings.LoadAsync()).ParseConcurrency);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task RiskControlStopsFurtherParsingAndRetainsTheDirectoryAndReadyEpisodes(int failedPage)
+    {
+        var runner = new ScriptedRunner
+        {
+            TotalPages = 123, ParseExitCode = 1, FailParsePage = failedPage,
+            ParseFailureOutput = "视频标题: 风控测试\n共计 123 个分P\n"
+                + string.Join('\n', Enumerable.Range(1, 123).Select(p => $"P{p}: [{p * 10}] [第{p}集] [24m]"))
+                + $"\n开始解析P{failedPage}: 123...\nnet_http_message_not_success_statuscode_reason, 412, Precondition Failed\n"
+        };
+        using var fixture = new ServiceFixture(runner);
+        DownloadCatalog? catalog = null;
+        var manager = new TaskManager(fixture.Paths, runner);
+        var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadParse, false, "risk", async (context, token) =>
+            catalog = await fixture.Service.ParseDownloadAsync(new("BV1LONG", DownloadParseMode.All), null, context, token));
+
+        Assert.Equal(TaskState.Completed, snapshot.State);
+        Assert.NotNull(catalog);
+        Assert.Equal(123, catalog.AllPages.Count);
+        var failed = Assert.Single(catalog.Episodes, e => e.Page.Number == failedPage);
+        Assert.Equal(DownloadEpisodeParseState.Failed, failed.State);
+        Assert.Contains("HTTP 412", failed.Error);
+        Assert.True(runner.RiskCancellationObserved);
+        Assert.True(catalog.Episodes.Count < 123);
+        if (failedPage == 1) Assert.Single(runner.Requests);
+        else Assert.Equal(DownloadEpisodeParseState.Ready, catalog.Episodes.Single(e => e.Page.Number == 1).State);
+    }
+
+    [Theory]
+    [InlineData("net_http_message_not_success_statuscode_reason, 412, Precondition Failed")]
+    [InlineData("Response status code does not indicate success: 412 (Precondition Failed).")]
+    [InlineData("HTTP 412")]
+    [InlineData("{\"code\":-352,\"message\":\"风控校验失败\"}")]
+    public void RiskDiagnosticsAreRecognizedWithoutTreatingMediaNumbersAsErrors(string output)
+    {
+        Assert.NotEmpty(BilibiliRequestFailure.RiskControlMessage(output));
+        Assert.Empty(BilibiliRequestFailure.RiskControlMessage("P106: [31030641236] [标题] [6m]\n[412 kbps]"));
+    }
+
     [Fact]
     public async Task CurrentParseOnlyReturnsTheUrlSelectedEpisode()
     {
@@ -382,6 +457,28 @@ public sealed class DownloadSelectionTests
         // 目录仍包含全部分集，供「继续解析」补齐其余集。
         Assert.Equal([1, 2], catalog.AllPages.Select(page => page.Number));
         Assert.DoesNotContain("-p", fixture.Runner.Requests[0].Arguments);
+    }
+
+    [Theory]
+    [InlineData("https://www.bilibili.com/video/BV1BhuezaEgB/?spm_id_from=333.337.search-card.all.click&vd_source=tracking", 1)]
+    [InlineData("https://www.bilibili.com/video/BV1BhuezaEgB/?spm_id_from=tracking&p=3&t=148.0", 3)]
+    [InlineData("https://www.bilibili.com/video/av625160382?t=28.3", 1)]
+    [InlineData("BV1BhuezaEgB", 1)]
+    public async Task CurrentUgcParseExplicitlySelectsOnePageAndKeepsTheFullDirectory(string url, int page)
+    {
+        using var fixture = new ServiceFixture(new ScriptedRunner { TotalPages = 123 });
+        DownloadCatalog? catalog = null;
+        var manager = new TaskManager(fixture.Paths, fixture.Runner);
+        var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadParse, false, "current-ugc", async (context, token) =>
+            catalog = await fixture.Service.ParseDownloadAsync(new(url, DownloadParseMode.Current), null, context, token));
+
+        Assert.Equal(TaskState.Completed, snapshot.State);
+        Assert.NotNull(catalog);
+        Assert.Equal(page, Assert.Single(catalog.Episodes).Page.Number);
+        Assert.Equal(123, catalog.AllPages.Count);
+        var arguments = Assert.Single(fixture.Runner.Requests).Arguments.ToList();
+        Assert.Equal(url, arguments[0]);
+        Assert.Equal(page.ToString(), arguments[arguments.IndexOf("-p") + 1]);
     }
 
     [Fact]
@@ -719,6 +816,8 @@ public sealed class DownloadSelectionTests
         public List<DownloadPreparationReply> PreparationReplies { get; } = [];
         public int FailDownloadPage { get; set; }
         public int ParseExitCode { get; set; }
+        public int FailParsePage { get; set; }
+        public bool RiskCancellationObserved { get; private set; }
         public string ParseFailureOutput { get; set; } = string.Empty;
         public HashSet<int> MuxedPages { get; } = [];
         public int TotalPages { get; set; } = 2;
@@ -760,9 +859,10 @@ public sealed class DownloadSelectionTests
                 return new ProcessResult(page == FailDownloadPage ? 1 : 0, string.Empty, false);
             }
 
-            if (ParseExitCode != 0)
+            if (ParseExitCode != 0 && (FailParsePage == 0 || selectedPages.Contains(FailParsePage)))
             {
                 foreach (var line in ParseFailureOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries)) onOutput?.Invoke(line + "\n");
+                RiskCancellationObserved |= cancellationToken.IsCancellationRequested;
                 return new ProcessResult(ParseExitCode, ParseFailureOutput, false);
             }
 
@@ -776,22 +876,24 @@ public sealed class DownloadSelectionTests
 
             var output = request.Arguments.Contains("ALL")
                 ? InfoOutput(1) + InfoOutput(2, includeHeader: false) + "任务完成\n"
-                : (MuxedPages.Contains(page) ? MuxedInfoOutput(page) : TotalPages == 2 ? InfoOutput(page) : CatalogInfoOutput(selectedPages, TotalPages)) + "任务完成\n";
+                : (MuxedPages.Contains(page) ? MuxedInfoOutput(page) : TotalPages == 2
+                    ? string.Concat(selectedPages.Select((number, index) => InfoOutput(number, includeHeader: index == 0)))
+                    : CatalogInfoOutput(selectedPages, TotalPages)) + "任务完成\n";
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries)) onOutput?.Invoke(line + "\n");
             return new ProcessResult(0, output, false);
         }
 
         public Task TerminateAllAsync() => Task.CompletedTask;
 
-        private static int ReadPage(IReadOnlyList<string> arguments)
-        {
-            return ReadPages(arguments)[0];
-        }
-
-        private static List<int> ReadPages(IReadOnlyList<string> arguments)
+        private List<int> ReadPages(IReadOnlyList<string> arguments)
         {
             var index = arguments.ToList().IndexOf("-p");
-            if (index < 0) return [1];
+            if (index < 0)
+            {
+                if (System.Text.RegularExpressions.Regex.IsMatch(arguments[0], @"/bangumi/play/ep\d+")) return [1];
+                var page = System.Text.RegularExpressions.Regex.Match(arguments[0], @"[?&]p=(\d+)(?:[&#]|$)");
+                return page.Success ? [int.Parse(page.Groups[1].Value)] : Enumerable.Range(1, TotalPages).ToList();
+            }
             return arguments[index + 1].Equals("ALL", StringComparison.OrdinalIgnoreCase)
                 ? [1, 2]
                 : BBDownParser.ExpandPageExpression(arguments[index + 1]);

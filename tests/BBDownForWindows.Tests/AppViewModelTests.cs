@@ -659,10 +659,13 @@ public sealed class AppViewModelTests
     private sealed class AppFixture : IDisposable
     {
         private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory();
-        public AppFixture()
+        public AppFixture(IBBDownService? downloader = null)
         {
             var app = Directory.CreateDirectory(Path.Combine(_root.FullName, "app"));
             Services = new AppServices(new ApplicationPaths(app.FullName, Path.Combine(_root.FullName, "local")));
+            if (downloader is not null)
+                typeof(AppServices).GetField("<BBDown>k__BackingField", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                    .SetValue(Services, downloader);
         }
 
         public AppServices Services { get; }
@@ -723,6 +726,89 @@ public sealed class AppViewModelTests
         Assert.Same(first, viewModel.VisibleRows[0]);
         Assert.DoesNotContain(System.Collections.Specialized.NotifyCollectionChangedAction.Reset, changes);
         Assert.Equal("已选择 4/4 集 · 预计 480 MB", viewModel.SelectionSummary);
+    }
+
+    [Fact]
+    public async Task PartialParseShowsActualCountsAndIgnoresQueuedProgressAfterCompletion()
+    {
+        var catalog = new DownloadCatalog
+        {
+            SourceUrl = "BV1TEST", ResolvedUrl = "BV1TEST",
+            AllPages = Enumerable.Range(1, 123).Select(p => new PageInfo(p, p.ToString(), $"第{p}集", "24m")).ToList(),
+            Episodes = [new() { Page = new(1, "1", "第一集", "24m"), State = DownloadEpisodeParseState.Failed, Error = "HTTP 412（风控）" }, ReadyEpisode(7, "第七集")]
+        };
+        using var fixture = new AppFixture(new ParseResultService(catalog));
+        var viewModel = new DownloadViewModel(fixture.Services) { Url = "BV1TEST", SaveTaskLogs = false };
+        var queued = new QueuedProgressContext();
+        var previous = SynchronizationContext.Current;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(queued);
+            var task = viewModel.ParseAllCommand.ExecuteAsync(null);
+            Assert.True(task.IsCompleted);
+            await task;
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+
+        Assert.Equal("就绪 1/123 集 · 失败 1 集 · 待解析 121 集", viewModel.EpisodeCountText);
+        Assert.Contains("HTTP 412", viewModel.Message);
+        Assert.Equal("解析未完成", viewModel.ProgressTitle);
+        Assert.False(viewModel.ShowProgress);
+        Assert.True(viewModel.ContinueParseCommand.CanExecute(null));
+        Assert.True(queued.Count > 0);
+        queued.Flush();
+        Assert.False(viewModel.ShowProgress);
+        Assert.Equal("解析未完成", viewModel.ProgressTitle);
+        Assert.Equal("成功解析 1/123 集", viewModel.ProgressDetail);
+        Assert.Single(viewModel.Rows, r => r.IsReady);
+    }
+
+    [Fact]
+    public void FailedProgressUpdatesItsReasonAndDoesNotEraseAnExistingReadyRow()
+    {
+        using var fixture = new AppFixture();
+        var viewModel = new DownloadViewModel(fixture.Services);
+        void Report(DownloadEpisodeInfo e) => viewModel.OnParseProgress(new(1, 2, e.Page.Number, e.Page.Title, e, ""));
+        var ready = ReadyEpisode(1, "第一集");
+        DownloadSessionPolicy.Remember(ready, "WEB");
+        Report(ready);
+        var row = viewModel.Rows.Single();
+        var selection = row.BuildSelection();
+        Report(new() { Page = ready.Page, State = DownloadEpisodeParseState.Failed, Error = "HTTP 412" });
+        Assert.Same(row, viewModel.Rows.Single());
+        Assert.Single(row.Episode.Sources);
+        Assert.Equal(selection.Video, row.BuildSelection().Video);
+        Assert.Equal(selection.Audio, row.BuildSelection().Audio);
+        Assert.Equal(selection.ApiMode, row.BuildSelection().ApiMode);
+        Assert.Equal(selection.FallbackReason, row.BuildSelection().FallbackReason);
+
+        Report(new() { Page = new(2, "2", "第二集", "24m"), State = DownloadEpisodeParseState.Failed, Error = "没有解析到可用视频流" });
+        Report(new() { Page = new(2, "2", "第二集", "24m"), State = DownloadEpisodeParseState.Failed, Error = "HTTP 412（风控）" });
+        Assert.Contains("HTTP 412", viewModel.Rows[1].StatusText);
+    }
+
+    private sealed class QueuedProgressContext : SynchronizationContext
+    {
+        private readonly Queue<(SendOrPostCallback Callback, object? State)> pending = new();
+        public int Count => pending.Count;
+        public override void Post(SendOrPostCallback callback, object? state) => pending.Enqueue((callback, state));
+        public void Flush() { while (pending.TryDequeue(out var item)) item.Callback(item.State); }
+    }
+
+    private sealed class ParseResultService(DownloadCatalog catalog) : IBBDownService
+    {
+        public Task<DownloadCatalog> ParseDownloadAsync(DownloadParseRequest request, IProgress<DownloadParseProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken)
+        {
+            foreach (var episode in catalog.Episodes) progress?.Report(new(1, 123, episode.Page.Number, episode.Page.Title, episode, "读取完成"));
+            return Task.FromResult(catalog);
+        }
+        public Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadEpisodeInfo> ParseEpisodeAsync(string url, int page, string apiMode, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ExactDownloadResult> DownloadExactAsync(ExactDownloadRequest request, IProgress<ExactDownloadProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<string> GetTitleAsync(string url, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     [Fact]

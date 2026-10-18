@@ -43,20 +43,29 @@ public sealed record BilibiliEpisodeMetadata(
     string EpisodeId,
     DateTimeOffset? PublishedAt);
 
-public sealed record DownloadParseRequest(string Url, DownloadParseMode Mode, string ApiMode = "WEB", string Pages = "");
+public sealed record DownloadParseRequest(string Url, DownloadParseMode Mode, string ApiMode = "WEB", string Pages = "",
+    StreamSelectionRule? Rule = null, DownloadMode DownloadMode = DownloadMode.VideoAndAudio);
+
+public sealed record DownloadEpisodeSource(string ApiMode, List<VideoStreamInfo> VideoStreams,
+    List<AudioStreamInfo> AudioStreams, bool IsMuxedStream);
 
 public sealed class DownloadEpisodeInfo
 {
     public required PageInfo Page { get; init; }
-    public List<VideoStreamInfo> VideoStreams { get; init; } = [];
-    public List<AudioStreamInfo> AudioStreams { get; init; } = [];
-    public bool IsMuxedStream { get; init; }
+    public List<VideoStreamInfo> VideoStreams { get; set; } = [];
+    public List<AudioStreamInfo> AudioStreams { get; set; } = [];
+    public bool IsMuxedStream { get; set; }
+    public string ApiMode { get; set; } = string.Empty;
+    public string SessionReason { get; set; } = string.Empty;
+    public string SourceWarning { get; set; } = string.Empty;
+    public List<DownloadEpisodeSource> Sources { get; init; } = [];
     public DownloadEpisodeParseState State { get; set; } = DownloadEpisodeParseState.Pending;
     public string Error { get; set; } = string.Empty;
 }
 
 public sealed class DownloadCatalog
 {
+    public bool AutomaticSession { get; set; }
     public string SourceUrl { get; init; } = string.Empty;
     public string ResolvedUrl { get; init; } = string.Empty;
     public string Title { get; init; } = string.Empty;
@@ -100,6 +109,7 @@ public sealed record AudioStreamSelection(
 
 public sealed class EpisodeStreamSelection
 {
+    public string ApiMode { get; set; } = string.Empty;
     public int PageNumber { get; set; }
     public string PageTitle { get; set; } = string.Empty;
     public VideoStreamSelection? Video { get; set; }

@@ -40,9 +40,9 @@ public sealed class SpaceVideoViewModel(BilibiliSpaceVideo video) : ObservableOb
         foreach (var page in catalog.AllPages.OrderBy(p => p.Number))
         {
             var old = Rows.FirstOrDefault(r => r.PageNumber == page.Number);
-            if (old?.IsReady == true) continue;
             var episode = catalog.Episodes.FirstOrDefault(e => e.Page.Number == page.Number)
                 ?? new DownloadEpisodeInfo { Page = page, State = DownloadEpisodeParseState.Pending, Error = "尚未解析，可重试" };
+            if (old?.IsReady == true) { old.RefreshAvailableSources(episode); continue; }
             if (old is not null) { old.SelectionChanged -= RowChanged; Rows.Remove(old); }
             var row = new DownloadEpisodeViewModel(episode);
             row.ApplyRule(rule, mode);
@@ -121,7 +121,7 @@ public sealed partial class PersonalSpaceViewModel : ObservableObject
         ParseCommand = new AsyncRelayCommand(ParseSelectedAsync, () => IsIdle && videos.Values.Any(v => v.IsSelected && !v.IsEnqueued));
         BrowseCommand = new RelayCommand(() => { selectionView = false; NotifyView(); }, () => IsIdle);
         ShowSelectionCommand = new RelayCommand(() => { selectionView = true; RefreshSelection(); NotifyView(); }, () => IsIdle && videos.Values.Any(v => v.IsSelected));
-        ApplyRuleCommand = new RelayCommand(ApplyRule, () => IsIdle);
+        ApplyRuleCommand = new AsyncRelayCommand(ApplyRule, () => IsIdle);
         EnqueueCommand = new AsyncRelayCommand(EnqueueAsync, () => IsIdle && SelectedVideos.Any(v => !v.IsEnqueued && ReadyRows(v).Any()));
         InitializeUserSearch();
     }
@@ -300,14 +300,15 @@ public sealed partial class PersonalSpaceViewModel : ObservableObject
         currentCollection = item.Collection; ResetFilter();
         if (!DirectoryComplete) await RunAsync(LoadCurrentAsync);
     }
-    private async Task RunAsync(Func<CancellationToken, Task> action)
+    private Task RunAsync(Func<CancellationToken, Task> action) => RunWithContextAsync((_, token) => action(token));
+    private async Task RunWithContextAsync(Func<TaskExecutionContext, CancellationToken, Task> action)
     {
         if (IsBusy) return;
         IsBusy = true;
         using var source = new CancellationTokenSource(); cancellation = source;
         try
         {
-            var result = await tasks.RunExclusiveAsync(TaskKind.DownloadParse, false, "space", (_, token) => action(token), source.Token);
+            var result = await tasks.RunExclusiveAsync(TaskKind.DownloadParse, false, "space", action, source.Token);
             if (result.State == TaskState.Failed) Message = result.Error + " 已保留结果，可手动重试。";
             if (result.State == TaskState.Cancelled) Message = "已取消，保留已读取和已解析的结果，可继续。";
         }
@@ -323,12 +324,14 @@ public sealed partial class PersonalSpaceViewModel : ObservableObject
         try
         {
             var config = await settings.LoadAsync(source.Token);
+            var rule = Rule;
+            var mode = CurrentMode;
             var selected = SelectedVideos.Where(v => !v.IsEnqueued).ToList();
             var existing = selected.Where(v => v.Catalog is not null).ToDictionary(v => v.Bvid, v => v.Catalog!);
             var result = await tasks.RunExclusiveAsync(TaskKind.DownloadParse, config.SaveTaskLogs, "space-parse", async (context, token) =>
             {
                 Message = $"正在解析 {selected.Count} 个视频的全部分P…";
-                await foreach (var parsed in batch.ParseAsync(selected.Select(v => v.Video), existing, config.ApiMode, context, token))
+                await foreach (var parsed in batch.ParseAsync(selected.Select(v => v.Video), existing, "AUTO", context, token, rule, mode))
                 {
                     var video = videos[parsed.Video.Bvid]; video.Error = parsed.Error;
                     if (parsed.Catalog is not null) video.MergeCatalog(parsed.Catalog, Rule, CurrentMode);
@@ -363,10 +366,16 @@ public sealed partial class PersonalSpaceViewModel : ObservableObject
         catch (Exception ex) { Message = ex.Message; }
         finally { IsBusy = false; RefreshSelection(); }
     }
-    private void ApplyRule()
+    private async Task ApplyRule()
     {
-        foreach (var video in SelectedVideos.Where(v => !v.IsEnqueued)) foreach (var row in video.Rows) row.ApplyRule(Rule, CurrentMode);
-        RefreshSelection();
+        var rule = Rule;
+        var mode = CurrentMode;
+        await RunWithContextAsync(async (context, token) =>
+        {
+            var selected = SelectedVideos.Where(v => !v.IsEnqueued && v.Catalog is not null).ToList();
+            foreach (var video in selected) await batch.PrepareSelectionAsync(video.Catalog!, rule, mode, context, token);
+            foreach (var video in selected) foreach (var row in video.Rows) row.ApplyRule(rule, mode);
+        });
     }
     private void SetSelection(IEnumerable<SpaceVideoViewModel> items) { foreach (var v in items.ToList().Where(v => !v.IsEnqueued)) v.IsSelected = true; }
     private void VideoChanged(object? sender, EventArgs e) => RefreshSelection();

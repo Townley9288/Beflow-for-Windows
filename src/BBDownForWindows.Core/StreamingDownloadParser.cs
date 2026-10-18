@@ -60,7 +60,12 @@ internal sealed partial class StreamingDownloadParser
         if (_currentPage is not null)
         {
             _currentOutput.Append(line);
-            if (line.Contains("解析此分P失败", StringComparison.Ordinal))
+            if (BilibiliRequestFailure.RiskControlMessage(line) is { Length: > 0 } risk)
+            {
+                _currentFailed = true;
+                _currentError = risk;
+            }
+            else if (line.Contains("解析此分P失败", StringComparison.Ordinal))
             {
                 _currentFailed = true;
                 _currentError = "BBDown 解析此分P失败";

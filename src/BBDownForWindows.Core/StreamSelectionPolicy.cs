@@ -38,6 +38,7 @@ public static partial class StreamSelectionPolicy
         EpisodeStreamSelection desired,
         DownloadRequest options)
     {
+        episode = DownloadSessionPolicy.ForSelection(episode, desired.ApiMode);
         var reasons = new List<string>();
         VideoStreamInfo? video = null;
         AudioStreamInfo? audio = null;

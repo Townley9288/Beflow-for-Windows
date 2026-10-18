@@ -57,13 +57,21 @@ public sealed class DownloadQueueService
             if (item.Download is null || item.DualAudio is not null || item.Download.Episodes.Count == 0) throw new InvalidDataException("下载队列没有已选分集");
             if (string.IsNullOrWhiteSpace(item.Download.Options.Url) || string.IsNullOrWhiteSpace(item.Download.Options.WorkDirectory)) throw new InvalidDataException("链接和下载目录不能为空");
             if (item.Download.Episodes.Select(e => e.PageNumber).Distinct().Count() != item.Download.Episodes.Count) throw new InvalidDataException("队列中有重复分集");
+            foreach (var episode in item.Download.Episodes) ValidateSession(episode);
         }
         else if (item.Kind == DownloadQueueKind.DualAudio)
         {
             if (item.DualAudio is null || item.Download is not null || !item.DualAudio.Pairs.Any(p => p.IsSelected)) throw new InvalidDataException("多音轨队列没有已选配对");
             if (string.IsNullOrWhiteSpace(item.DualAudio.WorkDirectory)) throw new InvalidDataException("输出目录不能为空");
+            foreach (var pair in item.DualAudio.Pairs) { ValidateSession(pair.SourceA); ValidateSession(pair.SourceB); }
         }
         else throw new InvalidDataException("未知队列任务类型");
+
+        static void ValidateSession(EpisodeStreamSelection episode)
+        {
+            if (episode.ApiMode.Length > 0 && episode.ApiMode is not ("WEB" or "TV" or "APP"))
+                throw new InvalidDataException("分P下载会话无效，请重新解析。");
+        }
     }
 
     public async Task<Guid> EnqueueAsync(DownloadQueueItem item)

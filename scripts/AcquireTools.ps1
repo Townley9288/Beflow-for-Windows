@@ -59,13 +59,16 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
     $MediaDirectSignature = 'media_http_client=direct_no_proxy'
     $PreparationSignature = 'download_preparation=pipe_v2_queue_resume_v2_cleanup_aria2_mirrors_explicit_cdn_split_per_mirror'
     $ParseChaptersSignature = 'info_parse=skip_chapter_request'
+    $TvSessionSignature = 'tv_session=' + (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $PSScriptRoot 'Apply-TvSessionPatch.ps1')).Hash +
+        (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $PSScriptRoot 'patches/BeflowTvStreamMetadata.cs')).Hash
     if ((Test-Path -LiteralPath $Executable -PathType Leaf) -and
         (Test-Path -LiteralPath $Marker -PathType Leaf) -and
         [IO.File]::ReadAllText($Marker).Contains($PatchSignature) -and
         [IO.File]::ReadAllText($Marker).Contains($EncodingSignature) -and
         [IO.File]::ReadAllText($Marker).Contains($MediaDirectSignature) -and
         [IO.File]::ReadAllText($Marker).Contains($PreparationSignature) -and
-        [IO.File]::ReadAllText($Marker).Contains($ParseChaptersSignature)) { return $Publish }
+        [IO.File]::ReadAllText($Marker).Contains($ParseChaptersSignature) -and
+        [IO.File]::ReadAllText($Marker).Contains($TvSessionSignature)) { return $Publish }
 
     $WorkingDirectory = Join-Path $CacheDirectory "work\bbdown-$($Entry.version)-$PID"
     New-Item -ItemType Directory -Force -Path $WorkingDirectory, $Publish | Out-Null
@@ -411,13 +414,15 @@ function Build-BBDownWithBeflowPatches([string]$SourceArchive, $Entry) {
 
     & (Join-Path $PSScriptRoot 'Apply-DownloadPreparationPatch.ps1') -WorkingDirectory $WorkingDirectory
     & (Join-Path $PSScriptRoot 'Apply-QueueDownloadPatch.ps1') -WorkingDirectory $WorkingDirectory
+    & (Join-Path $PSScriptRoot 'Apply-TvSessionPatch.ps1') -WorkingDirectory $WorkingDirectory
+    & (Join-Path $PSScriptRoot 'Test-BBDownTvSession.ps1') -WorkingDirectory $WorkingDirectory | Out-Host
     $Project = Join-Path $WorkingDirectory 'BBDown\BBDown.csproj'
     & dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:ManagePackageVersionsCentrally=false -p:Version=$($Entry.version) -o $Publish | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Patched BBDown build failed with exit code $LASTEXITCODE" }
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Patched BBDown build did not produce BBDown.exe.' }
     & (Join-Path $PSScriptRoot 'Test-BBDownOutputEncoding.ps1') -ExecutablePath $Executable | Out-Host
     & (Join-Path $PSScriptRoot 'Test-BBDownAria2Mirrors.ps1') -WorkingDirectory $WorkingDirectory | Out-Host
-    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`nquality=100:智能修复`nquality_lookup=support_formats_then_safe_fallback`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`nweb_login=cookie_container_with_trusted_callback_fallback`n$PatchSignature`n$EncodingSignature`n$MediaDirectSignature`n$PreparationSignature`n$ParseChaptersSignature`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($Marker, "source=$($Entry.commit)`nquality=122:4K·SDR增强`nquality=100:智能修复`nquality_lookup=support_formats_then_safe_fallback`npgc_web_fnval=143312`npgc_drm_tech_type=3`nugc_web_fnval=4048`nweb_login=cookie_container_with_trusted_callback_fallback`n$PatchSignature`n$EncodingSignature`n$MediaDirectSignature`n$PreparationSignature`n$ParseChaptersSignature`n$TvSessionSignature`n", [Text.UTF8Encoding]::new($false))
     return $Publish
 }
 

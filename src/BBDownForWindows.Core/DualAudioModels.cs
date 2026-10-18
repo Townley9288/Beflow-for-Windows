@@ -20,7 +20,7 @@ public sealed record DualAudioParseRequest(
     string SourceBUrl,
     DownloadParseMode Mode,
     string ApiMode = "WEB",
-    DualAudioSource? OnlySource = null);
+    DualAudioSource? OnlySource = null, StreamSelectionRule? SourceARule = null, StreamSelectionRule? SourceBRule = null);
 
 public sealed class DualAudioCatalog
 {

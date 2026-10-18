@@ -1,6 +1,7 @@
 <Page x:Class="BBDownForWindows.App.Pages.DualAudioPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:controls="using:BBDownForWindows.App.Controls"
       xmlns:vm="using:BBDownForWindows.App.ViewModels"
       NavigationCacheMode="Required"
       DataContext="{x:Bind ViewModel, Mode=OneWay}">
@@ -109,13 +110,13 @@
                                         <TextBlock Grid.RowSpan="2" Grid.Column="1" Text="{x:Bind PairText}" VerticalAlignment="Center"/>
                                         <TextBlock Grid.Column="2" Text="{x:Bind SourceATitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind SourceATitle}"/>
                                         <Grid Grid.Row="1" Grid.Column="2" ColumnSpacing="6" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding SourceA.SelectedSpecificationText}"><Grid.ColumnDefinitions><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
-                                            <ComboBox ItemsSource="{Binding SourceA.QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedQuality, Mode=TwoWay}" IsEnabled="{Binding SourceA.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                            <controls:StreamQualityComboBox ItemsSource="{Binding SourceA.QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedQuality, Mode=TwoWay}" IsEnabled="{Binding SourceA.QualitySelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                             <ComboBox Grid.Column="1" ItemsSource="{Binding SourceA.EncodingOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding SourceA.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                             <ComboBox Grid.Column="2" ItemsSource="{Binding SourceA.AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceA.SelectedAudio, Mode=TwoWay}" IsEnabled="{Binding SourceA.AudioSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         </Grid>
                                         <ComboBox Grid.Column="3" ItemsSource="{Binding SourceBChoices}" DisplayMemberPath="Label" SelectedValuePath="PageNumber" SelectedValue="{Binding SelectedSourceBPageNumber, Mode=TwoWay}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         <Grid Grid.Row="1" Grid.Column="3" ColumnSpacing="6" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding SourceB.SelectedSpecificationText}"><Grid.ColumnDefinitions><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
-                                            <ComboBox ItemsSource="{Binding SourceB.QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedQuality, Mode=TwoWay}" IsEnabled="{Binding SourceB.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                            <controls:StreamQualityComboBox ItemsSource="{Binding SourceB.QualityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedQuality, Mode=TwoWay}" IsEnabled="{Binding SourceB.QualitySelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                             <ComboBox Grid.Column="1" ItemsSource="{Binding SourceB.EncodingOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedEncoding, Mode=TwoWay}" IsEnabled="{Binding SourceB.VideoSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                             <ComboBox Grid.Column="2" ItemsSource="{Binding SourceB.AudioOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SourceB.SelectedAudio, Mode=TwoWay}" IsEnabled="{Binding SourceB.AudioSelectionEnabled}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                         </Grid>

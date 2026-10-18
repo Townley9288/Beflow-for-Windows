@@ -27,7 +27,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         var sourceBContext = context.WithPrefix("来源 B");
         if (request.OnlySource == DualAudioSource.A)
         {
-            var sourceAOnly = await ParseSourceAsync(request.SourceAUrl, request.Mode, string.Empty, request.ApiMode, sourceAProgress, sourceAContext, cancellationToken);
+            var sourceAOnly = await ParseSourceAsync(request.SourceAUrl, request.Mode, string.Empty, request.ApiMode, sourceAProgress, sourceAContext, cancellationToken, request.SourceARule);
             return new DualAudioCatalog
             {
                 SourceMode = request.SourceMode,
@@ -40,7 +40,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         }
         if (request.OnlySource == DualAudioSource.B)
         {
-            var sourceBOnly = await ParseSourceAsync(request.SourceBUrl, request.Mode, string.Empty, request.ApiMode, sourceBProgress, sourceBContext, cancellationToken);
+            var sourceBOnly = await ParseSourceAsync(request.SourceBUrl, request.Mode, string.Empty, request.ApiMode, sourceBProgress, sourceBContext, cancellationToken, request.SourceBRule);
             return new DualAudioCatalog
             {
                 SourceMode = request.SourceMode,
@@ -51,8 +51,8 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
                 SourceBError = sourceBOnly.Error
             };
         }
-        var taskA = ParseSourceAsync(request.SourceAUrl, request.Mode, string.Empty, request.ApiMode, sourceAProgress, sourceAContext, cancellationToken);
-        var taskB = ParseSourceAsync(request.SourceBUrl, request.Mode, string.Empty, request.ApiMode, sourceBProgress, sourceBContext, cancellationToken);
+        var taskA = ParseSourceAsync(request.SourceAUrl, request.Mode, string.Empty, request.ApiMode, sourceAProgress, sourceAContext, cancellationToken, request.SourceARule);
+        var taskB = ParseSourceAsync(request.SourceBUrl, request.Mode, string.Empty, request.ApiMode, sourceBProgress, sourceBContext, cancellationToken, request.SourceBRule);
         await Task.WhenAll(taskA, taskB);
         var sourceA = await taskA;
         var sourceB = await taskB;
@@ -116,8 +116,8 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
                 Report(progress, DualAudioProgressPhase.Validating, completed, selectedPairs.Count, pair.PairNumber, null, string.Empty, string.Empty, "正在确认来源 A/B 规格");
                 var sourceAContext = context.WithPrefix($"第 {pair.PairNumber} 对 / A");
                 var sourceBContext = context.WithPrefix($"第 {pair.PairNumber} 对 / B");
-                var parseA = bbdown.ParseEpisodeAsync(request.SourceAUrl, pair.SourceAPageNumber, request.ApiMode, sourceAContext, cancellationToken);
-                var parseB = bbdown.ParseEpisodeAsync(request.SourceBUrl, pair.SourceBPageNumber, request.ApiMode, sourceBContext, cancellationToken);
+                var parseA = bbdown.ParseEpisodeAsync(request.SourceAUrl, pair.SourceAPageNumber, string.IsNullOrWhiteSpace(pair.SourceA.ApiMode) ? request.ApiMode : pair.SourceA.ApiMode, sourceAContext, cancellationToken);
+                var parseB = bbdown.ParseEpisodeAsync(request.SourceBUrl, pair.SourceBPageNumber, string.IsNullOrWhiteSpace(pair.SourceB.ApiMode) ? request.ApiMode : pair.SourceB.ApiMode, sourceBContext, cancellationToken);
                 await Task.WhenAll(parseA, parseB);
                 var episodeA = await parseA;
                 var episodeB = await parseB;
@@ -490,6 +490,8 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
 
         var sourceA = FilterCatalog(catalog, item => item.Page.Number % 2 == 1);
         var sourceB = FilterCatalog(catalog, item => item.Page.Number % 2 == 0);
+        if (request.SourceARule is not null) await bbdown.PrepareSelectionAsync(sourceA, request.SourceARule, DownloadMode.VideoAndAudio, prefixed, cancellationToken);
+        if (request.SourceBRule is not null) await bbdown.PrepareSelectionAsync(sourceB, request.SourceBRule, DownloadMode.VideoAndAudio, prefixed, cancellationToken);
         return new DualAudioCatalog
         {
             SourceMode = request.SourceMode,
@@ -504,11 +506,11 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         };
     }
 
-    private async Task<(DownloadCatalog? Catalog, string Error)> ParseSourceAsync(string url, DownloadParseMode mode, string pages, string apiMode, IProgress<DownloadParseProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken)
+    private async Task<(DownloadCatalog? Catalog, string Error)> ParseSourceAsync(string url, DownloadParseMode mode, string pages, string apiMode, IProgress<DownloadParseProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken, StreamSelectionRule? rule = null)
     {
         try
         {
-            return (await bbdown.ParseDownloadAsync(new DownloadParseRequest(url.Trim(), mode, apiMode, pages), progress, context, cancellationToken), string.Empty);
+            return (await bbdown.ParseDownloadAsync(new DownloadParseRequest(url.Trim(), mode, apiMode, pages, rule), progress, context, cancellationToken), string.Empty);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -536,6 +538,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         options.Danmaku = false;
         var exactSelection = new EpisodeStreamSelection
         {
+            ApiMode = selection.ApiMode,
             PageNumber = selection.PageNumber,
             PageTitle = selection.PageTitle,
             Video = mode == DownloadMode.AudioOnly ? null : selection.Video,
@@ -623,6 +626,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
 
     private static EpisodeStreamSelection ToSelection(EpisodeStreamSelection desired, DownloadEpisodeInfo current, StreamSelectionDecision decision) => new()
     {
+        ApiMode = desired.ApiMode,
         PageNumber = current.Page.Number,
         PageTitle = current.Page.Title,
         Video = decision.Video is null ? null : new VideoStreamSelection(decision.Video.Quality, decision.Video.Resolution, decision.Video.Codec, decision.Video.BitrateKbps, desired.Video?.IsManual == true),
@@ -632,6 +636,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
 
     private static DownloadCatalog FilterCatalog(DownloadCatalog catalog, Func<DownloadEpisodeInfo, bool> predicate) => new()
     {
+        AutomaticSession = catalog.AutomaticSession,
         SourceUrl = catalog.SourceUrl,
         ResolvedUrl = catalog.ResolvedUrl,
         Title = catalog.Title,
