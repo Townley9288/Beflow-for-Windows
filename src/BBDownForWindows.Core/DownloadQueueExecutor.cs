@@ -62,7 +62,8 @@ public sealed class DownloadQueueExecutor(QueuedMediaDownloader downloader, IPro
                 {
                     RootDirectory = batch.Options.WorkDirectory, SourceUrl = batch.Options.Url, VideoTitle = batch.Title,
                     Page = episode.Page, Profile = batch.NamingProfile, ProfileKind = batch.NamingProfileKind,
-                    TotalPages = batch.TotalPages, DownloadMode = batch.Options.DownloadMode, ApiMode = batch.Options.ApiMode,
+                    TotalPages = batch.TotalPages, DownloadMode = batch.Options.DownloadMode,
+                    ApiMode = string.IsNullOrWhiteSpace(desired.ApiMode) ? batch.Options.ApiMode : desired.ApiMode,
                     DownloadedAt = batch.DownloadedAt, Metadata = batch.Metadata, Video = choice.Video, Audio = choice.Audio,
                     PreferredRelativePath = desired.RelativeOutputPath, FailOnConflict = true
                 }, state.Units.Where(u => u.FinalPath.Length > 0).Select(u => Path.ChangeExtension(u.FinalPath, null)).ToHashSet(StringComparer.OrdinalIgnoreCase));

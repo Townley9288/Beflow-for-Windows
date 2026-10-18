@@ -75,7 +75,7 @@ public sealed class DualAudioViewModel : ObservableObject
     private DualAudioBatchResult? _lastResult;
     private string _resultMessage = string.Empty;
     private DualAudioCatalog? _catalog;
-    private string _apiMode = "WEB";
+    private string _apiMode = "AUTO";
     private bool _isParsing;
     private int _parseGeneration;
     private int _catalogRowsClearGeneration;
@@ -104,7 +104,7 @@ public sealed class DualAudioViewModel : ObservableObject
         ParseAllCommand = new AsyncRelayCommand(() => RunCommandAsync("解析失败", () => ParseAsync(DownloadParseMode.All)), CanParse);
         RetrySourceACommand = new AsyncRelayCommand(() => RunCommandAsync("来源 A 重新解析失败", () => RetrySourceAsync(DualAudioSource.A)), () => CanRetrySource(DualAudioSource.A));
         RetrySourceBCommand = new AsyncRelayCommand(() => RunCommandAsync("来源 B 重新解析失败", () => RetrySourceAsync(DualAudioSource.B)), () => CanRetrySource(DualAudioSource.B));
-        ApplyAllCommand = new RelayCommand(ApplyAll, () => Pairs.Count > 0 && !Console.IsBusy);
+        ApplyAllCommand = new AsyncRelayCommand(ApplyAll, () => Pairs.Count > 0 && !Console.IsBusy);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true), () => Pairs.Count > 0 && !Console.IsBusy);
         InvertSelectionCommand = new RelayCommand(InvertSelection, () => Pairs.Count > 0 && !Console.IsBusy);
         StartCommand = new AsyncRelayCommand(() => RunCommandAsync("多音轨任务失败", StartAsync), CanStart);
@@ -395,7 +395,7 @@ public sealed class DualAudioViewModel : ObservableObject
             SourceAEncoding = SourceBEncoding = settings.Encoding;
             SourceAAudio = SourceBAudio = settings.AudioCodec;
             AudioBitrate = settings.AudioBitratePriority == AudioBitratePriority.Lowest ? "lowest" : "highest";
-            _apiMode = settings.ApiMode;
+            _apiMode = "AUTO";
             _initialized = true;
         }
         if (restore?.DualAudioBatch is not null)
@@ -442,7 +442,7 @@ public sealed class DualAudioViewModel : ObservableObject
                     sourceMode,
                     sourceAUrl,
                     sourceBUrl,
-                    mode, _apiMode), progressA, progressB, context, token);
+                    mode, _apiMode, SourceARule: SourceARule(), SourceBRule: SourceBRule()), progressA, progressB, context, token);
             });
         }
         finally { IsParsing = false; }
@@ -469,6 +469,10 @@ public sealed class DualAudioViewModel : ObservableObject
         SourceAParseStatus = string.IsNullOrWhiteSpace(SourceAUrl) ? "等待来源 A 链接" : catalog.SourceA is null ? catalog.SourceAError : $"已解析 {catalog.SourceA.Episodes.Count} 集";
         SourceBParseStatus = CurrentSourceMode == DualAudioSourceMode.Separate && string.IsNullOrWhiteSpace(SourceBUrl)
             ? "等待来源 B 链接" : catalog.SourceB is null ? catalog.SourceBError : $"已解析 {catalog.SourceB.Episodes.Count} 集";
+        var warningA = string.Join("；", (catalog.SourceA?.Episodes ?? []).Select(e => e.SourceWarning).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct());
+        var warningB = string.Join("；", (catalog.SourceB?.Episodes ?? []).Select(e => e.SourceWarning).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct());
+        if (warningA.Length > 0) SourceAParseStatus += $" · {warningA}";
+        if (warningB.Length > 0) SourceBParseStatus += $" · {warningB}";
         var sourceBChoices = (catalog.SourceB?.Episodes ?? [])
             .OrderBy(item => item.Page.Number)
             .Select(item => new DualAudioPairViewModel.EpisodeChoice(item.Page.Number, $"P{item.Page.Number} · {item.Page.Title}", item))
@@ -517,7 +521,7 @@ public sealed class DualAudioViewModel : ObservableObject
                     sourceBUrl,
                     existingCatalog.ParseMode,
                     _apiMode,
-                    source),
+                    source, SourceARule(), SourceBRule()),
                     source == DualAudioSource.A ? progress : null,
                     source == DualAudioSource.B ? progress : null,
                     context,
@@ -565,9 +569,17 @@ public sealed class DualAudioViewModel : ObservableObject
         NotifyRowsChanged();
     }
 
-    private void ApplyAll()
+    private async Task ApplyAll()
     {
-        foreach (var row in Pairs) row.ApplyRules(SourceARule(), SourceBRule(), MainVideoMode, checked((int)SourceBDelay));
+        var ruleA = SourceARule();
+        var ruleB = SourceBRule();
+        var result = await _services.TaskManager.RunExclusiveAsync(TaskKind.DualAudioParse, false, "dual-session-specifications", async (context, token) =>
+        {
+            if (_catalog?.SourceA is { } a) await _services.BBDown.PrepareSelectionAsync(a, ruleA, DownloadMode.VideoAndAudio, context, token);
+            if (_catalog?.SourceB is { } b) await _services.BBDown.PrepareSelectionAsync(b, ruleB, DownloadMode.VideoAndAudio, context, token);
+        });
+        if (result.State != TaskState.Completed) { ShowMessage(result.Error, InfoBarSeverity.Warning); return; }
+        foreach (var row in Pairs) row.ApplyRules(ruleA, ruleB, MainVideoMode, checked((int)SourceBDelay));
         NotifyRowsChanged();
     }
 

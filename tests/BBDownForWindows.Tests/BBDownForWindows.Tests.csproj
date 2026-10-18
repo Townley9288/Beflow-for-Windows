@@ -22,4 +22,7 @@
     <ProjectReference Include="..\..\src\BBDownForWindows.App\BBDownForWindows.App.csproj" />
     <ProjectReference Include="..\..\src\Beflow.Updater\Beflow.Updater.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\scripts\patches\BeflowTvStreamMetadata.cs" Link="PatchedBBDown\BeflowTvStreamMetadata.cs" />
+  </ItemGroup>
 </Project>

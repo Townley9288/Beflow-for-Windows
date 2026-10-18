@@ -145,6 +145,8 @@ public sealed class AccountStatusService : IAccountStatusService
             {
                 vipStatus = GetInt32(vip, "status");
                 if (TryGetObject(vip, "label", out var label)) vipLabel = GetString(label, "text");
+                // The ordinary VIP label does not describe TV membership rights.
+                if (GetInt32(vip, "tv_vip_status") == 1) vipLabel = "超级大会员";
             }
             if (string.IsNullOrWhiteSpace(vipLabel)) vipLabel = vipStatus == 1 ? "大会员" : "普通用户";
             var profile = new AccountProfile(displayName, userId, NormalizeAvatar(GetString(data, "face")), level, vipLabel);

@@ -5,10 +5,18 @@ namespace BBDownForWindows.Core;
 
 public sealed class BBDownService(ApplicationPaths paths, IProcessRunner processRunner, IToolLocator toolLocator, ISettingsStore settingsStore,
     IBilibiliMetadataService? metadataService = null, IDownloadNamingService? downloadNamingService = null,
-    ParseConcurrencyLimiter? parseLimiter = null) : IBBDownService
+    ParseConcurrencyLimiter? parseLimiter = null, IAccountStatusService? accountStatus = null) : IBBDownService
 {
     private readonly BBDownRuntimeManager _runtimeManager = new(paths);
     private readonly IDownloadNamingService _downloadNaming = downloadNamingService ?? new DownloadNamingService();
+    private AutomaticDownloadSession? automaticSession;
+    private AutomaticDownloadSession AutomaticSession => automaticSession ??= new(accountStatus
+        ?? throw new InvalidOperationException("自动会话选择服务未配置。"), this, channel =>
+            File.GetLastWriteTimeUtc(channel == AccountChannel.Tv ? paths.TvCredentialFile : paths.WebCredentialFile));
+
+    public Task PrepareSelectionAsync(DownloadCatalog catalog, StreamSelectionRule rule, DownloadMode mode,
+        TaskExecutionContext context, CancellationToken cancellationToken) => accountStatus is null ? Task.CompletedTask
+        : AutomaticSession.PrepareAsync(catalog, rule, mode, context, cancellationToken);
 
     public async Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken)
     {
@@ -21,6 +29,11 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
 
     public async Task<DownloadCatalog> ParseDownloadAsync(DownloadParseRequest request, IProgress<DownloadParseProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken)
     {
+        if (request.ApiMode.Equals("AUTO", StringComparison.OrdinalIgnoreCase))
+        {
+            if (accountStatus is null) throw new InvalidOperationException("自动会话选择服务未配置。");
+            return await AutomaticSession.ParseAsync(request, progress, context, cancellationToken);
+        }
         if (string.IsNullOrWhiteSpace(request.Url)) throw new ArgumentException("视频 URL 不能为空");
         var sourceUrl = request.Url.Trim();
         var metadata = metadataService is null ? null : await metadataService.GetAsync(sourceUrl, cancellationToken);
@@ -37,8 +50,10 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var infoRequest = new DownloadRequest
         {
             Url = resolvedUrl,
-            Pages = request.Pages,
-            ApiMode = request.ApiMode
+            Pages = string.IsNullOrWhiteSpace(request.Pages) && request.Mode == DownloadParseMode.Current
+                ? CurrentUgcPage(resolvedUrl) : request.Pages,
+            ApiMode = request.ApiMode,
+            UposHost = (await settingsStore.LoadAsync(cancellationToken)).UposHost
         };
         var expectedTotal = string.IsNullOrWhiteSpace(request.Pages) ? 0 : BBDownParser.ExpandPageExpression(request.Pages).Distinct().Count();
         var parser = new StreamingDownloadParser(request.Mode, progress, expectedTotal);
@@ -121,6 +136,15 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                 if (episodes.Count == 0) throw new OperationCanceledException(cancellationToken);
                 return BuildParsedCatalog(sourceUrl, resolvedUrl, metadata, title, pages, episodes);
             }
+            if (discovery.Blocked)
+            {
+                if (discoveredEpisode is null)
+                {
+                    if (pages.Count == 0) throw new InvalidOperationException(discovery.Error);
+                    episodes[1] = CreateFailedEpisode(1, pages.Values, discovery.Error);
+                }
+                return BuildParsedCatalog(sourceUrl, resolvedUrl, metadata, title, pages, episodes);
+            }
             if (discovery.ExitCode != 0 && discoveredEpisode is null)
                 throw new InvalidOperationException(discovery.Error);
             if (pages.Count == 0 && discoveredEpisode is not null) pages[discoveredEpisode.Page.Number] = discoveredEpisode.Page;
@@ -149,6 +173,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             .ToList();
         if (remainingPages.Count > 0)
         {
+            using var workers = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var parallelism = Math.Min(parseConcurrency, remainingPages.Count);
             var pageGroups = Enumerable.Range(0, parallelism).Select(_ => new List<int>()).ToList();
             for (var index = 0; index < remainingPages.Count; index++) pageGroups[index % parallelism].Add(remainingPages[index]);
@@ -160,14 +185,20 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                 try
                 {
                     var parsed = await ParsePagesForCatalogAsync(tools, resolvedUrl, group, request.ApiMode,
-                        context.WithPrefix($"并发{workerIndex + 1}"), CompleteEpisode, cancellationToken);
+                        context.WithPrefix($"并发{workerIndex + 1}"), CompleteEpisode, workers.Token);
                     MergeResult(parsed);
-                    if (parsed.Cancelled || cancellationToken.IsCancellationRequested) return;
+                    if (parsed.Blocked)
+                    {
+                        if (parsed.Episodes.Count == 0) CompleteEpisode(CreateFailedEpisode(group[0], parsed.Pages, parsed.Error));
+                        workers.Cancel();
+                        return;
+                    }
+                    if (parsed.Cancelled || workers.IsCancellationRequested) return;
                     var returnedPages = parsed.Episodes.Select(item => item.Page.Number).ToHashSet();
                     foreach (var missingPage in group.Where(page => !returnedPages.Contains(page)))
                         CompleteEpisode(CreateFailedEpisode(missingPage, parsed.Pages, parsed.Error));
                 }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                catch (OperationCanceledException) when (workers.IsCancellationRequested)
                 {
                     // 已完成的分集会保留在页面中，任务状态由 TaskManager 标记为已取消。
                 }
@@ -192,8 +223,14 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
     private async Task<PageParseResult> ParsePagesForCatalogAsync(ToolPaths tools, string url, IReadOnlyList<int>? selectedPages,
         string apiMode, TaskExecutionContext context, Action<DownloadEpisodeInfo>? onEpisode, CancellationToken cancellationToken)
     {
-        var pagesExpression = selectedPages is null ? string.Empty : string.Join(',', selectedPages);
-        var infoRequest = new DownloadRequest { Url = url, Pages = pagesExpression, ApiMode = apiMode };
+        // BBDown prints the complete directory with --show-all, but without -p it also
+        // resolves every stream. Discover the directory and P1 only; workers resolve the rest.
+        var pagesExpression = selectedPages is null ? "1" : string.Join(',', selectedPages);
+        var infoRequest = new DownloadRequest
+        {
+            Url = url, Pages = pagesExpression, ApiMode = apiMode,
+            UposHost = (await settingsStore.LoadAsync(cancellationToken)).UposHost
+        };
         IProgress<DownloadParseProgress>? parserProgress = onEpisode is null
             ? null
             : new InlineProgress<DownloadParseProgress>(update =>
@@ -221,7 +258,17 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         {
             error = selectedPages is null ? "没有解析到可用的分集目录" : "没有解析到所选分集的可用规格";
         }
-        return new PageParseResult(result.ExitCode, result.Cancelled, parser.Title, parser.Pages, parser.Episodes, error);
+        return new PageParseResult(result.ExitCode, result.Cancelled, parser.Title, parser.Pages, parser.Episodes, error,
+            !string.IsNullOrWhiteSpace(BilibiliRequestFailure.RiskControlMessage(result.Output)));
+    }
+
+    private static string CurrentUgcPage(string url)
+    {
+        // Episode/season URLs keep BBDown's own episode identity selection.
+        if (!Regex.IsMatch(url, @"(?:^|/)(?:BV[0-9A-Za-z]+|av\d+)(?:[/?#]|$)", RegexOptions.IgnoreCase))
+            return string.Empty;
+        var page = Regex.Match(url, @"[?&]p=(\d+)(?:[&#]|$)", RegexOptions.IgnoreCase);
+        return page.Success ? page.Groups[1].Value : "1";
     }
 
     private static DownloadEpisodeInfo CreateFailedEpisode(int page, IEnumerable<PageInfo> knownPages, string error)
@@ -257,7 +304,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
     }
 
     private sealed record PageParseResult(int ExitCode, bool Cancelled, string Title,
-        IReadOnlyList<PageInfo> Pages, IReadOnlyList<DownloadEpisodeInfo> Episodes, string Error);
+        IReadOnlyList<PageInfo> Pages, IReadOnlyList<DownloadEpisodeInfo> Episodes, string Error, bool Blocked);
 
     public async Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken)
     {
@@ -286,7 +333,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             ProfileKind = profileKind,
             TotalPages = Math.Max(request.TotalPages, request.Episodes.Count),
             DownloadMode = request.Options.DownloadMode,
-            ApiMode = request.Options.ApiMode,
+            ApiMode = string.IsNullOrWhiteSpace(first.ApiMode) ? request.Options.ApiMode : first.ApiMode,
             DownloadedAt = request.DownloadedAt,
             Metadata = request.Metadata
         });
@@ -319,6 +366,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                 episodeResult.State = DownloadEpisodeResultState.Validating;
                 ReportProgress(progress, DownloadProgressPhase.Validating, completed, request.Episodes.Count, desired, null, string.Empty, string.Empty, "正在确认所选规格");
                 var part = Clone(request.Options);
+                if (!string.IsNullOrWhiteSpace(desired.ApiMode)) part.ApiMode = desired.ApiMode;
                 part.WorkDirectory = baseDirectory;
                 part.TitleHint = title;
                 var exact = await DownloadPreparedAsync(part, desired, tools, (current, decision) =>
@@ -337,7 +385,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                         ProfileKind = profileKind,
                         TotalPages = Math.Max(request.TotalPages, request.Episodes.Count),
                         DownloadMode = request.Options.DownloadMode,
-                        ApiMode = request.Options.ApiMode,
+                        ApiMode = part.ApiMode,
                         DownloadedAt = request.DownloadedAt,
                         Metadata = request.Metadata,
                         Video = decision.Video,
@@ -417,6 +465,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var part = Clone(options);
+        if (!string.IsNullOrWhiteSpace(desired.ApiMode)) part.ApiMode = desired.ApiMode;
         part.Pages = desired.PageNumber.ToString();
         part.Season = false;
         part.MultiFilePattern = string.Empty;
@@ -511,6 +560,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         var decision = StreamSelectionPolicy.Resolve(request.Episode, request.Selection, request.Options);
         var tools = await ResolveToolsAsync(cancellationToken);
         var part = Clone(request.Options);
+        if (!string.IsNullOrWhiteSpace(request.Selection.ApiMode)) part.ApiMode = request.Selection.ApiMode;
         part.Pages = request.Selection.PageNumber.ToString();
         part.Season = false;
         part.OrganizeInTitleDirectory = false;
@@ -654,6 +704,8 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
 
     internal static string BuildProcessFailureMessage(string operation, ProcessResult result)
     {
+        var risk = BilibiliRequestFailure.RiskControlMessage(result.Output);
+        if (risk.Length > 0) return $"{operation}：{risk}";
         var details = SanitizeDiagnosticOutput(result.Output)
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -810,8 +862,10 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
         bool usePseudoConsole = false, Func<string, bool>? shouldLog = null)
     {
         using var permit = parseLimiter is not null && arguments.Contains("-info") ? await parseLimiter.EnterAsync(cancellationToken) : null;
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        string? blocked = null;
         context.AppendLog(SanitizeDiagnosticOutput($"\n$ {Path.GetFileName(executable)} {string.Join(' ', arguments.Select(Quote))}\n"));
-        return await processRunner.RunAsync(new ProcessRunRequest(executable, arguments, paths.RuntimeDirectory, input, usePseudoConsole), line =>
+        var result = await processRunner.RunAsync(new ProcessRunRequest(executable, arguments, paths.RuntimeDirectory, input, usePseudoConsole), line =>
         {
             observer?.Invoke(line);
             if (shouldLog?.Invoke(line) ?? true)
@@ -819,7 +873,14 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
                 var diagnostic = SanitizeDiagnosticOutput(line);
                 if (!diagnostic.Trim().Equals("[临时媒体地址已隐藏]", StringComparison.Ordinal)) context.AppendLog(diagnostic);
             }
-        }, cancellationToken);
+            if (arguments.Contains("-info") && BilibiliRequestFailure.RiskControlMessage(line) is { Length: > 0 } message
+                && Interlocked.CompareExchange(ref blocked, message, null) is null)
+            {
+                context.AppendLog(message + "\n");
+                lifetime.Cancel();
+            }
+        }, lifetime.Token);
+        return blocked is null ? result : result with { ExitCode = 1, Cancelled = false, Output = result.Output + "\n" + blocked };
     }
 
     private static bool ShouldSelectAudio(DownloadRequest request) =>

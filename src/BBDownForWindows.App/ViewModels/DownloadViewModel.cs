@@ -68,7 +68,7 @@ public sealed class DownloadViewModel : ObservableObject
         ParseAllCommand = new AsyncRelayCommand(() => ParseAsync(DownloadParseMode.All), CanParse);
         StartParseCommand = new AsyncRelayCommand(() => ParseAsync(ParseCurrentOnly ? DownloadParseMode.Current : DownloadParseMode.All), CanParse);
         ContinueParseCommand = new AsyncRelayCommand(ContinueParseAsync, CanContinueParse);
-        ApplyRuleCommand = new RelayCommand(ApplyRuleToAll, () => Rows.Count > 0 && !Console.IsBusy);
+        ApplyRuleCommand = new AsyncRelayCommand(ApplyRuleToAll, () => Rows.Count > 0 && !Console.IsBusy);
         SelectAllCommand = new RelayCommand(SelectAll, () => Rows.Count > 0 && !Console.IsBusy);
         InvertSelectionCommand = new RelayCommand(InvertSelection, () => Rows.Count > 0 && !Console.IsBusy);
         DownloadSelectedCommand = new AsyncRelayCommand(StartDownloadAsync, CanDownload);
@@ -217,7 +217,20 @@ public sealed class DownloadViewModel : ObservableObject
     public string CoverUrl => Catalog?.Metadata?.CoverUrl ?? string.Empty;
     public string OwnerName => string.IsNullOrWhiteSpace(Catalog?.Metadata?.OwnerName) ? "UP 主信息暂不可用" : Catalog!.Metadata!.OwnerName;
     public string OwnerAvatarUrl => Catalog?.Metadata?.OwnerAvatarUrl ?? string.Empty;
-    public string EpisodeCountText => Catalog is null ? string.Empty : $"已解析 {Rows.Count} 集";
+    public string EpisodeCountText
+    {
+        get
+        {
+            if (Catalog is null) return string.Empty;
+            var total = Math.Max(Catalog.AllPages.Count, Rows.Count);
+            var ready = Rows.Count(row => row.IsReady);
+            var failed = Rows.Count(row => row.Episode.State == DownloadEpisodeParseState.Failed);
+            var pending = total - ready - failed;
+            return $"就绪 {ready}/{total} 集"
+                + (failed > 0 ? $" · 失败 {failed} 集" : string.Empty)
+                + (pending > 0 ? $" · 待解析 {pending} 集" : string.Empty);
+        }
+    }
 
     public string SelectionSummary
     {
@@ -425,10 +438,13 @@ public sealed class DownloadViewModel : ObservableObject
         }
         var parseGeneration = ++_parseGeneration;
         var parsedUrl = Url.Trim();
+        var rule = CurrentRule;
+        var downloadMode = CurrentDownloadMode;
         if (reset)
         {
             ClearParsedState();
         }
+        DismissMessage();
         ShowProgress = true;
         OverallProgress = 0;
         CurrentProgress = 0;
@@ -436,15 +452,20 @@ public sealed class DownloadViewModel : ObservableObject
         ProgressTitle = mode == DownloadParseMode.All ? "正在解析全部集" : "正在解析当前集";
         ProgressDetail = "正在启动 BBDown…";
         DownloadCatalog? catalog = null;
+        var acceptingProgress = true;
         var parseProgress = new Progress<DownloadParseProgress>(update =>
         {
-            if (parseGeneration == _parseGeneration) OnParseProgress(update);
+            if (acceptingProgress && parseGeneration == _parseGeneration) OnParseProgress(update);
         });
-        var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DownloadParse, SaveTaskLogs, "download_parse", async (context, token) =>
+        TaskSnapshot snapshot;
+        try
         {
-            var settings = await _services.Settings.LoadAsync(token);
-            catalog = await _services.BBDown.ParseDownloadAsync(new DownloadParseRequest(parsedUrl, mode, settings.ApiMode, pages), parseProgress, context, token);
-        });
+            snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DownloadParse, SaveTaskLogs, "download_parse", async (context, token) =>
+            {
+                catalog = await _services.BBDown.ParseDownloadAsync(new DownloadParseRequest(parsedUrl, mode, "AUTO", pages, rule, downloadMode), parseProgress, context, token);
+            });
+        }
+        finally { acceptingProgress = false; }
 
         if (parseGeneration != _parseGeneration || !UrlsMatch(parsedUrl, Url))
         {
@@ -468,8 +489,17 @@ public sealed class DownloadViewModel : ObservableObject
         {
             OverallProgress = 100;
             CurrentProgress = 100;
-            ProgressTitle = "解析完成";
-            ProgressDetail = $"成功解析 {Rows.Count(row => row.IsReady)}/{Rows.Count} 集";
+            var expected = mode == DownloadParseMode.All && string.IsNullOrWhiteSpace(pages)
+                ? catalog?.AllPages.Count ?? 0
+                : string.IsNullOrWhiteSpace(pages) ? 1 : BBDownParser.ExpandPageExpression(pages).Distinct().Count();
+            var ready = catalog?.Episodes.Count(episode => episode.State == DownloadEpisodeParseState.Ready) ?? 0;
+            ProgressDetail = $"成功解析 {ready}/{expected} 集";
+            ProgressTitle = ready < expected ? "解析未完成" : "解析完成";
+            if (ready < expected)
+            {
+                var reason = catalog?.Episodes.FirstOrDefault(episode => episode.State != DownloadEpisodeParseState.Ready)?.Error;
+                SetMessage($"解析未完成：{ProgressDetail}。{reason} 可点击“继续解析”手动重试。", InfoBarSeverity.Warning, snapshot.LogPath);
+            }
         }
         ShowProgress = false;
         // 只解析了当前集时同样允许「继续解析」补齐目录中的其余分集。
@@ -492,6 +522,7 @@ public sealed class DownloadViewModel : ObservableObject
         {
             Catalog = new DownloadCatalog
             {
+                AutomaticSession = existing.AutomaticSession || catalog.AutomaticSession,
                 SourceUrl = existing.SourceUrl,
                 ResolvedUrl = string.IsNullOrWhiteSpace(catalog.ResolvedUrl) ? existing.ResolvedUrl : catalog.ResolvedUrl,
                 Title = string.IsNullOrWhiteSpace(catalog.Title) ? existing.Title : catalog.Title,
@@ -538,7 +569,12 @@ public sealed class DownloadViewModel : ObservableObject
         // Rows 始终按分集号有序；原地插入/替换单行，避免解析过程中整表重排导致列表闪烁。
         var index = FindRowIndex(episode.Page.Number);
         var exists = index < Rows.Count && Rows[index].PageNumber == episode.Page.Number;
-        if (exists && (Rows[index].IsReady || !episode.State.Equals(DownloadEpisodeParseState.Ready))) return;
+        if (exists && Rows[index].IsReady)
+        {
+            if (episode.State == DownloadEpisodeParseState.Ready) Rows[index].RefreshAvailableSources(episode);
+            return;
+        }
+        if (exists && Rows[index].Episode.State == episode.State && Rows[index].Episode.Error == episode.Error) return;
         var row = new DownloadEpisodeViewModel(episode);
         if (row.IsReady)
         {
@@ -568,9 +604,19 @@ public sealed class DownloadViewModel : ObservableObject
         return low;
     }
 
-    private void ApplyRuleToAll()
+    private async Task ApplyRuleToAll()
     {
-        foreach (var row in Rows.Where(item => item.IsReady)) row.ApplyRule(CurrentRule, CurrentDownloadMode);
+        if (Catalog is null) return;
+        var rule = CurrentRule;
+        var mode = CurrentDownloadMode;
+        var snapshot = await _services.TaskManager.RunExclusiveAsync(TaskKind.DownloadParse, SaveTaskLogs, "session-specifications",
+            (context, token) => _services.BBDown.PrepareSelectionAsync(Catalog, rule, mode, context, token));
+        if (snapshot.State != TaskState.Completed)
+        {
+            SetMessage(snapshot.State == TaskState.Cancelled ? "规格查询已取消，已保留选择。" : snapshot.Error, InfoBarSeverity.Warning);
+            return;
+        }
+        foreach (var row in Rows.Where(item => item.IsReady)) row.ApplyRule(rule, mode);
         OnSelectionChanged();
     }
 

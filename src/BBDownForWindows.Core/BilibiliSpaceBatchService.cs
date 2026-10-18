@@ -6,10 +6,13 @@ public sealed record BilibiliSpaceParseResult(BilibiliSpaceVideo Video, Download
 
 public sealed class BilibiliSpaceBatchService(IBBDownService downloader)
 {
+    public Task PrepareSelectionAsync(DownloadCatalog catalog, StreamSelectionRule rule, DownloadMode mode,
+        TaskExecutionContext context, CancellationToken token) => downloader.PrepareSelectionAsync(catalog, rule, mode, context, token);
     // BBDownService applies the shared per-process parser limit inside each catalog.
     public async IAsyncEnumerable<BilibiliSpaceParseResult> ParseAsync(IEnumerable<BilibiliSpaceVideo> videos,
         IReadOnlyDictionary<string, DownloadCatalog> existing, string apiMode, TaskExecutionContext context,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken, StreamSelectionRule? rule = null,
+        DownloadMode mode = DownloadMode.VideoAndAudio)
     {
         foreach (var video in videos.DistinctBy(v => v.Bvid))
         {
@@ -22,11 +25,12 @@ public sealed class BilibiliSpaceBatchService(IBBDownService downloader)
             try
             {
                 catalog = await downloader.ParseDownloadAsync(new(video.Url, DownloadParseMode.All, apiMode,
-                    pending is { Length: > 0 } ? string.Join(',', pending) : ""), null, context.WithPrefix(video.Bvid), cancellationToken);
+                    pending is { Length: > 0 } ? string.Join(',', pending) : "", rule, mode), null, context.WithPrefix(video.Bvid), cancellationToken);
                 if (previous is not null)
                 {
                     catalog = new DownloadCatalog
                     {
+                        AutomaticSession = previous.AutomaticSession || catalog.AutomaticSession,
                         SourceUrl = catalog.SourceUrl, ResolvedUrl = catalog.ResolvedUrl, Title = catalog.Title,
                         Metadata = catalog.Metadata, ParsedAt = catalog.ParsedAt,
                         AllPages = previous.AllPages.Concat(catalog.AllPages).DistinctBy(p => p.Number).OrderBy(p => p.Number).ToList(),
@@ -38,6 +42,10 @@ public sealed class BilibiliSpaceBatchService(IBBDownService downloader)
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex) { error = ex.Message; }
             yield return new(video, catalog, error);
+            if (apiMode.Equals("AUTO", StringComparison.OrdinalIgnoreCase)
+                && (error.Length > 0 || catalog?.Episodes.Any(e => e.ApiMode == "TV" && e.State == DownloadEpisodeParseState.Failed) == true))
+                throw new InvalidOperationException(error.Length > 0 ? error
+                    : catalog!.Episodes.First(e => e.ApiMode == "TV" && e.State == DownloadEpisodeParseState.Failed).Error);
         }
     }
 

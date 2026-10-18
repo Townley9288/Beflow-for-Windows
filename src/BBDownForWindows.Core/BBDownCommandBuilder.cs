@@ -45,6 +45,7 @@ public static class BBDownCommandBuilder
         if (request.ApiMode.Equals("TV", StringComparison.OrdinalIgnoreCase)) arguments.Add("-tv");
         else if (request.ApiMode.Equals("APP", StringComparison.OrdinalIgnoreCase)) arguments.Add("-app");
         if (request.AudioBitratePriority == AudioBitratePriority.Lowest) arguments.Add("--audio-ascending");
+        if (!string.IsNullOrWhiteSpace(request.UposHost)) arguments.AddRange(["--upos-host", request.UposHost]);
         if (!string.IsNullOrWhiteSpace(tools.Ffmpeg)) arguments.AddRange(["--ffmpeg-path", tools.Ffmpeg]);
         return arguments;
     }
