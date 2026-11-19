@@ -189,15 +189,7 @@ public sealed class DownloadQueueExecutor(QueuedMediaDownloader downloader, IPro
             }
             catch (Exception exception) { throw new QueuePersistenceException("保存任务阶段失败：" + exception.Message, exception); }
 
-            var warning = string.Empty;
-            try
-            {
-                await history.AddAsync(record);
-            }
-            catch (InvalidDataException exception)
-            {
-                warning = "下载已记录在队列中，但历史尚未同步：" + exception.Message;
-            }
+            var warning = await DownloadQueueHistory.TrySaveAsync(history, record);
             if (warning == state.HistoryWarning) return;
 
             state.HistoryWarning = warning;
@@ -222,6 +214,19 @@ public sealed class QueuePersistenceException(string message, Exception inner) :
 
 public static class DownloadQueueHistory
 {
+    internal static async Task<string> TrySaveAsync(IHistoryStore history, HistoryRecord record)
+    {
+        try
+        {
+            await history.AddAsync(record);
+            return string.Empty;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            return "下载已记录在队列中，但历史尚未同步：" + exception.Message;
+        }
+    }
+
     public static HistoryRecord Create(DownloadQueueItem item)
     {
         var record = new HistoryRecord

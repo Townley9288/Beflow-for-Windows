@@ -63,7 +63,7 @@ public sealed class DownloadQueueTests
         Assert.Equal(DownloadQueueState.Paused, f.Queue.Snapshot.Items.Single().State);
         await f.Queue.EnqueueAsync(Job(f.Root));
         Assert.Single(f.Executor.Order);
-        var restarted = new DownloadQueueService(f.Store, f.Executor, new TaskManager(f.Paths, new ProcessRunner()), f.Work);
+        var restarted = new DownloadQueueService(f.Store, f.Executor, new TaskManager(f.Paths, new ProcessRunner()), f.Work, new HistoryStore(f.Paths));
         await restarted.InitializeAsync(); Assert.True(restarted.Snapshot.Paused);
         await restarted.ResumeAsync(); Assert.Equal(id, await f.Executor.Started.Reader.ReadAsync());
         await restarted.PauseAsync();
@@ -87,7 +87,7 @@ public sealed class DownloadQueueTests
         await f.Queue.InitializeAsync();
         await f.Queue.ShutdownAsync();
 
-        var restarted = new DownloadQueueService(f.Store, f.Executor, new TaskManager(f.Paths, new ProcessRunner()), f.Work);
+        var restarted = new DownloadQueueService(f.Store, f.Executor, new TaskManager(f.Paths, new ProcessRunner()), f.Work, new HistoryStore(f.Paths));
         await restarted.InitializeAsync();
         Assert.False(restarted.Snapshot.Paused);
         Assert.False(f.Store.Document.Paused);
@@ -170,6 +170,42 @@ public sealed class DownloadQueueTests
     }
 
     [Fact]
+    public async Task RetryHistorySyncKeepsWarningUntilHistoryIsWritten()
+    {
+        using var fixture = new Fixture();
+        var completed = Job(fixture.Root);
+        completed.State = DownloadQueueState.Completed;
+        completed.Checkpoint.HistoryWarning = "历史尚未同步";
+        var media = Path.Combine(fixture.Root, "published.mp4");
+        await File.WriteAllTextAsync(media, "published media");
+        completed.Checkpoint.Units.Add(new QueueUnitCheckpoint { Number = 1, Completed = true, Files = [QueueFileStamp.Read(media)] });
+        fixture.Store.Document.Items.Add(completed);
+        await File.WriteAllTextAsync(fixture.Paths.HistoryFile, "{broken");
+
+        await fixture.Queue.RetryHistorySyncAsync();
+
+        Assert.True(Assert.Single(fixture.Queue.Snapshot.Items).CanRetryHistorySync);
+        Assert.Equal("{broken", await File.ReadAllTextAsync(fixture.Paths.HistoryFile));
+        Assert.Equal(DownloadQueueState.Completed, Assert.Single(fixture.Store.Document.Items).State);
+
+        await File.WriteAllTextAsync(fixture.Paths.HistoryFile, "[]");
+        var history = new HistoryStore(fixture.Paths);
+        var previous = new HistoryRecord { QueueTaskId = completed.Id, Title = "old history entry" };
+        await history.AddAsync(previous);
+        await Task.WhenAll(fixture.Queue.RetryHistorySyncAsync(), fixture.Queue.RetryHistorySyncAsync());
+
+        var saved = Assert.Single(await history.LoadAsync());
+        Assert.Equal(previous.Id, saved.Id);
+        Assert.Equal(completed.Id, saved.QueueTaskId);
+        Assert.Equal([media], saved.OutputFiles);
+        var persisted = Assert.Single(fixture.Store.Document.Items);
+        Assert.Equal(DownloadQueueState.Completed, persisted.State);
+        Assert.Empty(persisted.Checkpoint.HistoryWarning);
+        Assert.False(Assert.Single(fixture.Queue.Snapshot.Items).CanRetryHistorySync);
+        Assert.Empty(fixture.Executor.Order);
+    }
+
+    [Fact]
     public async Task SharedParseQuotaCapsAllSourcesAndCancelledWaiterDoesNotConsumeSlot()
     {
         using var f = new Fixture(); var settings = new SettingsStore(f.Paths);
@@ -243,7 +279,7 @@ public sealed class DownloadQueueTests
         public string Root = Path.Combine(Path.GetTempPath(), "beflow-queue-tests", Guid.NewGuid().ToString("N"));
         public ApplicationPaths Paths; public MemoryStore Store = new(); public Executor Executor = new();
         public WorkCoordinator Work = new(); public DownloadQueueService Queue;
-        public Fixture() { Paths = new ApplicationPaths(Root, Root); Paths.EnsureCreated(); Queue = new(Store, Executor, new TaskManager(Paths, new ProcessRunner()), Work); }
+        public Fixture() { Paths = new ApplicationPaths(Root, Root); Paths.EnsureCreated(); Queue = new(Store, Executor, new TaskManager(Paths, new ProcessRunner()), Work, new HistoryStore(Paths)); }
         public void Dispose() { Directory.Delete(Root, true); }
     }
 }

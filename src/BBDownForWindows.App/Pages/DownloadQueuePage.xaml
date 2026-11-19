@@ -13,7 +13,11 @@
         </Grid>
         <StackPanel Grid.Row="1" Spacing="4">
             <InfoBar x:Name="ErrorBar" Severity="Error" IsClosable="True"/>
-            <InfoBar x:Name="HistoryWarningBar" Severity="Warning" IsClosable="False" Title="下载历史尚未同步"/>
+            <InfoBar x:Name="HistoryWarningBar" Severity="Warning" IsClosable="False" Title="下载历史尚未同步">
+                <InfoBar.ActionButton>
+                    <Button x:Name="RetryHistorySyncButton" Content="重试同步历史" Click="RetryHistorySync_Click"/>
+                </InfoBar.ActionButton>
+            </InfoBar>
         </StackPanel>
         <Grid Grid.Row="2" ColumnSpacing="20">
             <Grid.ColumnDefinitions><ColumnDefinition Width="224"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>

@@ -17,6 +17,7 @@ public sealed partial class DownloadQueuePage : Page
     private QueueProgress? pendingProgress;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private bool active;
+    private bool retryingHistorySync;
     public DownloadQueuePage()
     {
         InitializeComponent();
@@ -59,6 +60,9 @@ public sealed partial class DownloadQueuePage : Page
             .FirstOrDefault(warning => !string.IsNullOrEmpty(warning));
         HistoryWarningBar.Message = historyWarning ?? string.Empty;
         HistoryWarningBar.IsOpen = historyWarning is not null;
+        var canRetryHistory = queue.Items.Any(item => item.CanRetryHistorySync);
+        RetryHistorySyncButton.Visibility = canRetryHistory ? Visibility.Visible : Visibility.Collapsed;
+        RetryHistorySyncButton.IsEnabled = canRetryHistory && !retryingHistorySync && services.DownloadQueue.Error.Length == 0;
         if (services.DownloadQueue.Error.Length > 0) { ErrorBar.Message = services.DownloadQueue.Error; ErrorBar.IsOpen = true; }
     }
     private static DownloadQueueItem Item(object sender) => ((QueueRow)((FrameworkElement)sender).DataContext).Item;
@@ -68,6 +72,18 @@ public sealed partial class DownloadQueuePage : Page
     private void QueuePage_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel.Rows.Count > 0) QueueList.ScrollIntoView(ViewModel.Rows[0]);
+    }
+    private async void RetryHistorySync_Click(object sender, RoutedEventArgs e)
+    {
+        if (retryingHistorySync) return;
+        retryingHistorySync = true;
+        RetryHistorySyncButton.IsEnabled = false;
+        try { await Run(services.DownloadQueue.RetryHistorySyncAsync); }
+        finally
+        {
+            retryingHistorySync = false;
+            if (active) Refresh();
+        }
     }
     private async void Clear_Click(object sender, RoutedEventArgs e) => await Run(services.DownloadQueue.ClearCompletedAsync);
     private async void Cancel_Click(object sender, RoutedEventArgs e) => await Run(services.DownloadQueue.CancelCurrentAsync);

@@ -53,6 +53,29 @@ public sealed class QueueCleanupTests
     }
 
     [Fact]
+    public async Task HistoryWriteFailureKeepsPublishedUnitSuccessful()
+    {
+        using var fixture = new Fixture(true);
+        Directory.CreateDirectory(fixture.Paths.HistoryFile);
+        var unit = Assert.Single(fixture.Item.Checkpoint.Units);
+        var staged = fixture.Final + ".staged";
+        File.Move(fixture.Final, staged);
+        unit.Publications.Add(new QueuePublication(QueueFileStamp.Read(staged), fixture.Final));
+        unit.Completed = false;
+
+        var result = await fixture.Run();
+
+        var saved = Assert.Single(fixture.SavedCheckpoint!.Units);
+        Assert.Equal(TaskState.Completed, result.State);
+        Assert.True(saved.Completed);
+        Assert.Empty(saved.Error);
+        Assert.Contains("历史尚未同步", fixture.SavedCheckpoint.HistoryWarning);
+        Assert.True(File.Exists(fixture.Final));
+        Assert.False(File.Exists(staged));
+        Assert.Equal(0, fixture.Runner.Calls);
+    }
+
+    [Fact]
     public async Task ChangedFinalOutputPreventsDeletingSourcesOnResume()
     {
         using var f = new Fixture(false);

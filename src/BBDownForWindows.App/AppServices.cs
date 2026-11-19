@@ -31,7 +31,7 @@ public sealed class AppServices
         BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata, ParseLimiter, AccountStatus);
         DownloadQueue = new DownloadQueueService(new DownloadQueueStore(paths),
             new DownloadQueueExecutor(new QueuedMediaDownloader(paths, QueueProcessRunner, ToolLocator, ParseLimiter),
-                QueueProcessRunner, ToolLocator, DownloadNaming, History), QueueTaskManager, Work);
+                QueueProcessRunner, ToolLocator, DownloadNaming, History), QueueTaskManager, Work, History);
         DualAudio = new DualAudioService(paths, BBDown, ProcessRunner, Settings, ToolLocator);
         Tmdb = new TmdbService(RenameSettings);
         Rename = new RenameService(ProcessRunner, ToolLocator, Settings, RenameHistory);

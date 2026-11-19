@@ -18,7 +18,7 @@ var history = new HistoryStore(paths);
 var manager = new TaskManager(paths, runner);
 var executor = new DownloadQueueExecutor(new QueuedMediaDownloader(paths, runner, tools, new ParseConcurrencyLimiter(settings)),
     runner, tools, new DownloadNamingService(), history);
-var queue = new DownloadQueueService(new DownloadQueueStore(paths), executor, manager, work);
+var queue = new DownloadQueueService(new DownloadQueueStore(paths), executor, manager, work, history);
 var json = new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 var credential = args.Length > 6 ? Path.GetFullPath(args[6]) : null;
 byte[]? credentialHash = null;

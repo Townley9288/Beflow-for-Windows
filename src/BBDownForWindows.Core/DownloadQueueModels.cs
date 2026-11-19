@@ -38,6 +38,7 @@ public sealed class DownloadQueueItem
     [JsonIgnore] public int Succeeded => Checkpoint.Units.Count(u => u.Completed);
     [JsonIgnore] public int Failed => Checkpoint.Units.Count(u => u.Error.Length > 0);
     [JsonIgnore] public bool IsTerminal => State is DownloadQueueState.Completed or DownloadQueueState.PartialFailure or DownloadQueueState.Failed or DownloadQueueState.Cancelled;
+    [JsonIgnore] public bool CanRetryHistorySync => IsTerminal && !string.IsNullOrEmpty(Checkpoint.HistoryWarning);
     [JsonIgnore] public bool CanEdit => StartedAt is null && State == DownloadQueueState.Waiting;
 }
 

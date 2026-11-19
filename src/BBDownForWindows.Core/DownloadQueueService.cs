@@ -6,6 +6,7 @@ public sealed class DownloadQueueService
     private readonly IDownloadQueueExecutor executor;
     private readonly ITaskManager tasks;
     private readonly WorkCoordinator work;
+    private readonly IHistoryStore history;
     private readonly object pumpSync = new();
     private readonly object cancellationSync = new();
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -22,9 +23,9 @@ public sealed class DownloadQueueService
     public event EventHandler? Changed;
     public event EventHandler<QueueProgress>? ProgressChanged;
     public DownloadQueueDocument Snapshot => QueueSnapshot.Copy(Volatile.Read(ref snapshot));
-    public DownloadQueueService(IDownloadQueueStore store, IDownloadQueueExecutor executor, ITaskManager tasks, WorkCoordinator work)
+    public DownloadQueueService(IDownloadQueueStore store, IDownloadQueueExecutor executor, ITaskManager tasks, WorkCoordinator work, IHistoryStore history)
     {
-        this.store = store; this.executor = executor; this.tasks = tasks; this.work = work;
+        this.store = store; this.executor = executor; this.tasks = tasks; this.work = work; this.history = history;
         work.Changed += (_, _) => Kick();
     }
 
@@ -142,6 +143,12 @@ public sealed class DownloadQueueService
     });
     public Task ClearCompletedAsync() => ChangeAsync(doc => doc.Items.RemoveAll(i => i.State == DownloadQueueState.Completed));
 
+    public Task RetryHistorySyncAsync() => ChangeAsync(async doc =>
+    {
+        foreach (var item in doc.Items.Where(item => item.CanRetryHistorySync))
+            item.Checkpoint.HistoryWarning = await DownloadQueueHistory.TrySaveAsync(history, DownloadQueueHistory.Create(item));
+    });
+
     public async Task PauseAsync()
     {
         await ChangeAsync(doc =>
@@ -187,7 +194,14 @@ public sealed class DownloadQueueService
         return copy;
     }
 
-    private async Task ChangeAsync(Action<DownloadQueueDocument> action, Action? afterSave = null)
+    private Task ChangeAsync(Action<DownloadQueueDocument> action, Action? afterSave = null) =>
+        ChangeAsync(doc =>
+        {
+            action(doc);
+            return Task.CompletedTask;
+        }, afterSave);
+
+    private async Task ChangeAsync(Func<DownloadQueueDocument, Task> action, Action? afterSave = null)
     {
         await InitializeAsync();
         await gate.WaitAsync();
@@ -195,7 +209,7 @@ public sealed class DownloadQueueService
         {
             if (faulted) throw new IOException(Error);
             var next = QueueSnapshot.Copy(document);
-            action(next);
+            await action(next);
             try { await store.SaveAsync(next); }
             catch (Exception exception) { Fault(exception); throw; }
             document = next; afterSave?.Invoke(); Publish();
