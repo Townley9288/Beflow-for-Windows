@@ -34,6 +34,31 @@ public sealed class StoreTests
     }
 
     [Fact]
+    public async Task SessionDefaultsKeepTheOriginalConfigurationReadOnly()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            paths.EnsureCreated();
+            const string damaged = "{broken";
+            await File.WriteAllTextAsync(paths.SettingsFile, damaged);
+            var warnings = new List<InvalidDataException>();
+            var settings = new SettingsStore(paths, warnings.Add);
+
+            Assert.Equal(new AppSettings().ThemeMode, (await settings.LoadAsync()).ThemeMode);
+            Assert.Contains(paths.SettingsFile, Assert.Single(warnings).Message);
+            await Assert.ThrowsAsync<InvalidDataException>(() => settings.SaveAsync(new AppSettings()));
+            await Assert.ThrowsAsync<InvalidDataException>(() => settings.UpdateAsync(value => value));
+            Assert.Equal(damaged, await File.ReadAllTextAsync(paths.SettingsFile));
+
+            await File.WriteAllTextAsync(paths.SettingsFile, """{"monitorClipboard":false}""");
+            Assert.False((await settings.LoadAsync()).MonitorClipboard);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
     public async Task OldConfigKeepsNewDefaults()
     {
         var root = Directory.CreateTempSubdirectory();

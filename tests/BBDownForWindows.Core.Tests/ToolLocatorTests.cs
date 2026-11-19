@@ -60,10 +60,9 @@ public sealed class ToolLocatorTests
     [Fact(Timeout = 15_000)]
     public async Task VersionDetectionReadsOutputAndCompletes()
     {
-        var dotnet = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(directory => Path.Combine(directory.Trim('"'), OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"))
-            .First(File.Exists);
+        var runtime = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
+        var hostName = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
+        var dotnet = Path.GetFullPath(Path.Combine(runtime, "..", "..", "..", hostName));
         using var temp = new TempDirectory();
         var locator = new ToolLocator(new ApplicationPaths(temp.Info.FullName, temp.Info.FullName));
 

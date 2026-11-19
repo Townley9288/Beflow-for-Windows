@@ -10,7 +10,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Artifacts = Join-Path $Root 'artifacts'
 $BuildRoot = Join-Path $Artifacts "build-$Version-$PID"
 $Publish = Join-Path $BuildRoot 'publish'
-$Release = if ($ReleaseDirectory) { [IO.Path]::GetFullPath($ReleaseDirectory, $Root) } else { Join-Path $Artifacts 'release' }
+$Release = if ($ReleaseDirectory) { [IO.Path]::GetFullPath($ReleaseDirectory, $Root) } else { Join-Path $Artifacts "release\v$Version" }
 $Portable = Join-Path $BuildRoot 'portable'
 
 function Assert-ChildPath([string]$Path) {
@@ -20,6 +20,11 @@ function Assert-ChildPath([string]$Path) {
 }
 
 foreach ($Directory in @($Artifacts, $BuildRoot, $Publish, $Portable, $Release)) { Assert-ChildPath $Directory }
+$AssetPrefix = "Beflow-for-Windows-v$Version-win-x64"
+$ZipPath = Join-Path $Release "$AssetPrefix-portable.zip"
+if (Test-Path -LiteralPath "$ZipPath.sha256.sig") {
+    throw 'This output already has a signed package. Use a different -ReleaseDirectory for a rebuild.'
+}
 if (Test-Path -LiteralPath $BuildRoot) { Remove-Item -LiteralPath $BuildRoot -Recurse -Force }
 
 New-Item -ItemType Directory -Force -Path $Publish, $Release | Out-Null
@@ -104,6 +109,8 @@ if ($UnexpectedMuiLanguages) {
 & (Join-Path $PSScriptRoot 'AcquireTools.ps1') -OutputDirectory $Publish -FfmpegArchiveUrl $FfmpegArchiveUrl
 Copy-Item -LiteralPath (Join-Path $Root 'LICENSE'), (Join-Path $Root 'THIRD_PARTY_NOTICES.md'), (Join-Path $Root 'THIRD_PARTY_SOURCES.md'), (Join-Path $Root 'README.md') -Destination $Publish
 
+Copy-Item -LiteralPath (Join-Path $Root 'third_party\BouncyCastle-LICENSE.md') -Destination (Join-Path $Publish 'licenses')
+
 $IsccCommand = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 $IsccCandidates = @(
     $IsccCommand.Source,
@@ -118,7 +125,6 @@ $ChineseMessages = Join-Path $Root 'installer\ChineseSimplified.isl'
 $AppIconFile = Join-Path $Root 'src\BBDownForWindows.App\Assets\AppIcon.ico'
 Invoke-Checked { & $Iscc "/DMyAppVersion=$Version" "/DSourceDir=$Publish" "/DOutputDir=$Release" "/DChineseMessages=$ChineseMessages" "/DAppIconFile=$AppIconFile" (Join-Path $Root 'installer\BBDownForWindows.iss') } 'Inno Setup compile'
 
-$AssetPrefix = "Beflow-for-Windows-v$Version-win-x64"
 $Installer = Join-Path $Release "$AssetPrefix-setup.exe"
 if (-not (Test-Path -LiteralPath $Installer -PathType Leaf)) { throw "Expected setup installer $Installer." }
 
@@ -134,7 +140,6 @@ $ManifestEntries = @(Get-ChildItem -LiteralPath $Portable -Recurse -File |
     Where-Object { $_.FullName -ne (Join-Path $Portable 'portable.flag') } |
     ForEach-Object { [IO.Path]::GetRelativePath($Portable, $_.FullName).Replace('\', '/') }) + $ManifestName
 $ManifestEntries | Sort-Object | Set-Content -LiteralPath (Join-Path $Portable $ManifestName) -Encoding utf8
-$ZipPath = Join-Path $Release "$AssetPrefix-portable.zip"
 $StagedZip = Join-Path $BuildRoot "$AssetPrefix-portable.zip"
 [IO.Compression.ZipFile]::CreateFromDirectory($Portable, $StagedZip, [IO.Compression.CompressionLevel]::Optimal, $false)
 $Archive = [IO.Compression.ZipFile]::OpenRead($StagedZip)

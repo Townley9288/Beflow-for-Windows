@@ -2,6 +2,8 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using BBDownForWindows.Core;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Crypto.Signers;
 using Xunit;
 
 namespace BBDownForWindows.Tests;
@@ -200,36 +202,54 @@ public sealed class UpdateServiceTests
         Assert.Equal("Beflow-for-Windows-v1.0.3.1-win-x64-portable.zip", result.Release.Portable.FileName);
     }
 
-    [Fact]
-    public async Task DownloadsAndVerifiesSha256()
+    [Theory]
+    [InlineData("valid")]
+    [InlineData("missing")]
+    [InlineData("wrong-key")]
+    [InlineData("modified-checksum")]
+    [InlineData("different-version")]
+    [InlineData("modified-package")]
+    public async Task PortableUpdateRequiresTrustedSignatureAndMatchingPackage(string scenario)
     {
-        var bytes = Encoding.UTF8.GetBytes("verified update package");
-        var hash = Convert.ToHexString(SHA256.HashData(bytes));
-        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath.EndsWith(".sha256", StringComparison.Ordinal)
-            ? Text(HttpStatusCode.OK, hash + "  package.zip")
-            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
-        var service = new UpdateService(new HttpClient(handler));
+        var trusted = new Ed25519PrivateKeyParameters(new byte[32], 0);
+        var otherKey = new Ed25519PrivateKeyParameters(Enumerable.Repeat((byte)1, 32).ToArray(), 0);
+        var package = Encoding.UTF8.GetBytes("verified update package");
+        var name = "Beflow-for-Windows-v1.2.3-win-x64-portable.zip";
+        var signedName = scenario == "different-version" ? name.Replace("1.2.3", "1.2.2") : name;
+        var checksum = Encoding.UTF8.GetBytes($"{Convert.ToHexString(SHA256.HashData(package))}  {signedName}\n");
+        var signer = new Ed25519Signer();
+        signer.Init(true, scenario == "wrong-key" ? otherKey : trusted);
+        signer.BlockUpdate(checksum, 0, checksum.Length);
+        var signature = signer.GenerateSignature();
+        if (scenario == "modified-checksum") checksum[0] = (byte)(checksum[0] == 'A' ? 'B' : 'A');
+        var checksumUri = new Uri($"https://example.invalid/{name}.sha256");
+        var asset = new UpdateAsset(UpdatePackageKind.Portable, name, new Uri($"https://example.invalid/{name}"),
+            package.Length, name + ".sha256", checksumUri);
+        var handler = new StubHandler(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith(".sig", StringComparison.Ordinal))
+                return scenario == "missing" ? new(HttpStatusCode.NotFound) : Bytes(signature);
+            if (request.RequestUri == checksumUri) return Bytes(checksum);
+            return scenario == "modified-package" ? Text(HttpStatusCode.OK, "modified") : Bytes(package);
+        });
+        using var client = new HttpClient(handler);
+        var service = new UpdateService(client, trusted.GeneratePublicKey());
         using var root = new TempDirectory();
-        var asset = new UpdateAsset(UpdatePackageKind.Portable, "package.zip", new Uri("https://example.invalid/package.zip"), bytes.Length, "package.zip.sha256", new Uri("https://example.invalid/package.zip.sha256"));
-
-        var result = await service.DownloadAndVerifyAsync(asset, root.Info.FullName);
-
-        Assert.Equal(bytes, await File.ReadAllBytesAsync(result));
+        if (scenario == "valid")
+        {
+            var result = await service.DownloadAndVerifyAsync(asset, root.Info.FullName);
+            Assert.Equal(package, await File.ReadAllBytesAsync(result));
+        }
+        else
+        {
+            await Assert.ThrowsAsync<InvalidDataException>(() => service.DownloadAndVerifyAsync(asset, root.Info.FullName));
+            Assert.Empty(root.Info.GetFiles());
+            if (scenario != "modified-package") Assert.DoesNotContain(handler.Requests, request => request.RequestUri == asset.DownloadUri);
+        }
     }
 
-    [Fact]
-    public async Task RejectsWrongSha256AndDeletesPartialFile()
-    {
-        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath.EndsWith(".sha256", StringComparison.Ordinal)
-            ? Text(HttpStatusCode.OK, new string('0', 64))
-            : Text(HttpStatusCode.OK, "bad"));
-        var service = new UpdateService(new HttpClient(handler));
-        using var root = new TempDirectory();
-        var asset = new UpdateAsset(UpdatePackageKind.Portable, "package.zip", new Uri("https://example.invalid/package.zip"), 3, "package.zip.sha256", new Uri("https://example.invalid/package.zip.sha256"));
-
-        await Assert.ThrowsAsync<InvalidDataException>(() => service.DownloadAndVerifyAsync(asset, root.Info.FullName));
-        Assert.Empty(root.Info.GetFiles());
-    }
+    private static HttpResponseMessage Bytes(byte[] value) => new(HttpStatusCode.OK) { Content = new ByteArrayContent(value) };
 
     private static HttpResponseMessage Latest(string tag) =>
         Latest(new Uri($"https://github.com/Townley9288/Beflow-for-Windows/releases/tag/{tag}"));

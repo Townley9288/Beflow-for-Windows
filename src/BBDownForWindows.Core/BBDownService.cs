@@ -323,7 +323,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
             if (tuning.Applied) context.AppendLog(tuning.Description + "\n");
         }
 
-        tools.Aria2c = toolLocator.Locate(new AppSettings { Aria2cPath = part.Aria2cPath }).Aria2c;
+        tools.Aria2c = (await toolLocator.LocateAsync(new AppSettings { Aria2cPath = part.Aria2cPath }, cancellationToken)).Aria2c;
         BBDownCommandBuilder.EnsureDownloadTools(part, tools);
         var arguments = BBDownCommandBuilder.BuildExactDownloadArguments(part, tools);
         var input = BuildExactInput(decision.Video, decision.Audio, part.DownloadMode, request.Episode.IsMuxedStream);
@@ -451,7 +451,7 @@ public sealed class BBDownService(ApplicationPaths paths, IProcessRunner process
     private async Task<ToolPaths> ResolveToolsAsync(CancellationToken cancellationToken, bool requireFfmpeg = true)
     {
         var settings = await settingsStore.LoadAsync(cancellationToken);
-        var tools = toolLocator.Locate(settings);
+        var tools = await toolLocator.LocateAsync(settings, cancellationToken);
         if (string.IsNullOrWhiteSpace(tools.BBDown))
             throw new FileNotFoundException("随包的 Beflow BBDown.exe 缺失或校验失败，请重新安装完整发布包。");
         if (requireFfmpeg && string.IsNullOrWhiteSpace(tools.Ffmpeg))

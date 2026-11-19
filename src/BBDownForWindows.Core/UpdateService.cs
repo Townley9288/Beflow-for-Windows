@@ -1,16 +1,22 @@
 using System.Net;
 using System.Security.Cryptography;
+using System.Text;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Crypto.Signers;
+using Org.BouncyCastle.OpenSsl;
 
 namespace BBDownForWindows.Core;
 
 public sealed class UpdateService : IUpdateService
 {
     private const string RepositoryRoot = "https://github.com/Townley9288/Beflow-for-Windows";
+    private static readonly Lazy<Ed25519PublicKeyParameters> PortableSigningKey = new(LoadPortableSigningKey);
     private static readonly TimeSpan CheckCacheDuration = TimeSpan.FromMinutes(5);
     public static readonly Uri LatestReleaseUri = new($"{RepositoryRoot}/releases/latest");
 
     private readonly HttpClient _httpClient;
     private readonly TimeProvider _timeProvider;
+    private readonly Ed25519PublicKeyParameters? _signingKey;
     private readonly SemaphoreSlim _checkGate = new(1, 1);
     private UpdateCheckResult? _cachedResult;
     private Version? _cachedCurrentVersion;
@@ -20,6 +26,11 @@ public sealed class UpdateService : IUpdateService
     {
         _httpClient = httpClient;
         _timeProvider = timeProvider ?? TimeProvider.System;
+    }
+
+    internal UpdateService(HttpClient httpClient, Ed25519PublicKeyParameters signingKey) : this(httpClient)
+    {
+        _signingKey = signingKey;
     }
 
     public async Task<UpdateCheckResult> CheckAsync(Version currentVersion, CancellationToken cancellationToken = default)
@@ -118,6 +129,7 @@ public sealed class UpdateService : IUpdateService
 
     public async Task<string> DownloadAndVerifyAsync(UpdateAsset asset, string destinationDirectory, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
+        var expected = await GetVerifiedChecksumAsync(asset, cancellationToken);
         Directory.CreateDirectory(destinationDirectory);
         var packagePath = Path.Combine(destinationDirectory, asset.FileName);
         var temporaryPath = packagePath + ".download";
@@ -145,11 +157,6 @@ public sealed class UpdateService : IUpdateService
                 await output.FlushAsync(cancellationToken);
             }
 
-            using var checksumRequest = CreateRequest(HttpMethod.Get, asset.ChecksumUri);
-            using var checksumResponse = await _httpClient.SendAsync(checksumRequest, cancellationToken);
-            checksumResponse.EnsureSuccessStatusCode();
-            var checksumText = await checksumResponse.Content.ReadAsStringAsync(cancellationToken);
-            var expected = ParseChecksum(checksumText);
             string actual;
             await using (var hashStream = File.OpenRead(temporaryPath))
                 actual = Convert.ToHexString(await SHA256.HashDataAsync(hashStream, cancellationToken));
@@ -165,6 +172,50 @@ public sealed class UpdateService : IUpdateService
             try { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); } catch { }
             throw;
         }
+    }
+
+    private async Task<string> GetVerifiedChecksumAsync(UpdateAsset asset, CancellationToken cancellationToken)
+    {
+        var checksum = await ReadMetadataAsync(asset.ChecksumUri, 1024, cancellationToken);
+        var checksumText = Encoding.UTF8.GetString(checksum);
+        if (asset.Kind == UpdatePackageKind.Portable)
+        {
+            var signatureUri = new Uri(asset.ChecksumUri.AbsoluteUri + ".sig");
+            var signature = await ReadMetadataAsync(signatureUri, 64, cancellationToken);
+            var verifier = new Ed25519Signer();
+            verifier.Init(false, _signingKey ?? PortableSigningKey.Value);
+            verifier.BlockUpdate(checksum, 0, checksum.Length);
+            if (signature.Length != 64 || !verifier.VerifySignature(signature))
+                throw new InvalidDataException("便携更新签名无效。");
+
+            var fields = checksumText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (fields.Length != 2 || !fields[1].Equals(asset.FileName, StringComparison.Ordinal))
+                throw new InvalidDataException("便携更新签名中的文件名与所选版本不匹配。");
+        }
+        return ParseChecksum(checksumText);
+    }
+
+    private async Task<byte[]> ReadMetadataAsync(Uri uri, int maxBytes, CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Get, uri);
+        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound && uri.AbsolutePath.EndsWith(".sig", StringComparison.Ordinal))
+            throw new InvalidDataException("该便携版本缺少发布者签名。");
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var buffer = new byte[maxBytes + 1];
+        var count = await stream.ReadAtLeastAsync(buffer, buffer.Length, false, cancellationToken);
+        if (count > maxBytes) throw new InvalidDataException("更新校验文件超出长度限制。");
+        return buffer[..count];
+    }
+
+    private static Ed25519PublicKeyParameters LoadPortableSigningKey()
+    {
+        using var stream = typeof(UpdateService).Assembly.GetManifestResourceStream("Beflow.PortableUpdateSigningKey.pem")
+            ?? throw new InvalidOperationException("缺少便携更新公钥。");
+        using var reader = new StreamReader(stream);
+        return new PemReader(reader).ReadObject() as Ed25519PublicKeyParameters
+            ?? throw new InvalidDataException("便携更新公钥格式无效。");
     }
 
     public static Version ParseTagVersion(string tag)

@@ -139,13 +139,13 @@ public sealed partial class DualAudioPage : Page, IQueueEditorPage
     private async Task<bool> ConfirmMkvmergeAvailableAsync()
     {
         var app = (App)Application.Current;
-        var tools = app.Services.ToolLocator.Locate(new AppSettings { MkvmergePath = ViewModel.MkvmergePath });
+        var tools = await app.Services.ToolLocator.LocateAsync(new AppSettings { MkvmergePath = ViewModel.MkvmergePath });
         if (!string.IsNullOrWhiteSpace(tools.Mkvmerge)) return true;
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
             Title = "缺少 MKVToolNix",
-            Content = "多音轨封装需要 mkvmerge.exe，但当前没有检测到。请先安装 MKVToolNix，或在设置页手动选择 mkvmerge.exe。",
+            Content = "多音轨封装需要 mkvmerge.exe，但当前没有检测到。请在系统的 Program Files 中安装 MKVToolNix，或在设置页选择 mkvmerge.exe 的完整路径。通过 Scoop 或其他自定义目录安装时，请手动选择。",
             PrimaryButtonText = "前往设置",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Primary

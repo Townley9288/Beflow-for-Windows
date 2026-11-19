@@ -454,5 +454,6 @@ public sealed record ProcessRunRequest(
     string? StandardInput = null,
     bool UsePseudoConsole = false,
     int PseudoConsoleColumns = 160,
-    int PseudoConsoleRows = 40);
+    int PseudoConsoleRows = 40,
+    bool RequireCompleteOutput = false);
 public sealed record ProcessResult(int ExitCode, string Output, bool Cancelled);

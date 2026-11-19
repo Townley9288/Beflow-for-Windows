@@ -25,7 +25,7 @@ public sealed partial class AboutPage : Page
         {
             var services = ((App)Application.Current).Services;
             var settings = await services.Settings.LoadAsync();
-            var tools = services.ToolLocator.Locate(settings);
+            var tools = await services.ToolLocator.LocateAsync(settings);
             var versions = await Task.WhenAll(
                 services.ToolLocator.GetVersionAsync(tools.BBDown),
                 services.ToolLocator.GetVersionAsync(tools.Aria2c),

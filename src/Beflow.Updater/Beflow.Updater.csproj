@@ -10,7 +10,7 @@
     <PublishSingleFile>true</PublishSingleFile>
     <InvariantGlobalization>true</InvariantGlobalization>
     <StripSymbols>true</StripSymbols>
-    <RuntimeFrameworkVersion>10.0.8</RuntimeFrameworkVersion>
+    <RuntimeFrameworkVersion>10.0.15</RuntimeFrameworkVersion>
   </PropertyGroup>
   <!-- Keep the locked Native AOT dependencies independent of the installed SDK feature band. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">

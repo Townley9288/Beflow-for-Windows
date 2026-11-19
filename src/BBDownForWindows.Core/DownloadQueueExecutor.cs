@@ -109,7 +109,7 @@ public sealed class DownloadQueueExecutor(QueuedMediaDownloader downloader, IPro
                 var otherSource = pair.MainVideoSource == DualAudioSource.A ? unit.SourceB : unit.SourceA;
                 var full = fullSource.Files.Single(f => DownloadFileKinds.IsVideoFile(f.Path)).Path;
                 var audio = otherSource.Files.Single(f => Path.GetExtension(f.Path).Equals(".m4a", StringComparison.OrdinalIgnoreCase)).Path;
-                var mkvmerge = tools.Locate(new AppSettings { MkvmergePath = batch.MkvmergePath }).Mkvmerge;
+                var mkvmerge = (await tools.LocateAsync(new AppSettings { MkvmergePath = batch.MkvmergePath }, cancellationToken)).Mkvmerge;
                 progress.Report(new(item.Id, unit.Number, "封装", null, "", ""));
                 var result = await runner.RunAsync(new ProcessRunRequest(mkvmerge,
                     DualAudioService.BuildMkvmergeArguments(full, audio, unit.MuxPath, batch, pair.MainVideoSource, pair.SourceBDelayOverrideMs ?? batch.SourceBDelayMs),
@@ -166,11 +166,11 @@ public sealed class DownloadQueueExecutor(QueuedMediaDownloader downloader, IPro
             progress.Report(new(item.Id, unit.Number, $"{prefix} · {p.Message}", p.Percent, p.Speed, p.Eta));
         async Task Save()
         {
+            HistoryRecord record;
             try
             {
                 await saveCheckpoint(state);
-                var record = DownloadQueueHistory.Create(item);
-                await history.AddAsync(record);
+                record = DownloadQueueHistory.Create(item);
                 if (item.DualAudio is not null && state.OutputDirectory.Length > 0)
                 {
                     var manifest = new DualAudioTaskManifest
@@ -187,6 +187,22 @@ public sealed class DownloadQueueExecutor(QueuedMediaDownloader downloader, IPro
                     await AtomicJson.WriteAsync(manifest.Result.ManifestPath, manifest, SettingsStore.CreateOptions(), CancellationToken.None);
                 }
             }
+            catch (Exception exception) { throw new QueuePersistenceException("保存任务阶段失败：" + exception.Message, exception); }
+
+            var warning = string.Empty;
+            try
+            {
+                await history.AddAsync(record);
+            }
+            catch (InvalidDataException exception)
+            {
+                warning = "下载已记录在队列中，但历史尚未同步：" + exception.Message;
+            }
+            if (warning == state.HistoryWarning) return;
+
+            state.HistoryWarning = warning;
+            if (warning.Length > 0) context.AppendLog(warning + "\n");
+            try { await saveCheckpoint(state); }
             catch (Exception exception) { throw new QueuePersistenceException("保存任务阶段失败：" + exception.Message, exception); }
         }
     }

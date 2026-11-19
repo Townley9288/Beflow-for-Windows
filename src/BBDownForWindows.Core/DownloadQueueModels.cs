@@ -43,6 +43,7 @@ public sealed class DownloadQueueItem
 
 public sealed class QueueCheckpoint
 {
+    public string HistoryWarning { get; set; } = string.Empty;
     public string WorkDirectory { get; set; } = string.Empty;
     public string OutputDirectory { get; set; } = string.Empty;
     public List<QueueUnitCheckpoint> Units { get; set; } = [];

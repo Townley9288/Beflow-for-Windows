@@ -5,4 +5,8 @@
     <AssemblyName>BBDownForWindows.Core</AssemblyName>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" />
+    <EmbeddedResource Include="..\..\scripts\portable-update-signing.pub.pem" LogicalName="Beflow.PortableUpdateSigningKey.pem" />
+  </ItemGroup>
 </Project>

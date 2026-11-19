@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace BBDownForWindows.Core;
 
-public sealed class SettingsStore(ApplicationPaths paths) : ISettingsStore
+public sealed class SettingsStore(ApplicationPaths paths, Action<InvalidDataException>? reportSessionDefaults = null) : ISettingsStore
 {
     private static readonly JsonSerializerOptions Options = CreateOptions();
     private readonly SemaphoreSlim _gate = JsonFileGates.For(paths.SettingsFile);
@@ -14,6 +14,11 @@ public sealed class SettingsStore(ApplicationPaths paths) : ISettingsStore
         try
         {
             return await LoadCoreAsync(cancellationToken);
+        }
+        catch (InvalidDataException exception) when (reportSessionDefaults is not null)
+        {
+            reportSessionDefaults(exception);
+            return new AppSettings();
         }
         finally
         {

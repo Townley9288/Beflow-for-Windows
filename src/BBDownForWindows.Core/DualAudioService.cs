@@ -81,7 +81,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         if (selectedPairs.Count == 0) throw new InvalidOperationException("没有选择已配对的分集");
 
         var settings = await settingsStore.LoadAsync(cancellationToken);
-        var tools = toolLocator.Locate(new AppSettings { MkvmergePath = request.MkvmergePath, Aria2cPath = request.Options.Aria2cPath });
+        var tools = await toolLocator.LocateAsync(new AppSettings { MkvmergePath = request.MkvmergePath, Aria2cPath = request.Options.Aria2cPath }, cancellationToken);
         if (string.IsNullOrWhiteSpace(tools.Mkvmerge)) throw new FileNotFoundException("找不到 mkvmerge.exe，请在设置中选择 MKVToolNix 路径");
         var root = string.IsNullOrWhiteSpace(request.WorkDirectory) ? settings.WorkDirectory : request.WorkDirectory;
         if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("请先设置输出目录");
@@ -291,7 +291,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         if (!preparation.CanRemux) throw new InvalidOperationException(preparation.Error);
         var settings = await settingsStore.LoadAsync(cancellationToken);
         settings.MkvmergePath = request.MkvmergePath;
-        var mkvmerge = toolLocator.Locate(settings).Mkvmerge;
+        var mkvmerge = (await toolLocator.LocateAsync(settings, cancellationToken)).Mkvmerge;
         if (string.IsNullOrWhiteSpace(mkvmerge)) throw new FileNotFoundException("找不到 mkvmerge.exe");
         var manifestPath = Path.Combine(request.ExistingTaskDirectory, "dual-audio-task.json");
         if (File.Exists(manifestPath))

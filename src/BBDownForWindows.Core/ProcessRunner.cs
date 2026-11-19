@@ -6,6 +6,7 @@ namespace BBDownForWindows.Core;
 
 public sealed class ProcessRunner : IProcessRunner
 {
+    private const int CompleteOutputLimit = 4 * 1024 * 1024;
     private readonly ConcurrentDictionary<Guid, Action> _ownedProcesses = new();
 
     public async Task<ProcessResult> RunAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
@@ -36,14 +37,14 @@ public sealed class ProcessRunner : IProcessRunner
         };
         foreach (var argument in request.Arguments) startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"无法启动 {request.FileName}");
-        return await CaptureAsync(() => TryKill(process), async consume =>
+        return await CaptureAsync(() => TryKill(process), async (consume, overflow) =>
         {
-            var stdout = ReadLinesAsync(process.StandardOutput.BaseStream, consume);
-            var stderr = ReadLinesAsync(process.StandardError.BaseStream, consume);
+            var stdout = ReadLinesAsync(process.StandardOutput.BaseStream, consume, overflow);
+            var stderr = ReadLinesAsync(process.StandardError.BaseStream, consume, overflow);
             var stdin = WriteInputAsync(process.StandardInput.BaseStream, request.StandardInput);
             await Task.WhenAll(stdout, stderr, stdin, process.WaitForExitAsync());
             return process.ExitCode;
-        }, onOutput, cancellationToken);
+        }, request.RequireCompleteOutput, onOutput, cancellationToken);
     }
 
     private async Task<ProcessResult> RunWindowsRedirectedAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
@@ -65,23 +66,23 @@ public sealed class ProcessRunner : IProcessRunner
         childOutput.Dispose();
         childError.Dispose();
 
-        return await CaptureAsync(process.StopTree, async consume =>
+        return await CaptureAsync(process.StopTree, async (consume, overflow) =>
         {
-            var readOutput = Task.Run(() => ReadLinesAsync(output, consume));
-            var readError = Task.Run(() => ReadLinesAsync(error, consume));
+            var readOutput = Task.Run(() => ReadLinesAsync(output, consume, overflow));
+            var readError = Task.Run(() => ReadLinesAsync(error, consume, overflow));
             var writeInput = Task.Run(() => WriteInputAsync(input, request.StandardInput));
             var exitCode = await process.WaitForExitAsync();
             process.CloseJob();
             await Task.WhenAll(readOutput, readError, writeInput);
             return exitCode;
-        }, onOutput, cancellationToken);
+        }, request.RequireCompleteOutput, onOutput, cancellationToken);
     }
 
     private async Task<ProcessResult> RunPseudoConsoleAsync(ProcessRunRequest request, Action<string>? onOutput, CancellationToken cancellationToken)
     {
         using var session = PseudoConsoleSession.Start(request);
         var process = session.Process;
-        return await CaptureAsync(process.StopTree, async consume =>
+        return await CaptureAsync(process.StopTree, async (consume, overflow) =>
         {
             var read = Task.Factory.StartNew(() => session.ReadOutput(consume), CancellationToken.None,
                 TaskCreationOptions.LongRunning, TaskScheduler.Default);
@@ -95,24 +96,34 @@ public sealed class ProcessRunner : IProcessRunner
             session.ClosePseudoConsole();
             await Task.WhenAll(read, write);
             return exitCode;
-        }, onOutput, cancellationToken);
+        }, request.RequireCompleteOutput, onOutput, cancellationToken);
     }
 
-    private async Task<ProcessResult> CaptureAsync(Action stop, Func<Action<string>, Task<int>> run,
-        Action<string>? onOutput, CancellationToken cancellationToken)
+    private async Task<ProcessResult> CaptureAsync(Action stop, Func<Action<string>, Action?, Task<int>> run,
+        bool requireCompleteOutput, Action<string>? onOutput, CancellationToken cancellationToken)
     {
         var id = Guid.NewGuid();
         _ownedProcesses[id] = stop;
         using var registration = cancellationToken.Register(stop);
-        var output = new ProcessOutputBuffer();
+        var complete = requireCompleteOutput ? new StringBuilder() : null;
+        var tail = requireCompleteOutput ? null : new ProcessOutputBuffer();
         var outputLock = new object();
         Exception? observerError = null;
         void Consume(string text)
         {
             lock (outputLock)
             {
-                output.Append(text);
                 if (observerError is not null) return;
+                if (complete is not null)
+                {
+                    if (text.Length > CompleteOutputLimit - complete.Length)
+                    {
+                        MarkOverflow();
+                        return;
+                    }
+                    complete.Append(text);
+                }
+                else tail!.Append(text);
                 try { onOutput?.Invoke(text); }
                 catch (Exception exception)
                 {
@@ -122,11 +133,20 @@ public sealed class ProcessRunner : IProcessRunner
             }
         }
 
+        void MarkOverflow()
+        {
+            lock (outputLock)
+            {
+                observerError ??= new InvalidDataException("工具的完整输出超出 4 MiB 捕获上限。");
+                stop();
+            }
+        }
+
         try
         {
-            var code = await run(Consume);
+            var code = await run(Consume, requireCompleteOutput ? MarkOverflow : null);
             if (observerError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(observerError);
-            return new ProcessResult(code, output.ToString(), cancellationToken.IsCancellationRequested);
+            return new ProcessResult(code, complete?.ToString() ?? tail!.ToString(), cancellationToken.IsCancellationRequested);
         }
         finally
         {
@@ -158,11 +178,13 @@ public sealed class ProcessRunner : IProcessRunner
         }
     }
 
-    internal static async Task ReadLinesAsync(Stream stream, Action<string> consume)
+    internal static async Task ReadLinesAsync(Stream stream, Action<string> consume, Action? onOversizedLine = null)
     {
         var buffer = new byte[4096];
         using var pending = new MemoryStream();
         var previousWasCarriageReturn = false;
+        // Allow up to four UTF-8 bytes per character when capturing structured output.
+        var lineLimit = onOversizedLine is null ? ProcessOutputBuffer.Capacity : 4 * CompleteOutputLimit;
         while (true)
         {
             var count = await stream.ReadAsync(buffer);
@@ -193,7 +215,8 @@ public sealed class ProcessRunner : IProcessRunner
 
         void Append(byte[] bytes, int offset, int count)
         {
-            var remaining = ProcessOutputBuffer.Capacity - (int)pending.Length;
+            var remaining = lineLimit - (int)pending.Length;
+            if (count > remaining) onOversizedLine?.Invoke();
             pending.Write(bytes, offset, Math.Min(count, remaining));
         }
     }

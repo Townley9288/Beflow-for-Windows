@@ -97,7 +97,7 @@ public sealed class RenameService(
         ValidateTmdbSeasonMapping(request, selected);
 
         var settings = await settingsStore.LoadAsync(cancellationToken);
-        var tools = toolLocator.Locate(settings);
+        var tools = await toolLocator.LocateAsync(settings, cancellationToken);
         if (string.IsNullOrWhiteSpace(tools.Ffprobe) || !File.Exists(tools.Ffprobe))
             throw new FileNotFoundException("找不到 ffprobe.exe，无法读取视频规格");
 
@@ -330,7 +330,7 @@ public sealed class RenameService(
             "-show_entries", "stream=index,codec_type,codec_name,width,height,color_transfer,color_primaries,r_frame_rate,channels,profile:stream_side_data=side_data_type",
             "-of", "json", sourcePath
         };
-        var result = await processRunner.RunAsync(new ProcessRunRequest(ffprobe, arguments, Path.GetDirectoryName(sourcePath)!), null, cancellationToken);
+        var result = await processRunner.RunAsync(new ProcessRunRequest(ffprobe, arguments, Path.GetDirectoryName(sourcePath)!, RequireCompleteOutput: true), null, cancellationToken);
         if (result.Cancelled) cancellationToken.ThrowIfCancellationRequested();
         return result.ExitCode == 0
             ? new MediaProbeOutcome(ParseMediaMetadata(result.Output), true)

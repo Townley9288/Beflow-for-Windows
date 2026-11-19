@@ -36,6 +36,23 @@ public sealed class QueueCleanupTests
     }
 
     [Fact]
+    public async Task DamagedHistoryDoesNotStopQueueAndWarningIsSavedWithTheCheckpoint()
+    {
+        using var fixture = new Fixture(false);
+        const string corrupted = "{broken";
+        await File.WriteAllTextAsync(fixture.Paths.HistoryFile, corrupted);
+        var log = new List<string>();
+        var result = await fixture.Run(log.Add);
+
+        Assert.Equal(TaskState.Completed, result.State);
+        Assert.False(File.Exists(fixture.SourceB));
+        Assert.True(File.Exists(fixture.Final));
+        Assert.Contains("历史尚未同步", fixture.SavedCheckpoint!.HistoryWarning);
+        Assert.Single(log, text => text.Contains("历史尚未同步", StringComparison.Ordinal));
+        Assert.Equal(corrupted, await File.ReadAllTextAsync(fixture.Paths.HistoryFile));
+    }
+
+    [Fact]
     public async Task ChangedFinalOutputPreventsDeletingSourcesOnResume()
     {
         using var f = new Fixture(false);
@@ -55,11 +72,13 @@ public sealed class QueueCleanupTests
         public string SourceA { get; }
         public string SourceB { get; }
         public DownloadQueueItem Item { get; }
+        public ApplicationPaths Paths { get; }
+        public QueueCheckpoint? SavedCheckpoint { get; private set; }
         private readonly DownloadQueueExecutor executor;
         private readonly TaskManager manager;
         public Fixture(bool keep)
         {
-            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            var paths = Paths = new ApplicationPaths(root.FullName, root.FullName);
             paths.EnsureCreated();
             Final = Path.Combine(root.FullName, "final.mkv");
             SourceA = Path.Combine(root.FullName, "source-a.mp4");
@@ -81,8 +100,16 @@ public sealed class QueueCleanupTests
                 new ParseConcurrencyLimiter(new SettingsStore(paths))), Runner, tools, new DownloadNamingService(), new HistoryStore(paths));
             manager = new TaskManager(paths, Runner);
         }
-        public Task<TaskSnapshot> Run() => manager.RunExclusiveAsync(TaskKind.DualAudioMux, false, "cleanup", (context, token) =>
-            executor.ExecuteAsync(Item, _ => Task.CompletedTask, new Progress<QueueProgress>(), context, token));
+        public async Task<TaskSnapshot> Run(Action<string>? report = null)
+        {
+            if (report is not null) manager.LogAppended += (_, line) => report(line);
+            return await manager.RunExclusiveAsync(TaskKind.DualAudioMux, false, "cleanup", (context, token) =>
+                executor.ExecuteAsync(Item, checkpoint =>
+                {
+                    SavedCheckpoint = QueueSnapshot.Copy(checkpoint);
+                    return Task.CompletedTask;
+                }, new Progress<QueueProgress>(), context, token));
+        }
         public void Dispose() => root.Delete(true);
     }
 

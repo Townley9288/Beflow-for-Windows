@@ -7,6 +7,7 @@ Beflow for Windows is an independent graphical frontend. Release packages may ag
 - **FFmpeg N-113240-g6d2f64534d-20240110 win64 GPL build** — GPLv3 build. Source project: <https://ffmpeg.org/>; Windows build project: <https://github.com/BtbN/FFmpeg-Builds>.
 - **Microsoft Windows App SDK 1.8** — Microsoft software license terms.
 - **CommunityToolkit.Mvvm 8.4.2** — MIT license.
+- **Bouncy Castle C#** — MIT license. Used to verify Ed25519 portable update signatures. Source: <https://github.com/bcgit/bc-csharp>.
 - **Inno Setup 6** — used only to create the installer; <https://jrsoftware.org/isinfo.php>.
 
 The release build rebuilds the pinned BBDown source with the documented compatibility patches, then copies the BBDown, aria2 and FFmpeg license files into the application `licenses` directory. Tool archives are not committed to this repository. Corresponding source locations are recorded in `THIRD_PARTY_SOURCES.md`.

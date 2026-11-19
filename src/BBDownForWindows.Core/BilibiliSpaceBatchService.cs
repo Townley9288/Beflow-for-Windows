@@ -55,7 +55,7 @@ public sealed class BilibiliSpaceBatchService(IBBDownParsingService downloader)
         if (string.IsNullOrWhiteSpace(profile.Name)) throw new InvalidOperationException("尚未读取 UP 主名称。");
         if (!long.TryParse(profile.Uid, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var uid) || uid <= 0)
             throw new InvalidOperationException("主页 UID 无效。");
-        var safe = string.Concat(profile.Name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim().TrimEnd('.');
+        var safe = string.Concat(profile.Name.Select(c => (c < ' ' || "<>:\"/\\|?*".Contains(c)) ? '_' : c)).Trim().TrimEnd('.');
         if (safe.Length == 0) throw new InvalidOperationException("UP 主名称不能用于文件夹名称。");
         var output = Path.Combine(Path.GetFullPath(directory), $"{safe}（{profile.Uid}）");
         for (var current = new DirectoryInfo(output); current is not null; current = current.Parent)

@@ -9,6 +9,8 @@ public partial class App : Application
 {
     private MainWindow? _window;
     private Window? _startupErrorWindow;
+    private static ApplicationPaths? _paths;
+    private string? _settingsWarning;
     private static readonly object LogSync = new();
 
     public App()
@@ -49,7 +51,7 @@ public partial class App : Application
     }
 
     internal static string CrashLogDirectory =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Beflow", "Logs");
+        _paths?.LogsDirectory ?? new ApplicationPaths().LogsDirectory;
 
     internal static void LogException(Exception exception)
     {
@@ -57,8 +59,9 @@ public partial class App : Application
         {
             lock (LogSync)
             {
-                Directory.CreateDirectory(CrashLogDirectory);
-                File.AppendAllText(Path.Combine(CrashLogDirectory, $"app-{DateTime.Now:yyyyMMdd}.log"),
+                var logs = CrashLogDirectory;
+                Directory.CreateDirectory(logs);
+                File.AppendAllText(Path.Combine(logs, $"app-{DateTime.Now:yyyyMMdd}.log"),
                     $"{DateTimeOffset.Now:O} {exception}{Environment.NewLine}");
             }
         }
@@ -72,14 +75,22 @@ public partial class App : Application
     {
         try
         {
-            var paths = new ApplicationPaths();
+            var paths = _paths = new ApplicationPaths();
             paths.EnsureCreated();
             new LegacyMigrationService(paths).Migrate();
-            Services = new AppServices(paths);
+            Services = new AppServices(paths, exception =>
+            {
+                var warning = exception.Message + "\n本次运行使用默认设置。修复配置文件后可恢复读写。";
+                if (Interlocked.Exchange(ref _settingsWarning, warning) == warning) return;
+                LogException(exception);
+                if (_window is { } window)
+                    window.DispatcherQueue.TryEnqueue(() => window.ShowOperationError(warning));
+            });
             await Services.Theme.InitializeAsync();
             _window = new MainWindow();
             _window.Activate();
             _window.ApplyInitialSize();
+            if (_settingsWarning is { } startupWarning) _window.ShowOperationError(startupWarning);
             var pageArgument = Environment.GetCommandLineArgs().FirstOrDefault(value => value.StartsWith("--page=", StringComparison.OrdinalIgnoreCase));
             if (pageArgument is not null) _window.Navigate(pageArgument[7..].ToLowerInvariant());
         }

@@ -55,6 +55,10 @@ public sealed partial class DownloadQueuePage : Page
         var pausing = queue.Items.Any(i => i.State == DownloadQueueState.Pausing);
         QueueStatus.Text = pausing ? "正在停止当前进程并保存状态…" : queue.Paused ? "已暂停 · 点击继续后执行" : $"共 {queue.Items.Count} 个任务 · 按顺序执行";
         PauseButton.Content = queue.Paused ? "继续" : "暂停"; PauseButton.IsEnabled = !pausing && services.DownloadQueue.Error.Length == 0;
+        var historyWarning = queue.Items.Select(item => item.Checkpoint.HistoryWarning)
+            .FirstOrDefault(warning => !string.IsNullOrEmpty(warning));
+        HistoryWarningBar.Message = historyWarning ?? string.Empty;
+        HistoryWarningBar.IsOpen = historyWarning is not null;
         if (services.DownloadQueue.Error.Length > 0) { ErrorBar.Message = services.DownloadQueue.Error; ErrorBar.IsOpen = true; }
     }
     private static DownloadQueueItem Item(object sender) => ((QueueRow)((FrameworkElement)sender).DataContext).Item;

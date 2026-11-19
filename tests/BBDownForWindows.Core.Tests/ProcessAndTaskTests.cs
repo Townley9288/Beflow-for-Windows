@@ -85,10 +85,9 @@ public sealed class ProcessAndTaskTests
         Assert.NotEmpty(lines);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task ProcessRunnerStreamsPseudoConsoleOutput()
     {
-        if (!OperatingSystem.IsWindows()) return;
         var runner = new ProcessRunner();
         var output = new List<string>();
         var result = await runner.RunAsync(new ProcessRunRequest(
@@ -102,10 +101,9 @@ public sealed class ProcessAndTaskTests
         Assert.NotEmpty(output);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task PseudoConsoleProcessMayExitBeforeProducingOutput()
     {
-        if (!OperatingSystem.IsWindows()) return;
         var request = Shell("exit /b 17") with { UsePseudoConsole = true };
         var result = await new ProcessRunner().RunAsync(request, null, CancellationToken.None)
             .WaitAsync(TimeSpan.FromSeconds(5));
@@ -125,6 +123,33 @@ public sealed class ProcessAndTaskTests
         Assert.Contains("early", result.Output);
     }
 
+    [Theory]
+    [InlineData(70000, false)]
+    [InlineData(4400000, true)]
+    public async Task CompleteStructuredCaptureRetainsTheBeginningOrReportsOverflow(int size, bool overflow)
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(file, "{\"value\":\"" + new string('a', size) + "\"}");
+            var name = Path.GetFileName(file);
+            var command = OperatingSystem.IsWindows() ? $"type {name}" : $"cat {name}";
+            var request = Shell(command) with
+            {
+                WorkingDirectory = Path.GetDirectoryName(file)!,
+                RequireCompleteOutput = true
+            };
+            var task = new ProcessRunner().RunAsync(request, null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+            if (overflow) await Assert.ThrowsAsync<InvalidDataException>(() => task);
+            else
+            {
+                using var json = System.Text.Json.JsonDocument.Parse((await task).Output);
+                Assert.Equal(size, json.RootElement.GetProperty("value").GetString()!.Length);
+            }
+        }
+        finally { File.Delete(file); }
+    }
+
     [Fact]
     public void OutputBufferKeepsOnlyTheMostRecentText()
     {
@@ -136,10 +161,9 @@ public sealed class ProcessAndTaskTests
         Assert.EndsWith("last", output);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task ProcessRunnerWritesInteractivePseudoConsoleInput()
     {
-        if (!OperatingSystem.IsWindows()) return;
         var runner = new ProcessRunner();
         var result = await runner.RunAsync(new ProcessRunRequest(
             Path.Combine(Environment.SystemDirectory, "cmd.exe"),
@@ -164,10 +188,9 @@ public sealed class ProcessAndTaskTests
         Assert.Contains(update, item => item.Contains("67%", StringComparison.Ordinal) && item.Contains("5.62 MB/s", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task CancellationTerminatesPseudoConsoleProcess()
     {
-        if (!OperatingSystem.IsWindows()) return;
         var runner = new ProcessRunner();
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
         var result = await runner.RunAsync(new ProcessRunRequest(
@@ -259,5 +282,13 @@ public sealed class ProcessAndTaskTests
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => manager.ReadSavedLogLinesAsync(Path.Combine(root.FullName, "outside.log")));
         }
         finally { root.Delete(true); }
+    }
+}
+
+internal sealed class WindowsFactAttribute : FactAttribute
+{
+    public WindowsFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows()) Skip = "Windows ConPTY is required.";
     }
 }

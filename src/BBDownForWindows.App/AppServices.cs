@@ -5,12 +5,12 @@ namespace BBDownForWindows.App;
 
 public sealed class AppServices
 {
-    public AppServices(ApplicationPaths paths)
+    public AppServices(ApplicationPaths paths, Action<InvalidDataException>? reportSessionDefaults = null)
     {
         Paths = paths;
         HttpClient = CreateHttpClient(TimeSpan.FromSeconds(15));
         UpdateHttpClient = CreateHttpClient(TimeSpan.FromMinutes(30));
-        Settings = new SettingsStore(paths);
+        Settings = new SettingsStore(paths, reportSessionDefaults);
         History = new HistoryStore(paths);
         RenameSettings = new RenameSettingsStore(paths);
         RenameHistory = new RenameHistoryStore(paths);

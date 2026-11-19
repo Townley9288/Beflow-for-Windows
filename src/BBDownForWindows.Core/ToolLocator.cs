@@ -29,6 +29,9 @@ public sealed class ToolLocator : IToolLocator
 
     public ToolPaths LocateFast(AppSettings settings) => Locate(settings);
 
+    public Task<ToolPaths> LocateAsync(AppSettings settings, CancellationToken cancellationToken = default) =>
+        Task.Run(() => Locate(settings), cancellationToken);
+
     private string FindBundledBBDown()
     {
         var path = Path.Combine(_paths.ToolsDirectory, "BBDown", "BBDown.exe");

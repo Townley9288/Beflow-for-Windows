@@ -79,7 +79,7 @@ TV 视频流保留接口返回的真实分辨率和帧率；缺少参数时，�
 软件默认在启动时每天最多检查一次 GitHub 稳定版，不会自动下载安装。关于页可以手动检查并确认更新：
 
 - 安装版打开 GitHub 发布页，由用户下载安装包并覆盖安装。
-- 便携版由用户确认后下载 ZIP，校验 SHA-256，保留 `Data` 目录并重新启动。缺少更新助手的旧便携版需要先手动解压一份完整发布包。
+- 便携版由用户确认后下载 ZIP，验证 Ed25519 发布者签名和 ZIP 的 SHA-256，保留 `Data` 目录并重新启动。缺少更新助手的旧便携版需要先手动解压一份完整发布包。
 
 更新检查直接读取 GitHub Releases 的最新稳定标签，不调用 GitHub API；五分钟内重复检查使用本地内存缓存。该功能可以在设置页关闭，GitHub 暂时不可访问不会影响下载、登录和封装功能。
 
@@ -118,6 +118,18 @@ aria2 使用默认 CDN 时会并行使用多个镜像，并按镜像数放大分
 ```powershell
 .\scripts\Build-Release.ps1 -Version 1.1.1.17
 ```
+
+产物默认写入 `artifacts/release/v<版本>`，不同版本各自使用独立目录。
+
+### 签署便携版
+
+标签构建会生成 GitHub Release 草稿。将草稿中的便携 ZIP 及其 `.sha256` 下载到同一目录，然后在持有项目私钥的机器上用 OpenSSL 签名：
+
+```powershell
+.\scripts\Sign-PortableRelease.ps1 -Package '<便携 ZIP 路径>' -PrivateKey '<项目 Ed25519 私钥路径>'
+```
+
+把生成的 `.zip.sha256.sig` 添加到同一个 Release 草稿，核对附件后再发布。私钥由发布者在本机保管。
 
 BBDown 与 aria2 由脚本从官方 Release 下载。固定 FFmpeg 历史归档可通过 `-FfmpegArchiveUrl`、环境变量 `FFMPEG_ARCHIVE_URL` 或本地归档提供，所有工具下载均校验 SHA-256。
 

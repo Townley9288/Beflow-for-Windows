@@ -67,22 +67,8 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\Beflow.exe"; Tasks: desktop
 
 [Run]
 Filename: "{app}\Beflow.exe"; Description: "启动 Beflow"; Flags: nowait postinstall skipifsilent
-Filename: "{app}\Beflow.exe"; Flags: nowait skipifnotsilent runasoriginaluser; Check: RestartWasRequested
 
 [Code]
-function RestartWasRequested: Boolean;
-var
-  Index: Integer;
-begin
-  Result := False;
-  for Index := 1 to ParamCount do
-    if CompareText(ParamStr(Index), '/RESTARTAPP') = 0 then
-    begin
-      Result := True;
-      Exit;
-    end;
-end;
-
 function IsRetainedMuiLanguage(const DirectoryName: String): Boolean;
 var
   NormalizedName: String;
