@@ -4,6 +4,8 @@ namespace BBDownForWindows.Core;
 
 public static partial class BBDownParser
 {
+    internal static string ParseTitle(string line) => TitleRegex().Match(line).Groups[1].Value.Trim();
+
     public static VideoInfo ParseInfo(string output)
     {
         var info = new VideoInfo { RawOutput = output };

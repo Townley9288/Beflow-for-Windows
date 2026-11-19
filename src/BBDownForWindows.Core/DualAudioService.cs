@@ -87,7 +87,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("请先设置输出目录");
         root = Path.GetFullPath(root);
         Directory.CreateDirectory(root);
-        var title = string.IsNullOrWhiteSpace(request.SourceATitle) ? await bbdown.GetTitleAsync(request.SourceAUrl, cancellationToken) : request.SourceATitle;
+        var title = string.IsNullOrWhiteSpace(request.SourceATitle) ? await bbdown.GetTitleAsync(request.SourceAUrl, context, cancellationToken) : request.SourceATitle;
         var taskDirectory = CreateUniqueTaskDirectory(root, title);
         var sourceADirectory = Directory.CreateDirectory(Path.Combine(taskDirectory, "来源A")).FullName;
         var sourceBDirectory = Directory.CreateDirectory(Path.Combine(taskDirectory, "来源B")).FullName;
@@ -184,8 +184,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
                     tools.Mkvmerge,
                     BuildMkvmergeArguments(fullFile, otherAudioFile, output, request, mainSource, pairResult.SourceBDelayMs),
                     paths.RuntimeDirectory), context.AppendLog, cancellationToken);
-                if (mux.Cancelled || cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
-                if (mux.ExitCode != 0 || !File.Exists(output)) throw new InvalidOperationException("mkvmerge 封装失败");
+                MkvmergeResult.EnsureOutput(mux, output, context, cancellationToken);
                 pairResult.OutputFile = output;
                 pairResult.State = DualAudioPairState.Completed;
                 result.OutputFiles.Add(output);
@@ -593,8 +592,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
             var delay = legacyOverrides.OverrideManifestDelay ? legacyOverrides.SecondaryAudioDelayMs : pair.SourceBDelayMs;
             var result = await processRunner.RunAsync(new ProcessRunRequest(mkvmerge,
                 BuildMkvmergeArguments(full, audio, target, batch, pair.MainVideoSource, delay), paths.RuntimeDirectory), context.AppendLog, cancellationToken);
-            if (result.Cancelled || cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
-            if (result.ExitCode != 0 || !File.Exists(target)) throw new InvalidOperationException($"重新封装失败：第 {pair.PairNumber} 对");
+            MkvmergeResult.EnsureOutput(result, target, context, cancellationToken);
         }
     }
 
@@ -608,8 +606,7 @@ public sealed class DualAudioService(ApplicationPaths paths, IBBDownService bbdo
         {
             var output = UniqueOutputPath(outputDirectory, Path.GetFileNameWithoutExtension(pair.Primary), reserved);
             var result = await processRunner.RunAsync(new ProcessRunRequest(mkvmerge, BuildMkvmergeArguments(pair.Primary, pair.Secondary, output, request), paths.RuntimeDirectory), context.AppendLog, cancellationToken);
-            if (result.Cancelled || cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
-            if (result.ExitCode != 0 || !File.Exists(output)) throw new InvalidOperationException($"封装失败: {Path.GetFileName(pair.Primary)}");
+            MkvmergeResult.EnsureOutput(result, output, context, cancellationToken);
         }
     }
 

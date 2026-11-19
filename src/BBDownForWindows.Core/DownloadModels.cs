@@ -160,28 +160,6 @@ public sealed class DownloadEpisodeResult
     };
 }
 
-public sealed class DownloadBatchResult
-{
-    public string Title { get; init; } = string.Empty;
-    public string OutputDirectory { get; init; } = string.Empty;
-    public List<DownloadEpisodeResult> Episodes { get; init; } = [];
-    public List<string> OutputFiles { get; init; } = [];
-    public string RenameDirectory { get; init; } = string.Empty;
-    [JsonIgnore] public bool HasVideo => OutputFiles.Any(DownloadFileKinds.IsVideoFile);
-}
-
-public sealed record DownloadProgressSnapshot(
-    DownloadProgressPhase Phase,
-    int CompletedEpisodes,
-    int TotalEpisodes,
-    int CurrentPage,
-    string CurrentTitle,
-    double OverallPercent,
-    double? CurrentPercent,
-    string Speed,
-    string Eta,
-    string Message);
-
 public sealed class ExactDownloadRequest
 {
     public required DownloadRequest Options { get; init; }

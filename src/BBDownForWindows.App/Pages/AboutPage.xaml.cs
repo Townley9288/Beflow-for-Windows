@@ -56,18 +56,19 @@ public sealed partial class AboutPage : Page
     {
         var release = _updates?.AvailableRelease;
         if (release is null) return;
-        var dialog = new ContentDialog
+        if (((App)Application.Current).Services.Paths.Portable)
         {
-            XamlRoot = XamlRoot,
-            Title = $"更新到 v{Core.UpdateService.FormatVersion(release.Version)}？",
-            Content = ((App)Application.Current).Services.Paths.Portable
-                ? "将下载完整便携包。主程序退出后，更新助手会替换程序文件并保留 Data 目录。"
-                : "将下载完整安装包并启动覆盖安装。配置、历史和登录数据会保留。",
-            PrimaryButtonText = "下载并更新",
-            CloseButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary
-        };
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = $"更新到 v{Core.UpdateService.FormatVersion(release.Version)}？",
+                Content = "更新助手会在 Beflow 退出后替换程序文件、保留 Data 目录并重新启动。",
+                PrimaryButtonText = "下载并更新",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Close
+            };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        }
         try { await _updates!.ApplyAvailableAsync(); }
         catch (Exception exception) { await ShowDialogAsync("更新失败", exception.Message); }
     }
@@ -79,6 +80,7 @@ public sealed partial class AboutPage : Page
         if (_updates is null) return;
         UpdateStatusText.Text = _updates.StatusText;
         CheckUpdateButton.IsEnabled = !_updates.IsBusy;
+        ApplyUpdateButton.Content = ((App)Application.Current).Services.Paths.Portable ? "下载并更新" : "打开 GitHub 发布页";
         ApplyUpdateButton.IsEnabled = !_updates.IsBusy;
         ApplyUpdateButton.Visibility = _updates.HasUpdate ? Visibility.Visible : Visibility.Collapsed;
         UpdateProgress.Visibility = _updates.IsBusy && _updates.Progress > 0 ? Visibility.Visible : Visibility.Collapsed;

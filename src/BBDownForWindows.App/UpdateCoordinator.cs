@@ -70,38 +70,34 @@ public sealed class UpdateCoordinator
 
     public async Task ApplyAvailableAsync(CancellationToken cancellationToken = default)
     {
-        if (AvailableRelease is null) throw new InvalidOperationException("当前没有可安装的新版本。");
+        var release = AvailableRelease ?? throw new InvalidOperationException("当前没有可安装的新版本。");
+        if (IsBusy) return;
+        if (!_services.Paths.Portable)
+        {
+            using var browser = Process.Start(new ProcessStartInfo(release.ReleasePage.AbsoluteUri) { UseShellExecute = true });
+            return;
+        }
         if (_services.Work.HasRunningOperations)
             throw new InvalidOperationException("当前有任务正在运行，请等待任务完成或取消后再更新。");
-        if (IsBusy) return;
+        var sourceUpdater = Path.Combine(_services.Paths.ApplicationDirectory, "Beflow.Updater.exe");
+        if (!File.Exists(sourceUpdater))
+            throw new FileNotFoundException("便携版缺少 Beflow.Updater.exe，请通过发布页下载完整便携包。", sourceUpdater);
+        EnsurePortableDirectoryWritable();
 
         IsBusy = true;
         Progress = 0;
-        var release = AvailableRelease;
-        var asset = _services.Paths.Portable ? release.Portable : release.Installer;
+        var asset = release.Portable;
         var updateDirectory = Path.Combine(Path.GetTempPath(), "Beflow", "Updates", release.TagName + "-" + Guid.NewGuid().ToString("N"));
         try
         {
-            if (_services.Paths.Portable)
-            {
-                try { EnsurePortableDirectoryWritable(); }
-                catch
-                {
-                    Process.Start(new ProcessStartInfo { FileName = release.ReleasePage.ToString(), UseShellExecute = true });
-                    throw;
-                }
-            }
             StatusText = $"正在下载 {asset.FileName}…";
             var progress = new Progress<double>(value => Progress = value);
             var package = await _services.Updates.DownloadAndVerifyAsync(asset, updateDirectory, progress, cancellationToken);
             if (_services.Work.HasRunningOperations) throw new InvalidOperationException("有任务正在运行，请暂停队列并等待操作结束后安装。");
             using var exclusive = _services.Work.EnterForeground(TaskKind.RenameExecute);
-            await _services.DownloadQueue.ShutdownAsync();
+            await _services.DownloadQueue.PauseAsync();
             StatusText = "更新包校验通过，正在启动更新…";
-            if (_services.Paths.Portable)
-                StartPortableUpdater(package, updateDirectory);
-            else
-                StartInstaller(package);
+            StartPortableUpdater(sourceUpdater, package, updateDirectory);
             ((App)Microsoft.UI.Xaml.Application.Current).MainWindow.RequestUpdateShutdown();
         }
         catch
@@ -111,24 +107,12 @@ public sealed class UpdateCoordinator
         }
     }
 
-    private void StartInstaller(string package)
+    private void StartPortableUpdater(string sourceUpdater, string package, string updateDirectory)
     {
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = package,
-            UseShellExecute = true,
-            Arguments = "/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
-        });
-    }
-
-    private void StartPortableUpdater(string package, string updateDirectory)
-    {
-        var sourceUpdater = Path.Combine(_services.Paths.ApplicationDirectory, "Beflow.Updater.exe");
-        if (!File.Exists(sourceUpdater)) throw new FileNotFoundException("便携版缺少 Beflow.Updater.exe，无法自动替换文件。", sourceUpdater);
         var temporaryUpdater = Path.Combine(updateDirectory, "Beflow.Updater.exe");
         File.Copy(sourceUpdater, temporaryUpdater, true);
         var log = Path.Combine(_services.Paths.LogsDirectory, $"update-{DateTime.Now:yyyyMMdd-HHmmss}.log");
-        var startInfo = new ProcessStartInfo { FileName = temporaryUpdater, UseShellExecute = false, WorkingDirectory = updateDirectory };
+        var startInfo = new ProcessStartInfo { FileName = temporaryUpdater, UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = updateDirectory };
         startInfo.ArgumentList.Add("--wait-pid");
         startInfo.ArgumentList.Add(Environment.ProcessId.ToString());
         startInfo.ArgumentList.Add("--package");
@@ -139,7 +123,7 @@ public sealed class UpdateCoordinator
         startInfo.ArgumentList.Add(Path.Combine(_services.Paths.ApplicationDirectory, "Beflow.exe"));
         startInfo.ArgumentList.Add("--log");
         startInfo.ArgumentList.Add(log);
-        Process.Start(startInfo);
+        using var updater = Process.Start(startInfo) ?? throw new InvalidOperationException("无法启动便携版更新助手。");
     }
 
     private void EnsurePortableDirectoryWritable()

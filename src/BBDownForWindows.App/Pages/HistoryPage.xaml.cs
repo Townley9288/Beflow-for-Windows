@@ -25,12 +25,15 @@ public sealed partial class HistoryPage : Page
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
-        ViewModel.Activate();
-        RenameViewModel.Activate();
-        if (e.Parameter is HistoryNavigationContext context)
-            HistoryTabs.SelectedIndex = context.Section == HistorySection.Renames ? 1 : 0;
-        await Task.WhenAll(ViewModel.LoadAsync(), RenameViewModel.LoadHistoryAsync());
         base.OnNavigatedTo(e);
+        await App.RunUiAsync(async () =>
+        {
+            ViewModel.Activate();
+            RenameViewModel.Activate();
+            if (e.Parameter is HistoryNavigationContext context)
+                HistoryTabs.SelectedIndex = context.Section == HistorySection.Renames ? 1 : 0;
+            await Task.WhenAll(ViewModel.LoadAsync(), RenameViewModel.LoadHistoryAsync());
+        });
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -51,13 +54,13 @@ public sealed partial class HistoryPage : Page
             ((App)Application.Current).MainWindow.Navigate("history-detail", ViewModel.SelectedRecord);
     }
 
-    private async void ViewLog_Click(object sender, RoutedEventArgs e)
+    private async void ViewLog_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (ViewModel.SelectedRecord is null) return;
         await TaskLogDialog.ShowAsync(XamlRoot, ViewModel.SelectedRecord.LogPath);
-    }
+    });
 
-    private async void Clear_Click(object sender, RoutedEventArgs e)
+    private async void Clear_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var dialog = new ContentDialog
         {
@@ -69,15 +72,15 @@ public sealed partial class HistoryPage : Page
             XamlRoot = XamlRoot
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await ViewModel.ClearCommand.ExecuteAsync(null);
-    }
+    });
 
     private void BackToRename_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("rename");
     private void RenameMessage_Closed(InfoBar sender, InfoBarClosedEventArgs args) => RenameViewModel.DismissMessage();
-    private async void RenameRefresh_Click(object sender, RoutedEventArgs e) => await RenameViewModel.LoadHistoryAsync();
+    private async void RenameRefresh_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { await RenameViewModel.LoadHistoryAsync(); });
     private void RenameHistoryPrevious_Click(object sender, RoutedEventArgs e) => RenameViewModel.PreviousHistoryPage();
     private void RenameHistoryNext_Click(object sender, RoutedEventArgs e) => RenameViewModel.NextHistoryPage();
 
-    private async void RenameHistoryDetail_Click(object sender, RoutedEventArgs e)
+    private async void RenameHistoryDetail_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var record = RenameViewModel.SelectedHistory;
         if (record is null) return;
@@ -96,9 +99,9 @@ public sealed partial class HistoryPage : Page
         };
         dialog.Resources["ContentDialogMaxWidth"] = 960d;
         await dialog.ShowAsync();
-    }
+    });
 
-    private async void RenameUndoHistory_Click(object sender, RoutedEventArgs e)
+    private async void RenameUndoHistory_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (RenameViewModel.SelectedHistory is null) return;
         var dialog = new ContentDialog
@@ -111,9 +114,9 @@ public sealed partial class HistoryPage : Page
             DefaultButton = ContentDialogButton.Close
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await RenameViewModel.UndoSelectedHistoryAsync();
-    }
+    });
 
-    private async void RenameDeleteHistory_Click(object sender, RoutedEventArgs e)
+    private async void RenameDeleteHistory_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (RenameViewModel.SelectedHistory is null) return;
         var dialog = new ContentDialog
@@ -126,9 +129,9 @@ public sealed partial class HistoryPage : Page
             DefaultButton = ContentDialogButton.Close
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await RenameViewModel.DeleteSelectedHistoryAsync();
-    }
+    });
 
-    private async void RenameClearHistory_Click(object sender, RoutedEventArgs e)
+    private async void RenameClearHistory_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var dialog = new ContentDialog
         {
@@ -140,5 +143,5 @@ public sealed partial class HistoryPage : Page
             DefaultButton = ContentDialogButton.Close
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await RenameViewModel.ClearHistoryAsync();
-    }
+    });
 }

@@ -21,6 +21,7 @@ public sealed class QueuedMediaDownloader(ApplicationPaths paths, IProcessRunner
         if (string.IsNullOrWhiteSpace(checkpoint.Directory)) throw new InvalidOperationException("队列下载工作目录未保存");
         Directory.CreateDirectory(checkpoint.Directory);
         var tools = locator.Locate(new AppSettings { Aria2cPath = options.Aria2cPath });
+        BBDownCommandBuilder.EnsureDownloadTools(options, tools);
         var executable = runtime.PrepareExecutable(tools.BBDown);
         var outputStem = Path.Combine(checkpoint.Directory, "output");
         if (checkpoint.OutputStem.Length > 0 && checkpoint.OutputStem != outputStem) throw new InvalidDataException("队列临时输出路径已变化");

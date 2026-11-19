@@ -6,6 +6,24 @@ namespace BBDownForWindows.Tests;
 
 public sealed class DualAudioTests
 {
+    [Fact]
+    public void MkvmergeWarningRequiresOutputAndIsLogged()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var log = new List<string>();
+            var context = new TaskExecutionContext(log.Add);
+            MkvmergeResult.EnsureOutput(new ProcessResult(1, "warning", false), path, context, CancellationToken.None);
+            Assert.Contains("警告", Assert.Single(log));
+            Assert.Throws<IOException>(() =>
+                MkvmergeResult.EnsureOutput(new ProcessResult(2, "", false), path, context, CancellationToken.None));
+            Assert.Throws<IOException>(() =>
+                MkvmergeResult.EnsureOutput(new ProcessResult(1, "", false), path + ".missing", context, CancellationToken.None));
+        }
+        finally { File.Delete(path); }
+    }
+
     [Theory]
     [InlineData(DualAudioSource.A)]
     [InlineData(DualAudioSource.B)]
@@ -543,13 +561,10 @@ public sealed class DualAudioTests
             finally { Interlocked.Decrement(ref _active); }
         }
 
-        public Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DownloadEpisodeInfo> ParseEpisodeAsync(string url, int page, string apiMode, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ExactDownloadResult> DownloadExactAsync(ExactDownloadRequest request, IProgress<ExactDownloadProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<string> GetTitleAsync(string url, CancellationToken cancellationToken) => Task.FromResult(url);
+        public Task<string> GetTitleAsync(string url, TaskExecutionContext context, CancellationToken cancellationToken) => Task.FromResult(url);
     }
 
     private sealed class OneCancelledParseService : IBBDownService
@@ -561,13 +576,10 @@ public sealed class DualAudioTests
             return Task.FromResult(new DownloadCatalog { SourceUrl = request.Url, Title = request.Url, Episodes = [episode] });
         }
 
-        public Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DownloadEpisodeInfo> ParseEpisodeAsync(string url, int page, string apiMode, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ExactDownloadResult> DownloadExactAsync(ExactDownloadRequest request, IProgress<ExactDownloadProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<string> GetTitleAsync(string url, CancellationToken cancellationToken) => Task.FromResult(url);
+        public Task<string> GetTitleAsync(string url, TaskExecutionContext context, CancellationToken cancellationToken) => Task.FromResult(url);
     }
 
     private sealed class NoopRunner : IProcessRunner
@@ -623,11 +635,8 @@ public sealed class DualAudioTests
             });
         }
 
-        public Task<string> GetTitleAsync(string url, CancellationToken cancellationToken) => Task.FromResult("测试双音轨");
-        public Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<string> GetTitleAsync(string url, TaskExecutionContext context, CancellationToken cancellationToken) => Task.FromResult("测试双音轨");
         public Task<DownloadCatalog> ParseDownloadAsync(DownloadParseRequest request, IProgress<DownloadParseProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 

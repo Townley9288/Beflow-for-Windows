@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace BBDownForWindows.Core;
 
 public sealed class TaskExecutionContext
@@ -49,7 +51,7 @@ public sealed class TaskManager : ITaskManager
 
     public async Task<TaskSnapshot> RunExclusiveAsync(TaskKind kind, bool persistLog, string logLabel, Func<TaskExecutionContext, CancellationToken, Task> operation, CancellationToken cancellationToken = default)
     {
-        if (!await _exclusive.WaitAsync(0, cancellationToken))
+        if (!await _exclusive.WaitAsync(0))
             throw new InvalidOperationException("已有任务正在运行，请先等待完成或取消当前任务。");
 
         var snapshot = new TaskSnapshot { Kind = kind, State = TaskState.Running, StartedAt = DateTimeOffset.Now };
@@ -83,13 +85,13 @@ public sealed class TaskManager : ITaskManager
                 }
             });
 
+            linked.Token.ThrowIfCancellationRequested();
             await operation(context, linked.Token);
             snapshot.State = linked.IsCancellationRequested ? TaskState.Cancelled : TaskState.Completed;
         }
         catch (OperationCanceledException)
         {
             snapshot.State = TaskState.Cancelled;
-            LogAppended?.Invoke(this, "\n任务已取消\n");
         }
         catch (Exception exception)
         {
@@ -101,22 +103,35 @@ public sealed class TaskManager : ITaskManager
         }
         finally
         {
-            snapshot.FinishedAt = DateTimeOffset.Now;
-            writer?.Dispose();
-            linked.Dispose();
-            lock (_sync) _activeCancellation = null;
-            RaiseTaskChanged(snapshot);
-            _exclusive.Release();
-            CleanupOldLogs();
+            try
+            {
+                if (snapshot.State == TaskState.Cancelled)
+                {
+                    const string message = "\n任务已取消\n";
+                    if (writer is not null) await writer.WriteAsync(message);
+                    LogAppended?.Invoke(this, message);
+                }
+            }
+            finally
+            {
+                snapshot.FinishedAt = DateTimeOffset.Now;
+                lock (_sync)
+                {
+                    _activeCancellation = null;
+                    linked.Dispose();
+                }
+                try { writer?.Dispose(); }
+                finally { _exclusive.Release(); }
+                RaiseTaskChanged(snapshot);
+                CleanupOldLogs();
+            }
         }
         return snapshot;
     }
 
     public async Task CancelActiveAsync()
     {
-        CancellationTokenSource? cancellation;
-        lock (_sync) cancellation = _activeCancellation;
-        cancellation?.Cancel();
+        lock (_sync) _activeCancellation?.Cancel();
         await _processRunner.TerminateAllAsync();
     }
 
@@ -169,11 +184,45 @@ public sealed class TaskManager : ITaskManager
     {
         if (!Directory.Exists(_paths.LogsDirectory)) return;
         var cutoff = DateTime.Now.AddDays(-RetentionDays);
-        var files = new DirectoryInfo(_paths.LogsDirectory).EnumerateFiles("*.log").OrderByDescending(file => file.LastWriteTime).ToList();
-        foreach (var file in files.Where(file => file.LastWriteTime < cutoff).Concat(files.Skip(MaximumLogFiles)).Distinct())
+        try
         {
-            try { file.Delete(); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            var files = new DirectoryInfo(_paths.LogsDirectory).EnumerateFiles("*.log").Where(file => !file.Name.StartsWith("app-", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(file => file.LastWriteTime).ToList();
+            var expired = files.Where(file => file.LastWriteTime < cutoff).Concat(files.Skip(MaximumLogFiles)).Distinct().ToList();
+            if (expired.Count == 0) return;
+
+            var options = SettingsStore.CreateOptions();
+            var history = ReadRecords<List<HistoryRecord>>(_paths.HistoryFile, options);
+            var queue = ReadRecords<DownloadQueueDocument>(_paths.DownloadQueueFile, options);
+            if (history?.Any(record => record is null) == true
+                || queue is not null && (queue.Items is null || queue.Items.Any(item => item?.LogPaths is null)))
+                return;
+            var referenced = (history ?? []).Select(record => record.LogPath)
+                .Concat((queue?.Items ?? []).SelectMany(item => item.LogPaths))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFileName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in expired.Where(file => !referenced.Contains(file.Name)))
+            {
+                try { file.Delete(); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
         }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        {
+            // Keep logs whenever their reference files could not be read.
+        }
+    }
+
+    private static T? ReadRecords<T>(string path, JsonSerializerOptions options) where T : class
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return JsonSerializer.Deserialize<T>(stream, options) ?? throw new JsonException("日志引用文件为空");
+        }
+        catch (FileNotFoundException) { return null; }
     }
 
     private void RaiseTaskChanged(TaskSnapshot snapshot) => TaskChanged?.Invoke(this, snapshot);

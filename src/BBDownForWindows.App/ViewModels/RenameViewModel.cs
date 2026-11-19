@@ -765,7 +765,7 @@ public sealed class RenameViewModel : ObservableObject
     {
         if (!_active) return;
         if (_dispatcher is null) _ = LoadHistoryAsync();
-        else _dispatcher.TryEnqueue(async () => await LoadHistoryAsync());
+        else _dispatcher.TryEnqueue(async () => await App.RunUiAsync(LoadHistoryAsync));
     }
 
     private static bool ContainsChinese(string value) => value.Any(character => character is >= '\u4e00' and <= '\u9fff');

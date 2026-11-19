@@ -5,6 +5,17 @@ namespace BBDownForWindows.Tests;
 
 public sealed class CommandBuilderTests
 {
+    [Fact]
+    public void RejectsOptionsBeforeBuildingVideoArguments()
+    {
+        var request = new DownloadRequest { Url = "  --help" };
+        Assert.Throws<ArgumentException>(() => BBDownCommandBuilder.BuildInfoArguments(request, new ToolPaths()));
+        Assert.Throws<ArgumentException>(() => BBDownCommandBuilder.BuildExactDownloadArguments(request, new ToolPaths()));
+        Assert.False(BilibiliInputParser.TryExtractVideo("--help BW123 av170001", out _));
+        Assert.True(BilibiliInputParser.TryExtractVideo("分享：av170001", out var normalized));
+        Assert.Equal("av170001", normalized);
+    }
+
     [Theory]
     [InlineData(0, false)]
     [InlineData(17, false)]
@@ -12,7 +23,7 @@ public sealed class CommandBuilderTests
     [InlineData(17, true)]
     public void InvalidAriaConnectionCountIsRejectedWithoutClamping(int connections, bool autoTune)
     {
-        var request = new DownloadRequest { Url = "BV1", UseAria2c = true, Aria2MaxConnection = connections, Aria2AutoTune = autoTune };
+        var request = new DownloadRequest { Url = "BV1xx411c7mD", UseAria2c = true, Aria2MaxConnection = connections, Aria2AutoTune = autoTune };
 
         Assert.Contains("1–16", Assert.Throws<InvalidOperationException>(() => Aria2TuningPolicy.Apply(request, 200L * 1024 * 1024)).Message);
         Assert.Throws<InvalidOperationException>(() => BBDownCommandBuilder.BuildDownloadArguments(request, new ToolPaths()));
@@ -25,7 +36,7 @@ public sealed class CommandBuilderTests
     [InlineData(16)]
     public void AriaConnectionCountAcceptsBothSupportedBoundaries(int connections)
     {
-        var request = new DownloadRequest { Url = "BV1", UseAria2c = true, Aria2AutoTune = false, Aria2MaxConnection = connections };
+        var request = new DownloadRequest { Url = "BV1xx411c7mD", UseAria2c = true, Aria2AutoTune = false, Aria2MaxConnection = connections };
         Aria2TuningPolicy.Apply(request, 0);
         var args = BBDownCommandBuilder.BuildExactDownloadArguments(request, new ToolPaths());
         Assert.Contains($"-x{connections} ", args[args.IndexOf("--aria2c-args") + 1]);
@@ -34,14 +45,14 @@ public sealed class CommandBuilderTests
     [Fact]
     public void DisabledAriaDoesNotValidateUnusedConnectionSettings()
     {
-        var request = new DownloadRequest { Url = "BV1", UseAria2c = false, Aria2MaxConnection = 32 };
+        var request = new DownloadRequest { Url = "BV1xx411c7mD", UseAria2c = false, Aria2MaxConnection = 32 };
         Assert.DoesNotContain("--use-aria2c", BBDownCommandBuilder.BuildDownloadArguments(request, new ToolPaths()));
     }
 
     [Fact]
     public void UsesQualityNamesAndSkipFlags()
     {
-        var arguments = BBDownCommandBuilder.BuildDownloadArguments(new DownloadRequest { Url = "BV1", Quality = "4K", Subtitle = false, Cover = false }, new ToolPaths());
+        var arguments = BBDownCommandBuilder.BuildDownloadArguments(new DownloadRequest { Url = "BV1xx411c7mD", Quality = "4K", Subtitle = false, Cover = false }, new ToolPaths());
         Assert.Contains("4K 超清", arguments);
         Assert.Contains("--skip-subtitle", arguments);
         Assert.Contains("--skip-cover", arguments);
@@ -60,7 +71,7 @@ public sealed class CommandBuilderTests
     [InlineData("480P 标清", "480P 清晰")]
     public void MapsCurrentBilibiliQualityNamesToBBDownArguments(string quality, string expectedArgument)
     {
-        var arguments = BBDownCommandBuilder.BuildDownloadArguments(new DownloadRequest { Url = "BV1", Quality = quality }, new ToolPaths());
+        var arguments = BBDownCommandBuilder.BuildDownloadArguments(new DownloadRequest { Url = "BV1xx411c7mD", Quality = quality }, new ToolPaths());
 
         var qualityIndex = arguments.IndexOf("-q");
         Assert.True(qualityIndex >= 0);
@@ -72,7 +83,7 @@ public sealed class CommandBuilderTests
     {
         var request = new DownloadRequest
         {
-            Url = "BV1", AudioBitratePriority = AudioBitratePriority.Lowest, UseAria2c = true,
+            Url = "BV1xx411c7mD", AudioBitratePriority = AudioBitratePriority.Lowest, UseAria2c = true,
             Aria2MaxConnection = 8, Aria2Split = 12, Aria2MaxConcurrentDownloads = 4, Aria2MinSplitSize = 10
         };
         var arguments = BBDownCommandBuilder.BuildDownloadArguments(request, new ToolPaths { Aria2c = @"C:\aria2c.exe" });
@@ -91,7 +102,7 @@ public sealed class CommandBuilderTests
     {
         var request = new DownloadRequest
         {
-            Url = "BV1", UseAria2c = true, Aria2AutoTune = true,
+            Url = "BV1xx411c7mD", UseAria2c = true, Aria2AutoTune = true,
             Aria2MaxConnection = 16, Aria2Split = 16, Aria2MaxConcurrentDownloads = 16, Aria2MinSplitSize = 5
         };
 
@@ -109,7 +120,7 @@ public sealed class CommandBuilderTests
     {
         var request = new DownloadRequest
         {
-            Url = "BV1", Aria2AutoTune = true,
+            Url = "BV1xx411c7mD", Aria2AutoTune = true,
             Aria2MaxConnection = 2, Aria2Split = 3, Aria2MaxConcurrentDownloads = 2
         };
 
@@ -125,7 +136,7 @@ public sealed class CommandBuilderTests
     {
         var request = new DownloadRequest
         {
-            Url = "BV1", UseAria2c = true, Aria2AutoTune = false,
+            Url = "BV1xx411c7mD", UseAria2c = true, Aria2AutoTune = false,
             Aria2MaxConnection = 12, Aria2Split = 10, Aria2MaxConcurrentDownloads = 6, Aria2MinSplitSize = 8
         };
 
@@ -144,7 +155,7 @@ public sealed class CommandBuilderTests
     [InlineData(true, true)]
     public void MediaDownloadsDisableAllAriaProxiesRegardlessOfSelectionOrTuning(bool exact, bool autoTune)
     {
-        var request = new DownloadRequest { Url = "BV1", UseAria2c = true, Aria2AutoTune = autoTune };
+        var request = new DownloadRequest { Url = "BV1xx411c7mD", UseAria2c = true, Aria2AutoTune = autoTune };
         var arguments = exact
             ? BBDownCommandBuilder.BuildExactDownloadArguments(request, new ToolPaths())
             : BBDownCommandBuilder.BuildDownloadArguments(request, new ToolPaths());

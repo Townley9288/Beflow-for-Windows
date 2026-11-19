@@ -35,8 +35,11 @@ public sealed partial class RenamePage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        ViewModel.Activate();
-        await ViewModel.InitializeAsync(e.Parameter as RenameNavigationContext);
+        await App.RunUiAsync(async () =>
+        {
+            ViewModel.Activate();
+            await ViewModel.InitializeAsync(e.Parameter as RenameNavigationContext);
+        });
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -45,16 +48,16 @@ public sealed partial class RenamePage : Page
         base.OnNavigatedFrom(e);
     }
 
-    private async void BrowseFolder_Click(object sender, RoutedEventArgs e)
+    private async void BrowseFolder_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var folder = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow);
         if (!string.IsNullOrWhiteSpace(folder)) await ViewModel.LoadDirectoryAsync(folder);
-    }
+    });
 
-    private async void ReloadFolder_Click(object sender, RoutedEventArgs e)
+    private async void ReloadFolder_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (!string.IsNullOrWhiteSpace(ViewModel.DirectoryPath)) await ViewModel.LoadDirectoryAsync(ViewModel.DirectoryPath);
-    }
+    });
 
     private void NumericTextBox_LostFocus(object sender, RoutedEventArgs e) => ViewModel.NormalizeNumericInputs();
 
@@ -81,7 +84,7 @@ public sealed partial class RenamePage : Page
         return false;
     }
 
-    private async void SearchTmdb_Click(object sender, RoutedEventArgs e)
+    private async void SearchTmdb_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (_isTmdbSearchInProgress) return;
 
@@ -126,12 +129,12 @@ public sealed partial class RenamePage : Page
             SearchTmdbButton.IsEnabled = true;
             _isTmdbSearchInProgress = false;
         }
-    }
+    });
 
-    private async void Preview_Click(object sender, RoutedEventArgs e) => await ViewModel.PreviewAsync();
+    private async void Preview_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { await ViewModel.PreviewAsync(); });
     private void RenameMessage_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
 
-    private async void Execute_Click(object sender, RoutedEventArgs e)
+    private async void Execute_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var dialog = new ContentDialog
         {
@@ -143,7 +146,7 @@ public sealed partial class RenamePage : Page
             DefaultButton = ContentDialogButton.Close
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await ViewModel.ExecuteAsync();
-    }
+    });
 
     private void ManageTemplates_Click(object sender, RoutedEventArgs e) =>
         ((App)Application.Current).MainWindow.Navigate("rename-templates", new RenameTemplatesNavigationContext(ViewModel.MediaType, ViewModel.SelectedTemplate?.Id));
@@ -151,11 +154,11 @@ public sealed partial class RenamePage : Page
     private void RenameHistory_Click(object sender, RoutedEventArgs e) =>
         ((App)Application.Current).MainWindow.Navigate("history", new HistoryNavigationContext(HistorySection.Renames));
 
-    private async void UndoLatest_Click(object sender, RoutedEventArgs e)
+    private async void UndoLatest_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         ViewModel.SelectedHistory = ViewModel.HistoryRecords.FirstOrDefault(record => record.UndoneAt is null);
         if (ViewModel.SelectedHistory is not null) await ConfirmUndoAsync();
-    }
+    });
 
     private async Task ConfirmUndoAsync()
     {

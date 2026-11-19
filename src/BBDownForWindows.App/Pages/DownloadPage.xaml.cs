@@ -36,22 +36,25 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
     public async Task<bool> ConfirmLeaveQueueEditAsync() =>
         await ViewModel.QueueEdit.ConfirmLeaveAsync(await ViewModel.BuildQueueItemAsync(), XamlRoot);
     private void ViewQueue_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("queue");
-    private async void CancelQueueEdit_Click(object sender, RoutedEventArgs e)
+    private async void CancelQueueEdit_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (await ConfirmLeaveQueueEditAsync()) ((App)Application.Current).MainWindow.Navigate("queue");
-    }
+    });
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
-        ViewModel.Activate();
-        await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
-        if (e.Parameter is QueueNavigationContext queue) await ViewModel.LoadQueueAsync(queue);
-        if (e.Parameter is DownloadInputNavigationContext input
-            && ViewModel.ApplyExternalInput(input.Input)
-            && input.ParseAutomatically
-            && ViewModel.StartParseCommand.CanExecute(null))
-            await ViewModel.StartParseCommand.ExecuteAsync(null);
         base.OnNavigatedTo(e);
+        await App.RunUiAsync(async () =>
+        {
+            ViewModel.Activate();
+            await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
+            if (e.Parameter is QueueNavigationContext queue) await ViewModel.LoadQueueAsync(queue);
+            if (e.Parameter is DownloadInputNavigationContext input
+                && ViewModel.ApplyExternalInput(input.Input)
+                && input.ParseAutomatically
+                && ViewModel.StartParseCommand.CanExecute(null))
+                await ViewModel.StartParseCommand.ExecuteAsync(null);
+        });
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -60,11 +63,11 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
         base.OnNavigatedFrom(e);
     }
 
-    private async void BrowseFolder_Click(object sender, RoutedEventArgs e)
+    private async void BrowseFolder_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var folder = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow);
         if (!string.IsNullOrWhiteSpace(folder)) ViewModel.WorkDirectory = folder;
-    }
+    });
 
     private void OpenDownloadFolder_Click(object sender, RoutedEventArgs e)
     {
@@ -97,7 +100,7 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
         Process.Start(startInfo);
     }
 
-    private async void ShowDownloadSettings_Click(object sender, RoutedEventArgs e)
+    private async void ShowDownloadSettings_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         _pendingNamingNavigation = null;
         DownloadSettingsDialog.XamlRoot = XamlRoot;
@@ -106,7 +109,7 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
         _pendingNamingNavigation = null;
         if (navigation is not null)
             ((App)Application.Current).MainWindow.Navigate("rename-templates", navigation);
-    }
+    });
 
     private void BilibiliInput_DragOver(object sender, DragEventArgs e)
     {
@@ -123,7 +126,7 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
         e.Handled = true;
     }
 
-    private async void BilibiliInput_Drop(object sender, DragEventArgs e)
+    private async void BilibiliInput_Drop(object sender, DragEventArgs e) => await App.RunUiAsync(async () =>
     {
         e.Handled = true;
         if (!((App)Application.Current).MainWindow.DragLinkMonitoringEnabled) return;
@@ -141,6 +144,6 @@ public sealed partial class DownloadPage : Page, IQueueEditorPage
         {
             // The drag source can disappear before asynchronous data retrieval completes.
         }
-    }
+    });
 
 }

@@ -58,7 +58,7 @@ public sealed class UpdateService : IUpdateService
         var version = ParseTagVersion(tag);
         var notes = await TryGetReleaseNotesAsync(tag, cancellationToken);
         var release = BuildRelease(tag, version, notes, releasePage);
-        return version > currentVersion
+        return NormalizeVersion(version) > NormalizeVersion(currentVersion)
             ? new UpdateCheckResult(UpdateCheckStatus.UpdateAvailable, currentVersion, release, $"发现新版本 v{FormatVersion(version)}")
             : new UpdateCheckResult(UpdateCheckStatus.UpToDate, currentVersion, release, $"当前已是最新版本 v{FormatVersion(currentVersion)}");
     }
@@ -100,7 +100,8 @@ public sealed class UpdateService : IUpdateService
     internal static UpdateRelease BuildRelease(string tag, Version version, string releaseNotes, Uri releasePage)
     {
         var versionText = FormatVersion(version);
-        var prefix = $"Beflow-for-Windows-v{versionText}-win-x64";
+        var assetVersion = tag.Trim().TrimStart('v', 'V');
+        var prefix = $"Beflow-for-Windows-v{assetVersion}-win-x64";
         var downloadRoot = $"{RepositoryRoot}/releases/download/{Uri.EscapeDataString(tag)}/";
         var installerName = prefix + "-setup.exe";
         var portableName = prefix + "-portable.zip";
@@ -174,6 +175,9 @@ public sealed class UpdateService : IUpdateService
             throw new InvalidDataException($"无法识别版本标签：{tag}");
         return version;
     }
+
+    private static Version NormalizeVersion(Version version) =>
+        new(version.Major, version.Minor, Math.Max(0, version.Build), Math.Max(0, version.Revision));
 
     public static string FormatVersion(Version version)
     {

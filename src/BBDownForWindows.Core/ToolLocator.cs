@@ -1,75 +1,60 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
+using System.Security.Cryptography;
 
 namespace BBDownForWindows.Core;
 
 public sealed class ToolLocator : IToolLocator
 {
-    private const string LegacyFolderName = "BBDown_1.6.3_20240814_win-x64";
     private readonly ApplicationPaths _paths;
-    private readonly Func<IEnumerable<string>> _fixedDriveRootProvider;
     private readonly Func<string, CancellationToken, Task<string>> _versionReader;
     private readonly ConcurrentDictionary<VersionCacheKey, Lazy<Task<string>>> _versionCache = new();
+    private (VersionCacheKey Executable, VersionCacheKey Manifest, bool Valid)? _bundledBBDown;
+    private readonly object _validationLock = new();
 
-    public ToolLocator(
-        ApplicationPaths paths,
-        Func<IEnumerable<string>>? fixedDriveRootProvider = null,
-        Func<string, CancellationToken, Task<string>>? versionReader = null)
+    public ToolLocator(ApplicationPaths paths, Func<string, CancellationToken, Task<string>>? versionReader = null)
     {
         _paths = paths;
-        _fixedDriveRootProvider = fixedDriveRootProvider ?? DiscoverFixedDriveRoots;
         _versionReader = versionReader ?? ReadVersionAsync;
     }
 
-    public ToolPaths Locate(AppSettings settings) => LocateCore(settings, includeLegacyDrives: true);
-
-    public ToolPaths LocateFast(AppSettings settings) => LocateCore(settings, includeLegacyDrives: false);
-
-    private ToolPaths LocateCore(AppSettings settings, bool includeLegacyDrives)
+    public ToolPaths Locate(AppSettings settings) => new()
     {
-        var driveRoots = includeLegacyDrives ? _fixedDriveRootProvider().ToArray() : [];
-        var legacyRoots = driveRoots.Select(root => Path.Combine(root, "Software", LegacyFolderName)).ToArray();
-        var bbDownCandidates = new List<string?>
-        {
-            Path.Combine(_paths.ToolsDirectory, "BBDown", "BBDown.exe"),
-            Path.Combine(_paths.ApplicationDirectory, "BBDown.exe")
-        };
-        if (includeLegacyDrives)
-        {
-            bbDownCandidates.AddRange(legacyRoots.Select(root => Path.Combine(root, "BBDown.exe")));
-            bbDownCandidates.Add(FindOnPath("BBDown.exe"));
-        }
+        BBDown = FindBundledBBDown(),
+        Aria2c = FindConfiguredOrBundled(settings.Aria2cPath, Path.Combine(_paths.ToolsDirectory, "aria2", "aria2c.exe")),
+        Ffmpeg = FirstExisting(Path.Combine(_paths.ToolsDirectory, "ffmpeg", "ffmpeg.exe")),
+        Ffprobe = FirstExisting(Path.Combine(_paths.ToolsDirectory, "ffmpeg", "ffprobe.exe")),
+        Mkvmerge = FindConfiguredOrBundled(settings.MkvmergePath,
+            FindInProgramFiles(Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86))
+    };
 
-        var aria2Candidates = new List<string?>
-        {
-            settings.Aria2cPath,
-            Path.Combine(_paths.ToolsDirectory, "aria2", "aria2c.exe")
-        };
-        if (includeLegacyDrives)
-        {
-            aria2Candidates.AddRange(legacyRoots.Select(root => Path.Combine(root, "tools", "aria2", "aria2-1.37.0-win-64bit-build1", "aria2c.exe")));
-            aria2Candidates.Add(FindOnPath("aria2c.exe"));
-        }
+    public ToolPaths LocateFast(AppSettings settings) => Locate(settings);
 
-        return new ToolPaths
+    private string FindBundledBBDown()
+    {
+        var path = Path.Combine(_paths.ToolsDirectory, "BBDown", "BBDown.exe");
+        var manifest = path + ".sha256";
+        if (!File.Exists(path) || !File.Exists(manifest)) return string.Empty;
+        var executableKey = VersionCacheKey.From(path);
+        var manifestKey = VersionCacheKey.From(manifest);
+        lock (_validationLock)
         {
-            BBDown = FirstExisting(bbDownCandidates.ToArray()),
-            Aria2c = FirstExisting(aria2Candidates.ToArray()),
-            Ffmpeg = FirstExisting(
-                Path.Combine(_paths.ToolsDirectory, "ffmpeg", "ffmpeg.exe"),
-                includeLegacyDrives ? FindOnPath("ffmpeg.exe") : null),
-            Ffprobe = FirstExisting(
-                Path.Combine(_paths.ToolsDirectory, "ffmpeg", "ffprobe.exe"),
-                includeLegacyDrives ? FindOnPath("ffprobe.exe") : null),
-            Mkvmerge = FindMkvmerge(settings.MkvmergePath, driveRoots)
-        };
+            if (_bundledBBDown is { } cached && cached.Executable == executableKey && cached.Manifest == manifestKey)
+                return cached.Valid ? path : string.Empty;
+
+            using var executable = File.OpenRead(path);
+            var expected = File.ReadAllText(manifest).Trim();
+            var valid = expected.Length == 64 && Convert.ToHexString(SHA256.HashData(executable))
+                .Equals(expected, StringComparison.OrdinalIgnoreCase);
+            _bundledBBDown = (executableKey, manifestKey, valid);
+            return valid ? path : string.Empty;
+        }
     }
 
     public Task<string> GetVersionAsync(string executable, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable)) return Task.FromResult("未找到");
         var file = new FileInfo(Path.GetFullPath(executable));
-        var key = new VersionCacheKey(file.FullName.ToUpperInvariant(), file.Length, file.LastWriteTimeUtc.Ticks);
+        var key = VersionCacheKey.From(file.FullName);
         var versionTask = _versionCache.GetOrAdd(key,
             _ => new Lazy<Task<string>>(
                 () => Task.Run(() => _versionReader(file.FullName, CancellationToken.None), CancellationToken.None),
@@ -79,46 +64,21 @@ public sealed class ToolLocator : IToolLocator
 
     private static async Task<string> ReadVersionAsync(string executable, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(executable)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
         var fileName = Path.GetFileName(executable);
-        startInfo.ArgumentList.Add(
-            fileName.Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase) || fileName.Equals("ffprobe.exe", StringComparison.OrdinalIgnoreCase) ? "-version"
-            : fileName.Equals("BBDown.exe", StringComparison.OrdinalIgnoreCase) ? "--help"
-            : "--version");
+        var argument = fileName.Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase) || fileName.Equals("ffprobe.exe", StringComparison.OrdinalIgnoreCase)
+            ? "-version" : fileName.Equals("BBDown.exe", StringComparison.OrdinalIgnoreCase) ? "--help" : "--version";
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
         try
         {
-            using var process = Process.Start(startInfo);
-            if (process is null) return "无法启动";
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(10));
-            var standardOutput = process.StandardOutput.ReadToEndAsync(timeout.Token);
-            var standardError = process.StandardError.ReadToEndAsync(timeout.Token);
-            try
-            {
-                await process.WaitForExitAsync(timeout.Token);
-                var output = await standardOutput;
-                var error = await standardError;
-                var lines = string.Concat(output, "\n", error)
-                    .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                return lines.FirstOrDefault(line => line.Contains("version", StringComparison.OrdinalIgnoreCase))
-                    ?? lines.FirstOrDefault()
-                    ?? fileName;
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                TryKill(process);
-                return "检测超时";
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
+            var result = await new ProcessRunner().RunAsync(
+                new ProcessRunRequest(executable, [argument], Path.GetDirectoryName(executable)!), null, timeout.Token);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (timeout.IsCancellationRequested) return "检测超时";
+            var lines = result.Output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return lines.FirstOrDefault(line => line.Contains("version", StringComparison.OrdinalIgnoreCase))
+                ?? lines.FirstOrDefault()
+                ?? fileName;
         }
         catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
         {
@@ -126,51 +86,22 @@ public sealed class ToolLocator : IToolLocator
         }
     }
 
-    private static string FindMkvmerge(string configured, IReadOnlyList<string> driveRoots)
+    private static string FindInProgramFiles(params Environment.SpecialFolder[] folders) =>
+        FirstExisting(folders.Select(Environment.GetFolderPath).Where(Path.IsPathFullyQualified)
+            .Select(directory => Path.Combine(directory, "MKVToolNix", "mkvmerge.exe")).ToArray());
+
+    private static string FindConfiguredOrBundled(string configured, string bundled) =>
+        string.IsNullOrWhiteSpace(configured) ? FirstExisting(bundled) : FirstExisting(configured);
+
+    private static string FirstExisting(params string[] candidates) =>
+        candidates.FirstOrDefault(candidate => Path.IsPathFullyQualified(candidate) && File.Exists(candidate)) ?? string.Empty;
+
+    private readonly record struct VersionCacheKey(string Path, long Length, long LastWriteTicks)
     {
-        var candidates = new List<string?>
+        public static VersionCacheKey From(string path)
         {
-            configured,
-            FindOnPath("mkvmerge.exe"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "MKVToolNix", "mkvmerge.exe"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "MKVToolNix", "mkvmerge.exe")
-        };
-        foreach (var root in driveRoots)
-            candidates.Add(Path.Combine(root, "Software", "MKVToolNix", "mkvmerge.exe"));
-        return FirstExisting(candidates.ToArray());
-    }
-
-    private static IEnumerable<string> DiscoverFixedDriveRoots() =>
-        DriveInfo.GetDrives()
-            .Where(drive => drive.DriveType == DriveType.Fixed && drive.IsReady)
-            .Select(drive => drive.RootDirectory.FullName);
-
-    private static string FirstExisting(params string?[] candidates) =>
-        candidates.FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate)) ?? string.Empty;
-
-    private static void TryKill(Process process)
-    {
-        try
-        {
-            if (!process.HasExited) process.Kill(true);
+            var file = new FileInfo(path);
+            return new(file.FullName, file.Length, file.LastWriteTimeUtc.Ticks);
         }
-        catch (InvalidOperationException) { }
-        catch (System.ComponentModel.Win32Exception) { }
     }
-
-    private static string FindOnPath(string executable)
-    {
-        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            try
-            {
-                var candidate = Path.Combine(directory.Trim('"'), executable);
-                if (File.Exists(candidate)) return candidate;
-            }
-            catch (ArgumentException) { }
-        }
-        return string.Empty;
-    }
-
-    private readonly record struct VersionCacheKey(string Path, long Length, long LastWriteTicks);
 }

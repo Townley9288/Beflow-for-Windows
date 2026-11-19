@@ -67,7 +67,7 @@ try
     var work = new WorkCoordinator();
     var limiter = new ParseConcurrencyLimiter(settings);
     var manager = new TaskManager(paths, runner, work);
-    var downloader = new BBDownService(paths, runner, tools, settings, new BilibiliMetadataService(http), new DownloadNamingService(), limiter);
+    var downloader = new BBDownService(paths, runner, tools, settings, new BilibiliMetadataService(http), limiter);
     var batches = new BilibiliSpaceBatchService(downloader);
     var rule = new StreamSelectionRule(config.VideoQualityRule, "AVC", "auto", AudioBitratePriority.Highest);
     var jobs = new List<DownloadQueueItem>();

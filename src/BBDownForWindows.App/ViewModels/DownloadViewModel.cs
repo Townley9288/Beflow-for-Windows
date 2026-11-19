@@ -436,8 +436,13 @@ public sealed class DownloadViewModel : ObservableObject
             ((App)Application.Current).MainWindow.Navigate("space", new Pages.DownloadInputNavigationContext(Url, ParseAutomatically: true));
             return;
         }
+        if (!BilibiliInputParser.TryExtractVideo(Url, out var parsedUrl))
+        {
+            SetMessage("请输入有效的哔哩哔哩视频链接或编号。", InfoBarSeverity.Warning);
+            return;
+        }
+        Url = parsedUrl;
         var parseGeneration = ++_parseGeneration;
-        var parsedUrl = Url.Trim();
         var rule = CurrentRule;
         var downloadMode = CurrentDownloadMode;
         if (reset)
@@ -692,18 +697,6 @@ public sealed class DownloadViewModel : ObservableObject
     {
         foreach (var row in Rows) row.IsSelected = _failedPages.Contains(row.PageNumber);
         await StartDownloadAsync();
-    }
-
-    private void OnDownloadProgress(DownloadProgressSnapshot update)
-    {
-        ShowProgress = true;
-        OverallProgress = Math.Max(OverallProgress, update.OverallPercent);
-        CurrentProgress = update.CurrentPercent ?? 0;
-        CurrentProgressIndeterminate = update.CurrentPercent is null && update.Phase is DownloadProgressPhase.Downloading or DownloadProgressPhase.Muxing or DownloadProgressPhase.Validating;
-        ProgressTitle = update.CurrentPage > 0 ? $"P{update.CurrentPage} {update.CurrentTitle}" : "批量下载";
-        var transfer = string.Join(" · ", new[] { update.Message, string.IsNullOrWhiteSpace(update.Speed) ? string.Empty : $"速度 {update.Speed}", string.IsNullOrWhiteSpace(update.Eta) ? string.Empty : $"剩余 {update.Eta}" }.Where(value => !string.IsNullOrWhiteSpace(value)));
-        ProgressDetail = $"已处理 {update.CompletedEpisodes}/{update.TotalEpisodes} 集{(string.IsNullOrWhiteSpace(transfer) ? string.Empty : $" · {transfer}")}";
-        if (update.CurrentPage > 0) Rows.FirstOrDefault(row => row.PageNumber == update.CurrentPage)?.SetRuntimeStatus(update.Phase, update.Message);
     }
 
     private async Task<DownloadRequest> BuildRequestAsync()

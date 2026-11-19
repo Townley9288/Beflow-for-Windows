@@ -149,9 +149,15 @@ public sealed partial class MainWindow : Window
     public bool DragLinkMonitoringEnabled => _dragLinkMonitoring;
     public void ConfigureDragLinkMonitoring(bool enabled) => _dragLinkMonitoring = enabled;
 
+    internal void ShowOperationError(string message)
+    {
+        OperationErrorBar.Message = message;
+        OperationErrorBar.IsOpen = true;
+    }
+
     public void ShowUpdateAvailable(UpdateRelease release)
     {
-        UpdateInfoBar.Message = $"v{UpdateService.FormatVersion(release.Version)} 已发布，可以在关于页查看并安装。";
+        UpdateInfoBar.Message = $"v{UpdateService.FormatVersion(release.Version)} 已发布，可以在关于页查看。";
         UpdateInfoBar.IsOpen = true;
     }
 
@@ -164,15 +170,15 @@ public sealed partial class MainWindow : Window
     private async void RootNavigation_Loaded(object sender, RoutedEventArgs e)
     {
         RootNavigation.Loaded -= RootNavigation_Loaded;
-        try { await ((App)Application.Current).Services.DownloadQueue.InitializeAsync(); }
-        catch (Exception exception)
+        var services = ((App)Application.Current).Services;
+        await App.RunUiAsync(services.DownloadQueue.InitializeAsync);
+        await App.RunUiAsync(async () =>
         {
-            await new ContentDialog { XamlRoot = WindowRoot.XamlRoot, Title = "下载队列无法读取", Content = exception.Message + "\n原队列文件已保留。", CloseButtonText = "关闭" }.ShowAsync();
-        }
-        var settings = await ((App)Application.Current).Services.Settings.LoadAsync();
-        ConfigureClipboardMonitoring(settings.MonitorClipboard);
-        ConfigureDragLinkMonitoring(settings.MonitorDragLinks);
-        await ((App)Application.Current).Services.UpdateCoordinator.CheckOnStartupAsync();
+            var settings = await services.Settings.LoadAsync();
+            ConfigureClipboardMonitoring(settings.MonitorClipboard);
+            ConfigureDragLinkMonitoring(settings.MonitorDragLinks);
+            await services.UpdateCoordinator.CheckOnStartupAsync();
+        });
     }
 
     private void UpdateInfoBar_Click(object sender, RoutedEventArgs e) => Navigate("about");
@@ -180,7 +186,7 @@ public sealed partial class MainWindow : Window
     private void Clipboard_ContentChanged(object? sender, object e)
     {
         if (!ShouldInspectClipboardChange(_clipboardMonitoring, _isWindowActive)) return;
-        DispatcherQueue.TryEnqueue(async () => await InspectClipboardAsync());
+        DispatcherQueue.TryEnqueue(async () => await App.RunUiAsync(InspectClipboardAsync));
     }
 
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args) =>
@@ -274,7 +280,7 @@ public sealed partial class MainWindow : Window
         var console = ((App)Application.Current).Services.TaskConsole;
         if (e.PropertyName != nameof(console.IsBusy) || console.IsBusy
             || !_clipboardMonitoring || string.IsNullOrWhiteSpace(_pendingClipboardInput)) return;
-        DispatcherQueue.TryEnqueue(async () => await ApplyPendingClipboardInputAsync());
+        DispatcherQueue.TryEnqueue(async () => await App.RunUiAsync(ApplyPendingClipboardInputAsync));
     }
 
     private async void ThemeMenuItem_Click(object sender, RoutedEventArgs e)

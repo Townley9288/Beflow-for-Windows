@@ -114,8 +114,7 @@ public sealed class DownloadQueueExecutor(QueuedMediaDownloader downloader, IPro
                 var result = await runner.RunAsync(new ProcessRunRequest(mkvmerge,
                     DualAudioService.BuildMkvmergeArguments(full, audio, unit.MuxPath, batch, pair.MainVideoSource, pair.SourceBDelayOverrideMs ?? batch.SourceBDelayMs),
                     state.WorkDirectory), context.AppendLog, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                if (result.ExitCode is not (0 or 1)) throw new IOException($"mkvmerge 封装失败：{result.ExitCode}");
+                MkvmergeResult.EnsureOutput(result, unit.MuxPath, context, cancellationToken);
                 unit.Files = [QueueFileStamp.Read(unit.MuxPath)]; unit.MuxCompleted = true;
                 await Save();
             }

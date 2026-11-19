@@ -20,8 +20,11 @@ public sealed partial class DownloadHistoryDetailPage : Page
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
-        if (e.Parameter is HistoryRecord record) await ViewModel.LoadAsync(record);
         base.OnNavigatedTo(e);
+        await App.RunUiAsync(async () =>
+        {
+            if (e.Parameter is HistoryRecord record) await ViewModel.LoadAsync(record);
+        });
     }
 
     private void Back_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("history");
@@ -40,9 +43,9 @@ public sealed partial class DownloadHistoryDetailPage : Page
         Process.Start(new ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
     }
 
-    private async void ViewLog_Click(object sender, RoutedEventArgs e)
+    private async void ViewLog_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (ViewModel.Record is null) return;
         await TaskLogDialog.ShowAsync(XamlRoot, ViewModel.Record.LogPath);
-    }
+    });
 }

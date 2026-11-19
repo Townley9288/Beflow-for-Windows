@@ -27,13 +27,13 @@
 - 普通下载与多音轨共用持久队列，支持等待任务编辑、排序和暂停续传
 - 跟随系统、浅色与深色主题切换，并记忆上次选择
 - 剪贴板链接自动识别与解析、下载及多音轨页面链接拖放，并提供独立开关
-- 安装版在线更新
+- 在线检查更新与便携版更新
 
 运行时不需要 Python、Node、Eel、Vue、WebView 或预先安装的 .NET Runtime。
 
 ## 下载与安装
 
-从 [GitHub Releases](https://github.com/Townley9288/Beflow-for-Windows/releases) 下载 `Beflow-for-Windows-vX.Y.Z[.R]-win-x64-setup.exe` 安装版。项目不再发布便携版。
+从 [GitHub Releases](https://github.com/Townley9288/Beflow-for-Windows/releases) 下载 `Beflow-for-Windows-vX.Y.Z[.R]-win-x64-setup.exe` 安装版，或下载同版本的 `-portable.zip` 便携版并解压后运行。
 
 项目暂未购买代码签名证书，Windows SmartScreen 可能在首次运行时显示“未知发布者”。请只从本仓库 Release 下载，并可使用同名 `.sha256` 文件核对完整性。
 
@@ -78,7 +78,8 @@ TV 视频流保留接口返回的真实分辨率和帧率；缺少参数时，�
 
 软件默认在启动时每天最多检查一次 GitHub 稳定版，不会自动下载安装。关于页可以手动检查并确认更新：
 
-- 安装版下载并校验新安装包，然后执行覆盖安装。
+- 安装版打开 GitHub 发布页，由用户下载安装包并覆盖安装。
+- 便携版由用户确认后下载 ZIP，校验 SHA-256，保留 `Data` 目录并重新启动。缺少更新助手的旧便携版需要先手动解压一份完整发布包。
 
 更新检查直接读取 GitHub Releases 的最新稳定标签，不调用 GitHub API；五分钟内重复检查使用本地内存缓存。该功能可以在设置页关闭，GitHub 暂时不可访问不会影响下载、登录和封装功能。
 

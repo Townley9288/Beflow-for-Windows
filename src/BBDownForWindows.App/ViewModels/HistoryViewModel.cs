@@ -91,8 +91,9 @@ public sealed class HistoryViewModel : ObservableObject
         try
         {
             IsLoading = true;
+            var history = await _services.History.LoadAsync();
             _allRecords.Clear();
-            _allRecords.AddRange(await _services.History.LoadAsync());
+            _allRecords.AddRange(history);
             PageNumber = Math.Min(PageNumber, TotalPages);
             ApplyPage();
             ClearCommand.NotifyCanExecuteChanged(); RefreshTitlesCommand.NotifyCanExecuteChanged();
@@ -128,14 +129,24 @@ public sealed class HistoryViewModel : ObservableObject
                 .Select(record => (record.Id, record.Url))
                 .ToList();
             var titles = new Dictionary<Guid, string>();
-            foreach (var target in targets)
+            if (targets.Count != 0)
             {
-                try
+                await _services.TaskManager.RunExclusiveAsync(TaskKind.DownloadParse, false, "history_titles", async (context, token) =>
                 {
-                    var title = await _services.BBDown.GetTitleAsync(target.Url, CancellationToken.None);
-                    if (!string.IsNullOrWhiteSpace(title)) titles[target.Id] = title.Trim();
-                }
-                catch { }
+                    foreach (var target in targets)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        try
+                        {
+                            var title = await _services.BBDown.GetTitleAsync(target.Url, context, token);
+                            if (!string.IsNullOrWhiteSpace(title)) titles[target.Id] = title;
+                        }
+                        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException)
+                        {
+                            context.AppendLog($"刷新历史标题失败：{exception.Message}\n");
+                        }
+                    }
+                });
             }
             await SuppressStoreChangeAsync(() => _services.History.UpdateTitlesAsync(titles));
             await LoadAsync();
@@ -156,7 +167,7 @@ public sealed class HistoryViewModel : ObservableObject
     private void History_Changed(object? sender, EventArgs e)
     {
         if (!_active || Volatile.Read(ref _suppressStoreChanges) > 0 || Interlocked.Exchange(ref _reloadQueued, 1) != 0) return;
-        if (!_dispatcher.TryEnqueue(async () =>
+        if (!_dispatcher.TryEnqueue(async () => await App.RunUiAsync(async () =>
         {
             try
             {
@@ -164,7 +175,7 @@ public sealed class HistoryViewModel : ObservableObject
                 await LoadAsync();
             }
             finally { Interlocked.Exchange(ref _reloadQueued, 0); }
-        }))
+        })))
             Interlocked.Exchange(ref _reloadQueued, 0);
     }
 

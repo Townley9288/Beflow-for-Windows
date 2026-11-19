@@ -20,26 +20,29 @@ public sealed partial class PersonalSpacePage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        await ViewModel.InitializeAsync();
-        if (e.Parameter is DownloadInputNavigationContext input) await ViewModel.ReceiveInputAsync(input.Input, input.ParseAutomatically);
+        await App.RunUiAsync(async () =>
+        {
+            await ViewModel.InitializeAsync();
+            if (e.Parameter is DownloadInputNavigationContext input) await ViewModel.ReceiveInputAsync(input.Input, input.ParseAutomatically);
+        });
     }
-    private async void Uploads_Checked(object sender, RoutedEventArgs e) { if (ready) await ViewModel.SwitchTabAsync(0); }
-    private async void Collections_Checked(object sender, RoutedEventArgs e) { if (ready) await ViewModel.SwitchTabAsync(1); }
-    private async void Collection_ItemClick(object sender, ItemClickEventArgs e)
+    private async void Uploads_Checked(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { if (ready) await ViewModel.SwitchTabAsync(0); });
+    private async void Collections_Checked(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { if (ready) await ViewModel.SwitchTabAsync(1); });
+    private async void Collection_ItemClick(object sender, ItemClickEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (e.ClickedItem is SpaceCollectionViewModel item && ViewModel.OpenCollectionCommand.CanExecute(item)) await ViewModel.OpenCollectionCommand.ExecuteAsync(item);
-    }
-    private async void User_ItemClick(object sender, ItemClickEventArgs e)
+    });
+    private async void User_ItemClick(object sender, ItemClickEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (e.ClickedItem is SpaceUserViewModel user && ViewModel.OpenUserCommand.CanExecute(user))
             await ViewModel.OpenUserCommand.ExecuteAsync(user);
-    }
-    private async void Input_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    });
+    private async void Input_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (e.Key != Windows.System.VirtualKey.Enter || !ViewModel.ReadCommand.CanExecute(null)) return;
         e.Handled = true;
         await ViewModel.ReadCommand.ExecuteAsync(null);
-    }
+    });
     private void Cover_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         var cover = (FrameworkElement)sender;
@@ -52,7 +55,7 @@ public sealed partial class PersonalSpacePage : Page
         e.AcceptedOperation = ((App)Application.Current).MainWindow.DragLinkMonitoringEnabled && BilibiliDataTransfer.MayContainInput(e.DataView) && ViewModel.IsIdle
             ? DataPackageOperation.Copy : DataPackageOperation.None;
     }
-    private async void Input_Drop(object sender, DragEventArgs e)
+    private async void Input_Drop(object sender, DragEventArgs e) => await App.RunUiAsync(async () =>
     {
         e.Handled = true;
         if (!((App)Application.Current).MainWindow.DragLinkMonitoringEnabled || ViewModel.IsBusy) return;
@@ -65,12 +68,12 @@ public sealed partial class PersonalSpacePage : Page
         {
             await new ContentDialog { XamlRoot = XamlRoot, Title = "无法读取拖入的链接", Content = ex.Message, CloseButtonText = "关闭" }.ShowAsync();
         }
-    }
-    private async void BrowseFolder_Click(object sender, RoutedEventArgs e)
+    });
+    private async void BrowseFolder_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var folder = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow);
         if (!string.IsNullOrWhiteSpace(folder)) ViewModel.WorkDirectory = folder;
-    }
+    });
     private void Queue_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("queue");
     private void Settings_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("settings");
     private void Naming_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("rename-templates");

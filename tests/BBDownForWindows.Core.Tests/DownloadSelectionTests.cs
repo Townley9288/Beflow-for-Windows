@@ -129,7 +129,7 @@ public sealed class DownloadSelectionTests
             Audio = new AudioStreamSelection("M4A", 128)
         };
 
-        var resolved = StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1" });
+        var resolved = StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1xx411c7mD" });
 
         Assert.Equal(3, resolved.Video!.Index);
         Assert.DoesNotContain("重新匹配", resolved.FallbackReason);
@@ -180,7 +180,7 @@ public sealed class DownloadSelectionTests
             Audio = new AudioStreamSelection("M4A", 128)
         };
 
-        Assert.Throws<InvalidOperationException>(() => StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1" }));
+        Assert.Throws<InvalidOperationException>(() => StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1xx411c7mD" }));
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public sealed class DownloadSelectionTests
             Audio = new AudioStreamSelection("M4A", 192)
         };
 
-        Assert.Throws<InvalidOperationException>(() => StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1" }));
+        Assert.Throws<InvalidOperationException>(() => StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1xx411c7mD" }));
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public sealed class DownloadSelectionTests
             Audio = new AudioStreamSelection("M4A", 192, true)
         };
 
-        Assert.Throws<InvalidOperationException>(() => StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1" }));
+        Assert.Throws<InvalidOperationException>(() => StreamSelectionPolicy.Resolve(episode, desired, new DownloadRequest { Url = "BV1xx411c7mD" }));
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public sealed class DownloadSelectionTests
     {
         var arguments = BBDownCommandBuilder.BuildExactDownloadArguments(new DownloadRequest
         {
-            Url = "BV1", Pages = "3", Quality = "4K", Encoding = "HEVC", AudioBitratePriority = AudioBitratePriority.Lowest
+            Url = "BV1xx411c7mD", Pages = "3", Quality = "4K", Encoding = "HEVC", AudioBitratePriority = AudioBitratePriority.Lowest
         }, new ToolPaths());
 
         Assert.Contains("--interactive", arguments);
@@ -259,7 +259,7 @@ public sealed class DownloadSelectionTests
     public void InfoCommandOmitsFfmpegArgumentWhenPathIsUnavailable()
     {
         var arguments = BBDownCommandBuilder.BuildInfoArguments(
-            new DownloadRequest { Url = "BV1", Pages = "1", ApiMode = "APP" },
+            new DownloadRequest { Url = "BV1xx411c7mD", Pages = "1", ApiMode = "APP" },
             new ToolPaths());
 
         Assert.Contains("-app", arguments);
@@ -362,7 +362,7 @@ public sealed class DownloadSelectionTests
 
         var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadParse, false, "parallel-parse", async (context, token) =>
         {
-            catalog = await fixture.Service.ParseDownloadAsync(new DownloadParseRequest("BV1LONG", DownloadParseMode.All),
+            catalog = await fixture.Service.ParseDownloadAsync(new DownloadParseRequest("BV1xx411c7mD", DownloadParseMode.All),
                 new SynchronousProgress<DownloadParseProgress>(updates.Add), context, token);
         });
 
@@ -415,7 +415,7 @@ public sealed class DownloadSelectionTests
         DownloadCatalog? catalog = null;
         var manager = new TaskManager(fixture.Paths, runner);
         var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadParse, false, "risk", async (context, token) =>
-            catalog = await fixture.Service.ParseDownloadAsync(new("BV1LONG", DownloadParseMode.All), null, context, token));
+            catalog = await fixture.Service.ParseDownloadAsync(new("BV1xx411c7mD", DownloadParseMode.All), null, context, token));
 
         Assert.Equal(TaskState.Completed, snapshot.State);
         Assert.NotNull(catalog);
@@ -449,7 +449,7 @@ public sealed class DownloadSelectionTests
 
         await manager.RunExclusiveAsync(TaskKind.DownloadParse, false, "parse", async (context, token) =>
         {
-            catalog = await fixture.Service.ParseDownloadAsync(new DownloadParseRequest("https://example.test/video?p=1", DownloadParseMode.Current), null, context, token);
+            catalog = await fixture.Service.ParseDownloadAsync(new DownloadParseRequest("https://b23.tv/AbCd123?p=1", DownloadParseMode.Current), null, context, token);
         });
 
         Assert.Single(catalog!.Episodes);
@@ -562,48 +562,6 @@ public sealed class DownloadSelectionTests
     }
 
     [Fact]
-    public async Task BatchDownloadUsesExactIndicesAndContinuesAfterFailure()
-    {
-        var runner = new ScriptedRunner { FailDownloadPage = 2 };
-        using var fixture = new ServiceFixture(runner);
-        var output = Directory.CreateDirectory(Path.Combine(fixture.Root.FullName, "output"));
-        DownloadBatchResult? batch = null;
-        var progress = new List<DownloadProgressSnapshot>();
-        var manager = new TaskManager(fixture.Paths, runner);
-        var request = new DownloadBatchRequest
-        {
-            Title = "测试合集",
-            Options = new DownloadRequest { Url = "ss1", WorkDirectory = output.FullName, UseAria2c = true },
-            Episodes =
-            [
-                Selection(1), Selection(2)
-            ]
-        };
-
-        var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadBatch, false, "batch", async (context, token) =>
-        {
-            batch = await fixture.Service.DownloadBatchAsync(request, new SynchronousProgress<DownloadProgressSnapshot>(progress.Add), context, token);
-        });
-
-        Assert.Equal(TaskState.Completed, snapshot.State);
-        Assert.NotNull(batch);
-        Assert.Equal(DownloadEpisodeResultState.Completed, batch!.Episodes[0].State);
-        Assert.Equal(DownloadEpisodeResultState.Failed, batch.Episodes[1].State);
-        var downloads = runner.Requests.Where(item => item.Arguments.Contains("--interactive")).ToList();
-        Assert.Equal(2, downloads.Count);
-        Assert.Equal(2, runner.Requests.Count);
-        Assert.Equal(1, fixture.Locator.Calls);
-        Assert.All(downloads, item => Assert.Null(item.StandardInput));
-        Assert.All(runner.PreparationReplies, item => { Assert.Equal(1, item.VideoIndex); Assert.Equal(2, item.AudioIndex); });
-        Assert.Equal(Path.Combine("测试合集", "[P01]第一集"), runner.PreparationReplies[0].RelativeOutputPath);
-        Assert.Equal(Path.Combine("测试合集", "[P02]第二集"), runner.PreparationReplies[1].RelativeOutputPath);
-        Assert.Equal(Path.Combine(output.FullName, "测试合集"), batch.OutputDirectory);
-        Assert.Contains(batch.OutputFiles, path => path.EndsWith(Path.Combine("测试合集", "[P01]第一集.mp4"), StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(progress, update => update.CompletedEpisodes == 1 && update.TotalEpisodes == 2 && Math.Abs(update.OverallPercent - 50) < 0.01);
-        Assert.DoesNotContain(progress, update => update.CompletedEpisodes < update.TotalEpisodes && update.OverallPercent >= 100);
-    }
-
-    [Fact]
     public async Task MetadataServiceReadsUgcAndPgcFieldsWithoutCredentials()
     {
         var handler = new MetadataHandler();
@@ -700,10 +658,10 @@ public sealed class DownloadSelectionTests
 
         var snapshot = await manager.RunExclusiveAsync(TaskKind.DownloadBatch, false, "exact", async (context, token) =>
         {
-            var episode = await fixture.Service.ParseEpisodeAsync("BV1", 1, "WEB", context, token);
+            var episode = await fixture.Service.ParseEpisodeAsync("BV1xx411c7mD", 1, "WEB", context, token);
             result = await fixture.Service.DownloadExactAsync(new ExactDownloadRequest
             {
-                Options = new DownloadRequest { Url = "BV1", WorkDirectory = output.FullName, UseAria2c = true },
+                Options = new DownloadRequest { Url = "BV1xx411c7mD", WorkDirectory = output.FullName, UseAria2c = true },
                 Episode = episode,
                 Selection = Selection(1),
                 OutputDirectory = output.FullName,
@@ -949,7 +907,7 @@ public sealed class DownloadSelectionTests
     private sealed class FixedToolLocator(string bbDown) : IToolLocator
     {
         public int Calls { get; private set; }
-        public ToolPaths Locate(AppSettings settings) { Calls++; return new() { BBDown = bbDown }; }
+        public ToolPaths Locate(AppSettings settings) { Calls++; return new() { BBDown = bbDown, Ffmpeg = bbDown, Aria2c = bbDown }; }
         public Task<string> GetVersionAsync(string executable, CancellationToken cancellationToken = default) => Task.FromResult("test");
     }
 
@@ -958,8 +916,8 @@ public sealed class DownloadSelectionTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var json = request.RequestUri!.AbsolutePath.Contains("pgc/view", StringComparison.Ordinal)
-                ? """{"code":0,"result":{"title":"番剧","cover":"https://cover/pgc.jpg","season_id":456,"publish":{"pub_time":"2026-01-01"},"up_info":{"uname":"出品方","mid":999,"avatar":"https://face/pgc.jpg"},"episodes":[{"cid":22,"aid":123,"bvid":"BV1EP","id":789,"pub_time":1767225600}]}}"""
-                : """{"code":0,"data":{"title":"普通视频","pic":"http://cover/ugc.jpg","aid":123,"bvid":"BV1TEST","pubdate":1767225600,"owner":{"name":"UP主","mid":456,"face":"https://face/ugc.jpg"},"pages":[{"cid":11,"page":1,"part":"第一集"}]}}""";
+                ? """{"code":0,"result":{"title":"番剧","cover":"https://cover/pgc.jpg","season_id":456,"publish":{"pub_time":"2026-01-01"},"up_info":{"uname":"出品方","mid":999,"avatar":"https://face/pgc.jpg"},"episodes":[{"cid":22,"aid":123,"bvid":"BV1xx411c7mF","id":789,"pub_time":1767225600}]}}"""
+                : """{"code":0,"data":{"title":"普通视频","pic":"http://cover/ugc.jpg","aid":123,"bvid":"BV1xx411c7mE","pubdate":1767225600,"owner":{"name":"UP主","mid":456,"face":"https://face/ugc.jpg"},"pages":[{"cid":11,"page":1,"part":"第一集"}]}}""";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
         }
     }
@@ -973,7 +931,7 @@ public sealed class DownloadSelectionTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            const string json = """{"code":0,"data":{"title":"百日成王","pic":"https://cover/video.jpg","aid":116933286430543,"bvid":"BV1TEST","redirect_url":"https://www.bilibili.com/bangumi/play/ep4368409?t=60.9","owner":{"name":"哔哩哔哩国创","mid":98627270,"face":"https://face/video.jpg"},"pages":[{"cid":40028146972,"page":1,"part":"第10集"}]}}""";
+            const string json = """{"code":0,"data":{"title":"百日成王","pic":"https://cover/video.jpg","aid":116933286430543,"bvid":"BV1xx411c7mE","redirect_url":"https://www.bilibili.com/bangumi/play/ep4368409?t=60.9","owner":{"name":"哔哩哔哩国创","mid":98627270,"face":"https://face/video.jpg"},"pages":[{"cid":40028146972,"page":1,"part":"第10集"}]}}""";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
         }
     }

@@ -4,7 +4,7 @@ namespace BBDownForWindows.Core;
 
 public sealed record BilibiliSpaceParseResult(BilibiliSpaceVideo Video, DownloadCatalog? Catalog, string Error);
 
-public sealed class BilibiliSpaceBatchService(IBBDownService downloader)
+public sealed class BilibiliSpaceBatchService(IBBDownParsingService downloader)
 {
     public Task PrepareSelectionAsync(DownloadCatalog catalog, StreamSelectionRule rule, DownloadMode mode,
         TaskExecutionContext context, CancellationToken token) => downloader.PrepareSelectionAsync(catalog, rule, mode, context, token);

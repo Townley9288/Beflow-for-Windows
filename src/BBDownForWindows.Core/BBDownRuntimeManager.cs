@@ -12,7 +12,7 @@ public sealed class BBDownRuntimeManager(ApplicationPaths paths)
     public string PrepareExecutable(string sourcePath)
     {
         if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
-            throw new FileNotFoundException("找不到 BBDown.exe", sourcePath);
+            throw new FileNotFoundException("随包的 Beflow BBDown.exe 缺失或校验失败，请重新安装完整发布包。", sourcePath);
 
         var source = Path.GetFullPath(sourcePath);
         var destination = Path.GetFullPath(paths.RuntimeBBDownExecutable);

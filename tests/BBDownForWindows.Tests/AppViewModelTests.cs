@@ -733,12 +733,12 @@ public sealed class AppViewModelTests
     {
         var catalog = new DownloadCatalog
         {
-            SourceUrl = "BV1TEST", ResolvedUrl = "BV1TEST",
+            SourceUrl = "BV1xx411c7mD", ResolvedUrl = "BV1xx411c7mD",
             AllPages = Enumerable.Range(1, 123).Select(p => new PageInfo(p, p.ToString(), $"第{p}集", "24m")).ToList(),
             Episodes = [new() { Page = new(1, "1", "第一集", "24m"), State = DownloadEpisodeParseState.Failed, Error = "HTTP 412（风控）" }, ReadyEpisode(7, "第七集")]
         };
         using var fixture = new AppFixture(new ParseResultService(catalog));
-        var viewModel = new DownloadViewModel(fixture.Services) { Url = "BV1TEST", SaveTaskLogs = false };
+        var viewModel = new DownloadViewModel(fixture.Services) { Url = "BV1xx411c7mD", SaveTaskLogs = false };
         var queued = new QueuedProgressContext();
         var previous = SynchronizationContext.Current;
         try
@@ -802,13 +802,10 @@ public sealed class AppViewModelTests
             foreach (var episode in catalog.Episodes) progress?.Report(new(1, 123, episode.Page.Number, episode.Page.Title, episode, "读取完成"));
             return Task.FromResult(catalog);
         }
-        public Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DownloadEpisodeInfo> ParseEpisodeAsync(string url, int page, string apiMode, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ExactDownloadResult> DownloadExactAsync(ExactDownloadRequest request, IProgress<ExactDownloadProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<string> GetTitleAsync(string url, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<string> GetTitleAsync(string url, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     [Fact]

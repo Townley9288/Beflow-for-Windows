@@ -6,7 +6,7 @@ namespace BBDownForWindows.Tests;
 public sealed class ToolLocatorTests
 {
     [Fact]
-    public void FastLookupUsesBundledAndConfiguredPathsWithoutEnumeratingLegacyDrives()
+    public void LookupUsesVerifiedBundledAndExplicitPaths()
     {
         using var temp = new TempDirectory();
         var paths = new ApplicationPaths(temp.Info.FullName, temp.Info.FullName);
@@ -15,24 +15,22 @@ public sealed class ToolLocatorTests
         var ffmpeg = CreateFile(Path.Combine(paths.ToolsDirectory, "ffmpeg", "ffmpeg.exe"));
         var ffprobe = CreateFile(Path.Combine(paths.ToolsDirectory, "ffmpeg", "ffprobe.exe"));
         var mkvmerge = CreateFile(Path.Combine(temp.Info.FullName, "MKVToolNix", "mkvmerge.exe"));
-        var legacyDriveScans = 0;
-        var locator = new ToolLocator(paths, () =>
-        {
-            legacyDriveScans++;
-            return ["Z:\\"];
-        });
+        var locator = new ToolLocator(paths);
+        var settings = new AppSettings { MkvmergePath = mkvmerge };
 
-        var tools = locator.LocateFast(new AppSettings { MkvmergePath = mkvmerge });
+        Assert.Empty(locator.Locate(settings).BBDown);
+        using (var executable = File.OpenRead(bbDown))
+            File.WriteAllText(bbDown + ".sha256", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(executable)));
+        var tools = locator.LocateFast(settings);
 
-        Assert.Equal(0, legacyDriveScans);
         Assert.Equal(bbDown, tools.BBDown);
         Assert.Equal(aria2, tools.Aria2c);
         Assert.Equal(ffmpeg, tools.Ffmpeg);
         Assert.Equal(ffprobe, tools.Ffprobe);
         Assert.Equal(mkvmerge, tools.Mkvmerge);
 
-        locator.Locate(new AppSettings { MkvmergePath = mkvmerge });
-        Assert.Equal(1, legacyDriveScans);
+        File.WriteAllText(bbDown, "changed");
+        Assert.Empty(locator.Locate(settings).BBDown);
     }
 
     [Fact]
@@ -64,7 +62,7 @@ public sealed class ToolLocatorTests
     {
         var dotnet = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(directory => Path.Combine(directory.Trim('"'), "dotnet.exe"))
+            .Select(directory => Path.Combine(directory.Trim('"'), OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"))
             .First(File.Exists);
         using var temp = new TempDirectory();
         var locator = new ToolLocator(new ApplicationPaths(temp.Info.FullName, temp.Info.FullName));

@@ -313,12 +313,9 @@ public sealed class PersonalSpaceViewModelTests
             }).ToList();
             return new() { SourceUrl = request.Url, ResolvedUrl = request.Url, Title = "test title", AllPages = pages, Episodes = episodes, Metadata = new() { Bvid = request.Url.Split('/')[^1] } };
         }
-        public Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DownloadEpisodeInfo> ParseEpisodeAsync(string url, int page, string apiMode, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ExactDownloadResult> DownloadExactAsync(ExactDownloadRequest request, IProgress<ExactDownloadProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<string> GetTitleAsync(string url, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<string> GetTitleAsync(string url, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

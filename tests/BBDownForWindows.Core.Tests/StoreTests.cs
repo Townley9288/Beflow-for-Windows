@@ -5,6 +5,34 @@ namespace BBDownForWindows.Tests;
 
 public sealed class StoreTests
 {
+    [Theory]
+    [InlineData("{broken")]
+    [InlineData("null")]
+    public async Task DamagedSettingsAndHistoryStayIntactOnReadAndWrite(string damaged)
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            paths.EnsureCreated();
+            await File.WriteAllTextAsync(paths.SettingsFile, damaged);
+            await File.WriteAllTextAsync(paths.HistoryFile, damaged);
+            var settings = new SettingsStore(paths);
+            var history = new HistoryStore(paths);
+
+            Assert.Contains(paths.SettingsFile, (await Assert.ThrowsAsync<InvalidDataException>(() => settings.LoadAsync())).Message);
+            await Assert.ThrowsAsync<InvalidDataException>(() => settings.UpdateAsync(value => value));
+            await Assert.ThrowsAsync<InvalidDataException>(() => settings.SaveAsync(new AppSettings()));
+            Assert.Contains(paths.HistoryFile, (await Assert.ThrowsAsync<InvalidDataException>(() => history.LoadAsync())).Message);
+            await Assert.ThrowsAsync<InvalidDataException>(() => history.AddAsync(new HistoryRecord()));
+            await Assert.ThrowsAsync<InvalidDataException>(() => history.ClearAsync());
+
+            Assert.Equal(damaged, await File.ReadAllTextAsync(paths.SettingsFile));
+            Assert.Equal(damaged, await File.ReadAllTextAsync(paths.HistoryFile));
+        }
+        finally { root.Delete(true); }
+    }
+
     [Fact]
     public async Task OldConfigKeepsNewDefaults()
     {

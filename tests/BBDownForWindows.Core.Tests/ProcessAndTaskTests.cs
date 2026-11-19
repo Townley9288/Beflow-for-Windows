@@ -78,7 +78,8 @@ public sealed class ProcessAndTaskTests
     {
         var runner = new ProcessRunner();
         var lines = new List<string>();
-        var result = await runner.RunAsync(new ProcessRunRequest(Path.Combine(Environment.SystemDirectory, "cmd.exe"), ["/d", "/c", "echo hello"], Path.GetTempPath()), lines.Add, CancellationToken.None);
+        var request = Shell("echo hello");
+        var result = await runner.RunAsync(request, lines.Add, CancellationToken.None);
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("hello", result.Output, StringComparison.OrdinalIgnoreCase);
         Assert.NotEmpty(lines);
@@ -99,6 +100,40 @@ public sealed class ProcessAndTaskTests
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("pseudo-console", result.Output, StringComparison.OrdinalIgnoreCase);
         Assert.NotEmpty(output);
+    }
+
+    [Fact]
+    public async Task PseudoConsoleProcessMayExitBeforeProducingOutput()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var request = Shell("exit /b 17") with { UsePseudoConsole = true };
+        var result = await new ProcessRunner().RunAsync(request, null, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(17, result.ExitCode);
+        Assert.False(result.Cancelled);
+    }
+
+    [Fact]
+    public async Task AClosedInputPipePreservesTheExitCodeAndOutput()
+    {
+        var request = Shell(OperatingSystem.IsWindows()
+            ? "echo early & exit /b 19"
+            : "echo early; exit 19") with { StandardInput = new string('x', 1024 * 1024) };
+        var result = await new ProcessRunner().RunAsync(request, null, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(19, result.ExitCode);
+        Assert.Contains("early", result.Output);
+    }
+
+    [Fact]
+    public void OutputBufferKeepsOnlyTheMostRecentText()
+    {
+        var buffer = new ProcessOutputBuffer();
+        buffer.Append(new string('x', ProcessOutputBuffer.Capacity * 2));
+        buffer.Append("last");
+        var output = buffer.ToString();
+        Assert.Equal(ProcessOutputBuffer.Capacity, output.Length);
+        Assert.EndsWith("last", output);
     }
 
     [Fact]
@@ -150,8 +185,54 @@ public sealed class ProcessAndTaskTests
     {
         var runner = new ProcessRunner();
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        var result = await runner.RunAsync(new ProcessRunRequest(Path.Combine(Environment.SystemDirectory, "ping.exe"), ["127.0.0.1", "-n", "20"], Path.GetTempPath()), null, cancellation.Token);
+        var request = OperatingSystem.IsWindows()
+            ? new ProcessRunRequest(Path.Combine(Environment.SystemDirectory, "ping.exe"), ["127.0.0.1", "-n", "20"], Path.GetTempPath())
+            : Shell("exec sleep 20");
+        var result = await runner.RunAsync(request, null, cancellation.Token);
         Assert.True(result.Cancelled);
+    }
+
+    private static ProcessRunRequest Shell(string command) => OperatingSystem.IsWindows()
+        ? new(Path.Combine(Environment.SystemDirectory, "cmd.exe"), ["/d", "/c", command], Path.GetTempPath())
+        : new("/bin/sh", ["-c", command], Path.GetTempPath());
+
+    [Fact]
+    public async Task CancelledTasksPersistTheirStatusAndCleanupKeepsReferencedLogs()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var paths = new ApplicationPaths(root.FullName, root.FullName);
+            paths.EnsureCreated();
+            var historyLog = Path.Combine(paths.LogsDirectory, "history.log");
+            var queueLog = Path.Combine(paths.LogsDirectory, "queue.log");
+            var unusedLog = Path.Combine(paths.LogsDirectory, "unused.log");
+            foreach (var file in new[] { historyLog, queueLog, unusedLog })
+            {
+                await File.WriteAllTextAsync(file, "saved log");
+                File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddDays(-35));
+            }
+            await new HistoryStore(paths).AddAsync(new HistoryRecord { LogPath = historyLog });
+            await new DownloadQueueStore(paths).SaveAsync(new DownloadQueueDocument
+            {
+                Items = [new DownloadQueueItem { LogPaths = [queueLog] }]
+            });
+
+            var manager = new TaskManager(paths, new ProcessRunner());
+            using var cancellation = new CancellationTokenSource();
+            var task = await manager.RunExclusiveAsync(TaskKind.Download, true, "cancel", (_, _) =>
+            {
+                cancellation.Cancel();
+                return Task.CompletedTask;
+            }, cancellation.Token);
+
+            Assert.Equal(TaskState.Cancelled, task.State);
+            Assert.Contains("任务已取消", manager.ReadSavedLog(task.LogPath));
+            Assert.True(File.Exists(historyLog));
+            Assert.True(File.Exists(queueLog));
+            Assert.False(File.Exists(unusedLog));
+        }
+        finally { root.Delete(true); }
     }
 
     [Fact]

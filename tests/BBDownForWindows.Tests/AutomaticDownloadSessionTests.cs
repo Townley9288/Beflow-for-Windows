@@ -316,7 +316,7 @@ public sealed class AutomaticDownloadSessionTests
         Assert.Equal(4, accounts.Checked.Count);
     }
 
-    private static DownloadParseRequest Request() => new("https://www.bilibili.com/video/BVtest", DownloadParseMode.All, "AUTO", Rule: FourK);
+    private static DownloadParseRequest Request() => new("https://www.bilibili.com/video/BV1xx411c7mD", DownloadParseMode.All, "AUTO", Rule: FourK);
     private static DownloadEpisodeViewModel Row(DownloadCatalog catalog)
     {
         var row = new DownloadEpisodeViewModel(catalog.Episodes[0]);
@@ -368,7 +368,7 @@ public sealed class AutomaticDownloadSessionTests
             var runner = new CaptureRunner(); var locator = new Locator(executable);
             var downloader = new QueuedMediaDownloader(paths, runner, locator, new ParseConcurrencyLimiter(settings));
             await Assert.ThrowsAsync<IOException>(() => downloader.DownloadAsync(
-                new DownloadRequest { Url = "BVtest", ApiMode = globalApi, WorkDirectory = root.FullName, UseAria2c = false },
+                new DownloadRequest { Url = "BV1xx411c7mD", ApiMode = globalApi, WorkDirectory = root.FullName, UseAria2c = false },
                 new EpisodeStreamSelection { PageNumber = 1, ApiMode = selectedApi }, "cid1",
                 new QueueSourceCheckpoint { Directory = Path.Combine(root.FullName, "private-source") }, () => Task.CompletedTask,
                 new Sink<ExactDownloadProgress>(), Context, default));
@@ -416,12 +416,12 @@ public sealed class AutomaticDownloadSessionTests
     }
     private sealed class Locator(string executable) : IToolLocator
     {
-        public ToolPaths Locate(AppSettings settings) => new() { BBDown = executable };
+        public ToolPaths Locate(AppSettings settings) => new() { BBDown = executable, Ffmpeg = executable };
         public Task<string> GetVersionAsync(string executable, CancellationToken cancellationToken = default) => Task.FromResult("test");
     }
     private static DownloadCatalog Catalog(params DownloadEpisodeInfo[] episodes) => new()
     {
-        ResolvedUrl = "https://www.bilibili.com/video/BVtest", Episodes = episodes.ToList(), AllPages = episodes.Select(e => e.Page).ToList()
+        ResolvedUrl = "https://www.bilibili.com/video/BV1xx411c7mD", Episodes = episodes.ToList(), AllPages = episodes.Select(e => e.Page).ToList()
     };
     private static DownloadEpisodeInfo Episode(string quality = "4K 超高清", string codec = "HEVC", string audio = "M4A", int number = 1, string cid = "cid1") => new()
     {
@@ -452,12 +452,9 @@ public sealed class AutomaticDownloadSessionTests
             foreach (var e in catalog.Episodes) progress?.Report(new(1, catalog.Episodes.Count, e.Page.Number, e.Page.Title, e, "解析"));
             return Task.FromResult(catalog);
         }
-        public Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DownloadEpisodeInfo> ParseEpisodeAsync(string url, int page, string apiMode, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ExactDownloadResult> DownloadExactAsync(ExactDownloadRequest request, IProgress<ExactDownloadProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<string> GetTitleAsync(string url, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<string> GetTitleAsync(string url, TaskExecutionContext context, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

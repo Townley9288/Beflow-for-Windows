@@ -104,7 +104,7 @@ public sealed partial class PersonalSpaceViewModel : ObservableObject
     private string bitrate = "最高码率";
     private string mode = "视频+音频";
     public PersonalSpaceViewModel(AppServices services) : this(services.BilibiliSpace, services.BBDown, services.Settings, services.TaskManager, services.DownloadQueue) { }
-    public PersonalSpaceViewModel(IBilibiliSpaceService space, IBBDownService downloader, ISettingsStore settings, ITaskManager tasks, DownloadQueueService queue)
+    public PersonalSpaceViewModel(IBilibiliSpaceService space, IBBDownParsingService downloader, ISettingsStore settings, ITaskManager tasks, DownloadQueueService queue)
     {
         this.space = space; batch = new(downloader); this.settings = settings; this.tasks = tasks; this.queue = queue;
         ReadCommand = new AsyncRelayCommand(SubmitInputAsync, () => IsIdle);

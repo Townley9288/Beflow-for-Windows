@@ -17,6 +17,6 @@
 
 ## Local data and updates
 
-Beflow 的设置、下载历史、重命名历史、日志、TMDB API Key 和 B 站登录凭据保存在本地，不会由应用上传。TMDB Key 仅用于用户主动发起的 TMDB 请求，不写入任务日志或历史。在线更新只访问本仓库的 GitHub Releases，下载完成后必须通过同一 Release 提供的 SHA-256 校验才会执行。
+Beflow 的设置、下载历史、重命名历史、日志、TMDB API Key 和 B 站登录凭据保存在本地，不会由应用上传。TMDB Key 仅用于用户主动发起的 TMDB 请求，不写入任务日志或历史。安装版更新入口打开本仓库的 GitHub Releases，由用户自行下载安装。便携版在用户确认后下载 ZIP，应用会验证同一 Release 提供的 SHA-256，再启动本地更新助手。
 
 当前发行版未进行商业代码签名，SHA-256 可以检测下载损坏，但不能替代发布者代码签名。请只从 <https://github.com/Townley9288/Beflow-for-Windows/releases> 获取安装包和便携包。

@@ -6,6 +6,8 @@ public sealed class DownloadQueueService
     private readonly IDownloadQueueExecutor executor;
     private readonly ITaskManager tasks;
     private readonly WorkCoordinator work;
+    private readonly object pumpSync = new();
+    private readonly object cancellationSync = new();
     private readonly SemaphoreSlim gate = new(1, 1);
     private DownloadQueueDocument document = new();
     private DownloadQueueDocument snapshot = new();
@@ -14,8 +16,8 @@ public sealed class DownloadQueueService
     private CancellationTokenSource? activeCancellation;
     private Guid? activeId;
     private bool cancelCurrent;
-    private bool stopping;
-    private bool faulted;
+    private volatile bool stopping;
+    private volatile bool faulted;
     public string Error { get; private set; } = string.Empty;
     public event EventHandler? Changed;
     public event EventHandler<QueueProgress>? ProgressChanged;
@@ -28,7 +30,7 @@ public sealed class DownloadQueueService
 
     public Task InitializeAsync()
     {
-        lock (this) return initialization ??= InitializeCoreAsync();
+        lock (pumpSync) return initialization ??= InitializeCoreAsync();
     }
     private async Task InitializeCoreAsync()
     {
@@ -146,8 +148,8 @@ public sealed class DownloadQueueService
         {
             doc.Paused = true;
             if (activeId is { } id) Find(doc, id).State = DownloadQueueState.Pausing;
-        }, () => activeCancellation?.Cancel());
-        Task? running; lock (this) running = pump;
+        }, CancelActive);
+        Task? running; lock (pumpSync) running = pump;
         if (running is not null) await running;
     }
     public Task ResumeAsync() => ChangeAsync(doc =>
@@ -160,7 +162,7 @@ public sealed class DownloadQueueService
     {
         if (activeId is null) return;
         Find(doc, activeId.Value).State = DownloadQueueState.Pausing;
-    }, () => { cancelCurrent = true; activeCancellation?.Cancel(); });
+    }, () => { cancelCurrent = true; CancelActive(); });
     public async Task ShutdownAsync()
     {
         stopping = true;
@@ -203,7 +205,7 @@ public sealed class DownloadQueueService
     }
     private void Kick()
     {
-        lock (this)
+        lock (pumpSync)
         {
             if (initialization?.IsCompletedSuccessfully != true || faulted || stopping || pump is { IsCompleted: false }) return;
             pump = Task.Run(PumpAsync);
@@ -217,6 +219,7 @@ public sealed class DownloadQueueService
             {
                 IDisposable? activity = null;
                 DownloadQueueItem? job = null;
+                CancellationTokenSource? cancellation = null;
                 await gate.WaitAsync();
                 try
                 {
@@ -225,13 +228,15 @@ public sealed class DownloadQueueService
                     if (next is null || (activity = work.TryEnterDownload()) is null) return;
                     next.State = DownloadQueueState.Running; next.StartedAt ??= DateTimeOffset.Now;
                     activeId = next.Id; cancelCurrent = false;
-                    activeCancellation = new CancellationTokenSource();
+                    cancellation = new CancellationTokenSource();
+                    lock (cancellationSync) activeCancellation = cancellation;
                     await SaveLockedAsync(); job = QueueSnapshot.Copy(next);
                 }
                 finally
                 {
+                    if (job is null) ClearActiveLocked();
                     gate.Release();
-                    if (job is null) { activeCancellation?.Dispose(); activeCancellation = null; activeId = null; activity?.Dispose(); }
+                    if (job is null) activity?.Dispose();
                 }
                 try
                 {
@@ -246,7 +251,7 @@ public sealed class DownloadQueueService
                                     new DirectProgress<QueueProgress>(p => ProgressChanged?.Invoke(this, p)), context, token);
                             }
                             catch (QueuePersistenceException exception) { Fault(exception); throw; }
-                        }, activeCancellation!.Token);
+                        }, cancellation!.Token);
                     await gate.WaitAsync();
                     try
                     {
@@ -256,13 +261,16 @@ public sealed class DownloadQueueService
                         else if (result.State == TaskState.Failed) { item.State = DownloadQueueState.Failed; item.Error = result.Error; }
                         else item.State = item.Failed == 0 ? DownloadQueueState.Completed : item.Succeeded == 0 ? DownloadQueueState.Failed : DownloadQueueState.PartialFailure;
                         if (item.IsTerminal) item.FinishedAt = DateTimeOffset.Now;
+                        ClearActiveLocked();
                         await SaveLockedAsync();
                     }
                     finally { gate.Release(); }
                 }
                 finally
                 {
-                    activeCancellation?.Dispose(); activeCancellation = null; activeId = null;
+                    await gate.WaitAsync();
+                    try { ClearActiveLocked(); }
+                    finally { gate.Release(); }
                     activity!.Dispose();
                 }
             }
@@ -270,7 +278,7 @@ public sealed class DownloadQueueService
         catch (Exception exception) { Fault(exception); }
         finally
         {
-            lock (this) pump = null;
+            lock (pumpSync) pump = null;
             // A foreground exclusive operation may have ended while this pump was exiting.
             if (!faulted && !stopping && !Snapshot.Paused && Snapshot.Items.Any(i => i.State == DownloadQueueState.Waiting) && !work.HasRunningOperations) Kick();
         }
@@ -295,8 +303,23 @@ public sealed class DownloadQueueService
     private void Publish() { Volatile.Write(ref snapshot, QueueSnapshot.Copy(document)); Changed?.Invoke(this, EventArgs.Empty); }
     private void Fault(Exception exception)
     {
-        faulted = true; Error = $"队列已停止：{exception.Message}"; activeCancellation?.Cancel(); Changed?.Invoke(this, EventArgs.Empty);
+        faulted = true; Error = $"队列已停止：{exception.Message}"; CancelActive(); Changed?.Invoke(this, EventArgs.Empty);
     }
+    private void CancelActive()
+    {
+        lock (cancellationSync) activeCancellation?.Cancel();
+    }
+
+    private void ClearActiveLocked()
+    {
+        activeId = null;
+        lock (cancellationSync)
+        {
+            activeCancellation?.Dispose();
+            activeCancellation = null;
+        }
+    }
+
     private static DownloadQueueItem Find(DownloadQueueDocument doc, Guid id) => doc.Items.SingleOrDefault(i => i.Id == id) ?? throw new InvalidOperationException("队列任务不存在");
     private sealed class DirectProgress<T>(Action<T> action) : IProgress<T> { public void Report(T value) => action(value); }
 }

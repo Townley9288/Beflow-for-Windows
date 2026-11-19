@@ -109,18 +109,23 @@ public interface ITaskManager
     Task<IReadOnlyList<string>> ReadSavedLogLinesAsync(string path, CancellationToken cancellationToken = default);
 }
 
-public interface IBBDownService
+public interface IBBDownService : IBBDownParsingService, IBBDownExactDownloadService
+{
+    Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken);
+}
+
+public interface IBBDownParsingService
 {
     Task PrepareSelectionAsync(DownloadCatalog catalog, StreamSelectionRule rule, DownloadMode mode,
         TaskExecutionContext context, CancellationToken cancellationToken) => Task.CompletedTask;
-    Task<VideoInfo> GetVideoInfoAsync(string url, string pages, TaskExecutionContext context, CancellationToken cancellationToken);
     Task<DownloadCatalog> ParseDownloadAsync(DownloadParseRequest request, IProgress<DownloadParseProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken);
-    Task<DownloadBatchResult> DownloadBatchAsync(DownloadBatchRequest request, IProgress<DownloadProgressSnapshot>? progress, TaskExecutionContext context, CancellationToken cancellationToken);
     Task<DownloadEpisodeInfo> ParseEpisodeAsync(string url, int page, string apiMode, TaskExecutionContext context, CancellationToken cancellationToken);
+    Task<string> GetTitleAsync(string url, TaskExecutionContext context, CancellationToken cancellationToken);
+}
+
+public interface IBBDownExactDownloadService
+{
     Task<ExactDownloadResult> DownloadExactAsync(ExactDownloadRequest request, IProgress<ExactDownloadProgress>? progress, TaskExecutionContext context, CancellationToken cancellationToken);
-    Task<DownloadResult> DownloadAsync(DownloadRequest request, TaskExecutionContext context, CancellationToken cancellationToken);
-    Task LoginAsync(bool tv, TaskExecutionContext context, CancellationToken cancellationToken);
-    Task<string> GetTitleAsync(string url, CancellationToken cancellationToken);
 }
 
 public interface IDualAudioService

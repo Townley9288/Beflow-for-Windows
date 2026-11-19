@@ -43,6 +43,24 @@ public static partial class BilibiliInputParser
         return result;
     }
 
+    public static bool TryExtractVideo(string? text, out string input)
+    {
+        input = string.Empty;
+        if (string.IsNullOrWhiteSpace(text) || text.TrimStart().StartsWith('-')) return false;
+        input = ExtractAll(text).FirstOrDefault(candidate => !TryGetSpaceUid(candidate, out _)) ?? string.Empty;
+        return input.Length != 0;
+    }
+
+    internal static string RequireVideoArgument(string? value)
+    {
+        var input = value?.Trim() ?? string.Empty;
+        var match = IdentifierRegex().Match(input);
+        if (IsSupportedUrl(input) && !TryGetSpaceUid(input, out _)
+            || match.Success && match.Length == input.Length)
+            return input;
+        throw new ArgumentException("请输入有效的哔哩哔哩视频链接或编号。", nameof(value));
+    }
+
     public static bool IsSupportedUrl(string? value)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return false;

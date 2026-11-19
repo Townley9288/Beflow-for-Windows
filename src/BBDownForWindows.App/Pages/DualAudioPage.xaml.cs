@@ -44,22 +44,25 @@ public sealed partial class DualAudioPage : Page, IQueueEditorPage
     public async Task<bool> ConfirmLeaveQueueEditAsync() =>
         await ViewModel.QueueEdit.ConfirmLeaveAsync(await ViewModel.BuildQueueItemAsync(), XamlRoot);
     private void ViewQueue_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).MainWindow.Navigate("queue");
-    private async void CancelQueueEdit_Click(object sender, RoutedEventArgs e)
+    private async void CancelQueueEdit_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (await ConfirmLeaveQueueEditAsync()) ((App)Application.Current).MainWindow.Navigate("queue");
-    }
+    });
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
-        ViewModel.Activate();
-        await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
-        if (e.Parameter is QueueNavigationContext queue) await ViewModel.LoadQueueAsync(queue);
-        if (e.Parameter is DualAudioNavigationContext context)
-        {
-            await ViewModel.PrepareExistingRemuxAsync(context.ExistingTaskDirectory);
-            if (context.OpenTaskSettings) await TaskSettingsDialog.ShowAsync();
-        }
         base.OnNavigatedTo(e);
+        await App.RunUiAsync(async () =>
+        {
+            ViewModel.Activate();
+            await ViewModel.InitializeAsync(e.Parameter as HistoryRecord);
+            if (e.Parameter is QueueNavigationContext queue) await ViewModel.LoadQueueAsync(queue);
+            if (e.Parameter is DualAudioNavigationContext context)
+            {
+                await ViewModel.PrepareExistingRemuxAsync(context.ExistingTaskDirectory);
+                if (context.OpenTaskSettings) await TaskSettingsDialog.ShowAsync();
+            }
+        });
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -68,28 +71,28 @@ public sealed partial class DualAudioPage : Page, IQueueEditorPage
         base.OnNavigatedFrom(e);
     }
 
-    private async void ShowTaskSettings_Click(object sender, RoutedEventArgs e) => await TaskSettingsDialog.ShowAsync();
+    private async void ShowTaskSettings_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { await TaskSettingsDialog.ShowAsync(); });
     private void LayoutGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         var compact = e.NewSize.Width < 1150;
         SourceCardsWide.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         SourceCardsCompact.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
     }
-    private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e)
+    private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow);
         if (value is not null) ViewModel.WorkDirectory = value;
-    }
-    private async void BrowseExisting_Click(object sender, RoutedEventArgs e)
+    });
+    private async void BrowseExisting_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow);
         if (value is not null) await ViewModel.PrepareExistingRemuxAsync(value);
-    }
-    private async void BrowseMkvmerge_Click(object sender, RoutedEventArgs e)
+    });
+    private async void BrowseMkvmerge_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow);
         if (value is not null) ViewModel.MkvmergePath = value;
-    }
+    });
 
     private void OpenOutputFolder_Click(object sender, RoutedEventArgs e)
     {
@@ -118,7 +121,7 @@ public sealed partial class DualAudioPage : Page, IQueueEditorPage
         e.Handled = true;
     }
 
-    private async void BilibiliInput_Drop(object sender, DragEventArgs e)
+    private async void BilibiliInput_Drop(object sender, DragEventArgs e) => await App.RunUiAsync(async () =>
     {
         e.Handled = true;
         if (!((App)Application.Current).MainWindow.DragLinkMonitoringEnabled) return;
@@ -131,7 +134,7 @@ public sealed partial class DualAudioPage : Page, IQueueEditorPage
         {
             // The drag source can disappear before asynchronous data retrieval completes.
         }
-    }
+    });
 
     private async Task<bool> ConfirmMkvmergeAvailableAsync()
     {

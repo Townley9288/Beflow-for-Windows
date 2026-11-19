@@ -31,16 +31,19 @@ public sealed partial class RenameTemplatesPage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        await DownloadNamingViewModel.InitializeAsync(e.Parameter as DownloadNamingNavigationContext);
-        await ViewModel.InitializeAsync(e.Parameter as RenameTemplatesNavigationContext);
-        RuleTabs.SelectedIndex = e.Parameter is RenameTemplatesNavigationContext ? 1 : 0;
-        SyncSelectionControls();
-        SyncDownloadNamingControls();
-        RebuildFieldPalette(FieldPalette.ActualWidth, true);
-        DispatcherQueue.TryEnqueue(() =>
+        await App.RunUiAsync(async () =>
         {
-            _activeDownloadNamingTextBox = MainFolderTemplateBox;
-            UpdateDownloadFieldButtons();
+            await DownloadNamingViewModel.InitializeAsync(e.Parameter as DownloadNamingNavigationContext);
+            await ViewModel.InitializeAsync(e.Parameter as RenameTemplatesNavigationContext);
+            RuleTabs.SelectedIndex = e.Parameter is RenameTemplatesNavigationContext ? 1 : 0;
+            SyncSelectionControls();
+            SyncDownloadNamingControls();
+            RebuildFieldPalette(FieldPalette.ActualWidth, true);
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _activeDownloadNamingTextBox = MainFolderTemplateBox;
+                UpdateDownloadFieldButtons();
+            });
         });
     }
 
@@ -110,7 +113,7 @@ public sealed partial class RenameTemplatesPage : Page
         UpdateDownloadFieldButton(button, GetSection(_activeDownloadNamingTextBox));
     }
 
-    private async void SaveDownloadNaming_Click(object sender, RoutedEventArgs e)
+    private async void SaveDownloadNaming_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         try
         {
@@ -121,7 +124,7 @@ public sealed partial class RenameTemplatesPage : Page
         {
             DownloadNamingViewModel.ReportError(exception);
         }
-    }
+    });
 
     private void RestoreDownloadNamingDefault_Click(object sender, RoutedEventArgs e)
     {
@@ -132,7 +135,7 @@ public sealed partial class RenameTemplatesPage : Page
     private void DownloadNamingMessage_Closed(InfoBar sender, InfoBarClosedEventArgs args) => DownloadNamingViewModel.DismissMessage();
     private void RenameTemplateMessage_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissMessage();
 
-    private async void MediaTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void MediaTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (_syncingSelection || MediaTypeBox.SelectedIndex < 0) return;
         var requested = MediaTypeBox.SelectedIndex == 1 ? RenameMediaType.Movie : RenameMediaType.Series;
@@ -144,9 +147,9 @@ public sealed partial class RenameTemplatesPage : Page
         }
         ViewModel.ChangeMediaType(requested);
         SyncSelectionControls();
-    }
+    });
 
-    private async void TemplateList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void TemplateList_SelectionChanged(object sender, SelectionChangedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (_syncingSelection || TemplateList.SelectedItem is not RenameTemplateListItem requested || ReferenceEquals(requested, ViewModel.SelectedItem)) return;
         if (!await ConfirmDiscardChangesAsync())
@@ -156,7 +159,7 @@ public sealed partial class RenameTemplatesPage : Page
         }
         ViewModel.SelectTemplate(requested);
         SyncSelectionControls();
-    }
+    });
 
     private void AddLayoutField_Click(object sender, RoutedEventArgs e)
     {
@@ -223,12 +226,12 @@ public sealed partial class RenameTemplatesPage : Page
         foreach (var button in _fieldButtons) button.IsChecked = ReferenceEquals(button, selected);
     }
 
-    private async void CreateTemplate_Click(object sender, RoutedEventArgs e)
+    private async void CreateTemplate_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (!await ConfirmDiscardChangesAsync()) return;
         var name = await RequestTextAsync("新建模板", "模板名称", string.Empty);
         if (name is not null) await RunActionAsync(() => ViewModel.CreateTemplateAsync(name));
-    }
+    });
 
     private void MoveFieldUp_Click(object sender, RoutedEventArgs e)
     {
@@ -248,21 +251,21 @@ public sealed partial class RenameTemplatesPage : Page
     private void ApplyFieldLayout_Click(object sender, RoutedEventArgs e) => ViewModel.ApplyFieldLayout();
     private void ReadTemplateFields_Click(object sender, RoutedEventArgs e) => ViewModel.ReadFieldsFromPattern();
 
-    private async void SaveChanges_Click(object sender, RoutedEventArgs e) => await RunActionAsync(ViewModel.SaveChangesAsync);
+    private async void SaveChanges_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { await RunActionAsync(ViewModel.SaveChangesAsync); });
 
-    private async void SaveAs_Click(object sender, RoutedEventArgs e)
+    private async void SaveAs_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var name = await RequestTextAsync("另存为并应用", "新模板名称", string.Empty);
         if (name is not null) await RunActionAsync(() => ViewModel.SaveAsAndApplyAsync(name));
-    }
+    });
 
-    private async void RenameTemplate_Click(object sender, RoutedEventArgs e)
+    private async void RenameTemplate_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         var name = await RequestTextAsync("重命名模板", "新的模板名称", ViewModel.SelectedTemplate?.Name ?? string.Empty);
         if (name is not null) await RunActionAsync(() => ViewModel.RenameSelectedAsync(name));
-    }
+    });
 
-    private async void DeleteTemplate_Click(object sender, RoutedEventArgs e)
+    private async void DeleteTemplate_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (ViewModel.SelectedTemplate is not { BuiltIn: false } template) return;
         var dialog = new ContentDialog
@@ -275,15 +278,15 @@ public sealed partial class RenameTemplatesPage : Page
             DefaultButton = ContentDialogButton.Close
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await RunActionAsync(ViewModel.DeleteSelectedAsync);
-    }
+    });
 
-    private async void SetActive_Click(object sender, RoutedEventArgs e) => await RunActionAsync(ViewModel.SetActiveAsync);
+    private async void SetActive_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { await RunActionAsync(ViewModel.SetActiveAsync); });
 
-    private async void BackToRename_Click(object sender, RoutedEventArgs e)
+    private async void BackToRename_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (!await ConfirmDiscardChangesAsync()) return;
         ((App)Application.Current).MainWindow.Navigate("rename");
-    }
+    });
 
     private async Task RunActionAsync(Func<Task> action)
     {

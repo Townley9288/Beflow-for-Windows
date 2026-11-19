@@ -41,6 +41,9 @@ public sealed class UpdateServiceTests
 
     [Theory]
     [InlineData("1.0.2", "1.0.1", UpdateCheckStatus.UpdateAvailable)]
+    [InlineData("1.1.1", "1.1.1.0", UpdateCheckStatus.UpToDate)]
+    [InlineData("1.1.1.0", "1.1.1", UpdateCheckStatus.UpToDate)]
+    [InlineData("1.1.1.1", "1.1.1", UpdateCheckStatus.UpdateAvailable)]
     [InlineData("1.0.2", "1.0.2", UpdateCheckStatus.UpToDate)]
     [InlineData("1.0.2", "1.1.0", UpdateCheckStatus.UpToDate)]
     public async Task ComparesLatestVersionWithCurrentVersion(string latest, string current, UpdateCheckStatus expected)
@@ -51,6 +54,7 @@ public sealed class UpdateServiceTests
 
         Assert.Equal(expected, result.Status);
         Assert.Equal(Version.Parse(latest), result.Release!.Version);
+        Assert.Equal($"Beflow-for-Windows-v{latest}-win-x64-portable.zip", result.Release.Portable.FileName);
     }
 
     [Fact]

@@ -448,7 +448,10 @@ $FfmpegExpanded = Expand-VerifiedArchive $FfmpegArchive 'ffmpeg-20240110'
 $ToolsRoot = Join-Path $OutputDirectory 'tools'
 $LicensesRoot = Join-Path $OutputDirectory 'licenses'
 New-Item -ItemType Directory -Force -Path (Join-Path $ToolsRoot 'BBDown'), (Join-Path $ToolsRoot 'aria2'), (Join-Path $ToolsRoot 'ffmpeg'), $LicensesRoot | Out-Null
-Copy-Item -LiteralPath (Join-Path $BBDownExpanded 'BBDown.exe') -Destination (Join-Path $ToolsRoot 'BBDown\BBDown.exe') -Force
+$BBDownExecutable = Join-Path $ToolsRoot 'BBDown\BBDown.exe'
+Copy-Item -LiteralPath (Join-Path $BBDownExpanded 'BBDown.exe') -Destination $BBDownExecutable -Force
+(Get-FileHash -LiteralPath $BBDownExecutable -Algorithm SHA256).Hash |
+    Set-Content -LiteralPath ($BBDownExecutable + '.sha256') -Encoding ascii
 Copy-Item -LiteralPath (Join-Path $Root 'third_party\BBDown-LICENSE.txt') -Destination (Join-Path $LicensesRoot 'BBDown-LICENSE.txt') -Force
 $AriaRoot = Get-ChildItem -LiteralPath $AriaExpanded -Directory | Select-Object -First 1
 Copy-Item -LiteralPath (Join-Path $AriaRoot.FullName 'aria2c.exe') -Destination (Join-Path $ToolsRoot 'aria2\aria2c.exe') -Force

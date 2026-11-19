@@ -28,11 +28,14 @@ public sealed partial class SettingsPage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        _inputSettingsReady = false;
-        ViewModel.Activate();
-        _qrTimer.Start();
-        await ViewModel.InitializeAsync();
-        _inputSettingsReady = ViewModel.IsActive && ViewModel.IsInitialized;
+        await App.RunUiAsync(async () =>
+        {
+            _inputSettingsReady = false;
+            ViewModel.Activate();
+            _qrTimer.Start();
+            await ViewModel.InitializeAsync();
+            _inputSettingsReady = ViewModel.IsActive && ViewModel.IsInitialized;
+        });
     }
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
@@ -42,22 +45,22 @@ public sealed partial class SettingsPage : Page
         ViewModel.Deactivate();
         base.OnNavigatedFrom(e);
     }
-    private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetWorkDirectory(value); }
-    private async void BrowseAria_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetAria2cPath(value); }
-    private async void BrowseMkv_Click(object sender, RoutedEventArgs e) { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetMkvmergePath(value); }
-    private async void Apply_Click(object sender, RoutedEventArgs e) { await ViewModel.SaveDownloadSettingsAsync(); ((App)Application.Current).MainWindow.Navigate("download"); }
-    private async void ClipboardMonitoring_Toggled(object sender, RoutedEventArgs e)
+    private async void BrowseWorkDir_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { var value = await PickerHelper.PickFolderAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetWorkDirectory(value); });
+    private async void BrowseAria_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetAria2cPath(value); });
+    private async void BrowseMkv_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { var value = await PickerHelper.PickExecutableAsync(((App)Application.Current).MainWindow); if (!string.IsNullOrWhiteSpace(value)) ViewModel.SetMkvmergePath(value); });
+    private async void Apply_Click(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () => { await ViewModel.SaveDownloadSettingsAsync(); ((App)Application.Current).MainWindow.Navigate("download"); });
+    private async void ClipboardMonitoring_Toggled(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (!_inputSettingsReady || sender is not ToggleSwitch toggle) return;
         ViewModel.Settings.MonitorClipboard = toggle.IsOn;
         await SaveInputSettingsAsync();
-    }
-    private async void DragLinkMonitoring_Toggled(object sender, RoutedEventArgs e)
+    });
+    private async void DragLinkMonitoring_Toggled(object sender, RoutedEventArgs e) => await App.RunUiAsync(async () =>
     {
         if (!_inputSettingsReady || sender is not ToggleSwitch toggle) return;
         ViewModel.Settings.MonitorDragLinks = toggle.IsOn;
         await SaveInputSettingsAsync();
-    }
+    });
     private async Task SaveInputSettingsAsync()
     {
         await ViewModel.SaveInputSettingsAsync();

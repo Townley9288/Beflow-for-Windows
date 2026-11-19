@@ -132,6 +132,22 @@ public sealed class DownloadQueueTests
     }
 
     [Fact]
+    public async Task PausingWhileTheExecutorFinishesLeavesATerminalOrPausedTask()
+    {
+        using var fixture = new Fixture();
+        var id = await fixture.Queue.EnqueueAsync(Job(fixture.Root));
+        Assert.Equal(id, await fixture.Executor.Started.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(3)));
+
+        var pause = fixture.Queue.PauseAsync();
+        fixture.Executor.Complete.Release();
+        await pause.WaitAsync(TimeSpan.FromSeconds(3));
+
+        Assert.Empty(fixture.Queue.Error);
+        Assert.True(fixture.Queue.Snapshot.Paused);
+        Assert.True(fixture.Queue.Snapshot.Items.Single().State is DownloadQueueState.Paused or DownloadQueueState.Completed);
+    }
+
+    [Fact]
     public async Task StoreFailurePreventsUnpersistedTaskFromStarting()
     {
         using var f = new Fixture(); await f.Queue.InitializeAsync();

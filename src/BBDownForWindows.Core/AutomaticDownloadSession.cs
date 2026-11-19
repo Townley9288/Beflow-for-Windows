@@ -1,7 +1,7 @@
 namespace BBDownForWindows.Core;
 
 /// <summary>Reads the original WEB catalog and attaches a separate, optional TV catalog.</summary>
-public sealed class AutomaticDownloadSession(IAccountStatusService accounts, IBBDownService parser,
+public sealed class AutomaticDownloadSession(IAccountStatusService accounts, IBBDownParsingService parser,
     Func<AccountChannel, DateTime>? credentialUpdatedAt = null)
 {
     private readonly SemaphoreSlim validationGate = new(1, 1);

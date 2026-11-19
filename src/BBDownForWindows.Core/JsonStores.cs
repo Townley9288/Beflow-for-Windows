@@ -26,6 +26,7 @@ public sealed class SettingsStore(ApplicationPaths paths) : ISettingsStore
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            await LoadCoreAsync(cancellationToken);
             await AtomicJson.WriteAsync(paths.SettingsFile, settings, Options, cancellationToken);
         }
         finally
@@ -57,13 +58,14 @@ public sealed class SettingsStore(ApplicationPaths paths) : ISettingsStore
         try
         {
             await using var stream = File.OpenRead(paths.SettingsFile);
-            var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, Options, cancellationToken) ?? new AppSettings();
+            var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, Options, cancellationToken)
+                ?? throw new JsonException("设置文件内容为空");
             settings.EnsureCurrentSchema();
             return settings;
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
-            return new AppSettings();
+            throw new InvalidDataException($"设置文件已损坏，已保留原文件：{paths.SettingsFile}", exception);
         }
     }
 
@@ -166,6 +168,7 @@ public sealed class HistoryStore(ApplicationPaths paths) : IHistoryStore
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            await LoadCoreAsync(cancellationToken);
             await AtomicJson.WriteAsync(paths.HistoryFile, Array.Empty<HistoryRecord>(), Options, cancellationToken);
         }
         finally
@@ -182,11 +185,13 @@ public sealed class HistoryStore(ApplicationPaths paths) : IHistoryStore
         try
         {
             await using var stream = File.OpenRead(paths.HistoryFile);
-            return await JsonSerializer.DeserializeAsync<List<HistoryRecord>>(stream, Options, cancellationToken) ?? [];
+            var history = await JsonSerializer.DeserializeAsync<List<HistoryRecord>>(stream, Options, cancellationToken);
+            if (history is null || history.Any(record => record is null)) throw new JsonException("历史记录数据无效");
+            return history;
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
-            return [];
+            throw new InvalidDataException($"下载历史文件已损坏，已保留原文件：{paths.HistoryFile}", exception);
         }
     }
 

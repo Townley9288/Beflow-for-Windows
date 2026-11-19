@@ -28,7 +28,7 @@ public sealed class AppServices
         BilibiliSpace = new BilibiliSpaceService(HttpClient, paths);
         DownloadNaming = new DownloadNamingService();
         AccountStatus = new AccountStatusService(paths, HttpClient);
-        BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata, DownloadNaming, ParseLimiter, AccountStatus);
+        BBDown = new BBDownService(paths, ProcessRunner, ToolLocator, Settings, BilibiliMetadata, ParseLimiter, AccountStatus);
         DownloadQueue = new DownloadQueueService(new DownloadQueueStore(paths),
             new DownloadQueueExecutor(new QueuedMediaDownloader(paths, QueueProcessRunner, ToolLocator, ParseLimiter),
                 QueueProcessRunner, ToolLocator, DownloadNaming, History), QueueTaskManager, Work);

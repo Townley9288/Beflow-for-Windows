@@ -19,7 +19,7 @@ public static class BBDownCommandBuilder
 
     public static List<string> BuildDownloadArguments(DownloadRequest request, ToolPaths tools)
     {
-        var arguments = new List<string> { request.Url };
+        var arguments = new List<string> { BilibiliInputParser.RequireVideoArgument(request.Url) };
         if (request.Season) arguments.AddRange(["-p", "ALL"]);
         else if (!string.IsNullOrWhiteSpace(request.Pages)) arguments.AddRange(["-p", request.Pages]);
         if (!string.IsNullOrWhiteSpace(request.MultiFilePattern)) arguments.AddRange(["-M", request.MultiFilePattern]);
@@ -29,7 +29,7 @@ public static class BBDownCommandBuilder
 
     public static List<string> BuildExactDownloadArguments(DownloadRequest request, ToolPaths tools)
     {
-        var arguments = new List<string> { request.Url };
+        var arguments = new List<string> { BilibiliInputParser.RequireVideoArgument(request.Url) };
         if (!string.IsNullOrWhiteSpace(request.Pages)) arguments.AddRange(["-p", request.Pages]);
         if (!string.IsNullOrWhiteSpace(request.MultiFilePattern)) arguments.AddRange(["-M", request.MultiFilePattern]);
         AppendCommon(arguments, request, tools, includeSelectionPreferences: false);
@@ -39,7 +39,7 @@ public static class BBDownCommandBuilder
 
     public static List<string> BuildInfoArguments(DownloadRequest request, ToolPaths tools)
     {
-        var arguments = new List<string> { request.Url, "-info", "--show-all" };
+        var arguments = new List<string> { BilibiliInputParser.RequireVideoArgument(request.Url), "-info", "--show-all" };
         if (request.Season) arguments.AddRange(["-p", "ALL"]);
         else if (!string.IsNullOrWhiteSpace(request.Pages)) arguments.AddRange(["-p", request.Pages]);
         if (request.ApiMode.Equals("TV", StringComparison.OrdinalIgnoreCase)) arguments.Add("-tv");
@@ -48,6 +48,14 @@ public static class BBDownCommandBuilder
         if (!string.IsNullOrWhiteSpace(request.UposHost)) arguments.AddRange(["--upos-host", request.UposHost]);
         if (!string.IsNullOrWhiteSpace(tools.Ffmpeg)) arguments.AddRange(["--ffmpeg-path", tools.Ffmpeg]);
         return arguments;
+    }
+
+    internal static void EnsureDownloadTools(DownloadRequest request, ToolPaths tools)
+    {
+        if (string.IsNullOrWhiteSpace(tools.Ffmpeg))
+            throw new FileNotFoundException("缺少随包的 ffmpeg.exe，请重新安装完整发布包。");
+        if (request.UseAria2c && string.IsNullOrWhiteSpace(tools.Aria2c))
+            throw new FileNotFoundException("找不到 aria2c.exe，请检查已配置路径或重新安装完整发布包。");
     }
 
     private static void AppendCommon(List<string> arguments, DownloadRequest request, ToolPaths tools, bool includeSelectionPreferences = true)
@@ -71,7 +79,7 @@ public static class BBDownCommandBuilder
         {
             Aria2TuningPolicy.ValidateMaxConnection(request.Aria2MaxConnection);
             arguments.Add("--use-aria2c");
-            var aria = !string.IsNullOrWhiteSpace(request.Aria2cPath) ? request.Aria2cPath : tools.Aria2c;
+            var aria = tools.Aria2c;
             if (!string.IsNullOrWhiteSpace(aria)) arguments.AddRange(["--aria2c-path", aria]);
             var ariaArguments = $"-x{request.Aria2MaxConnection} -s{request.Aria2Split} -j{request.Aria2MaxConcurrentDownloads} -k {request.Aria2MinSplitSize}M";
             if (request.Aria2AutoTune) ariaArguments += " --file-allocation=none --disk-cache=64M";

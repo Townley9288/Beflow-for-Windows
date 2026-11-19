@@ -10,5 +10,13 @@
     <PublishSingleFile>true</PublishSingleFile>
     <InvariantGlobalization>true</InvariantGlobalization>
     <StripSymbols>true</StripSymbols>
+    <RuntimeFrameworkVersion>10.0.8</RuntimeFrameworkVersion>
   </PropertyGroup>
+  <!-- Keep the locked Native AOT dependencies independent of the installed SDK feature band. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler"
+      ILCompilerPackVersion="$(RuntimeFrameworkVersion)" />
+    <KnownILLinkPack Update="Microsoft.NET.ILLink.Tasks"
+      ILLinkPackVersion="$(RuntimeFrameworkVersion)" />
+  </ItemGroup>
 </Project>

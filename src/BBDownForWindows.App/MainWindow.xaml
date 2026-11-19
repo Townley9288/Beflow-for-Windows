@@ -4,9 +4,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid x:Name="WindowRoot" Background="{ThemeResource BeflowWindowBackgroundBrush}">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <StackPanel>
+    <InfoBar x:Name="OperationErrorBar" IsOpen="False" IsClosable="True" Severity="Error" Title="操作失败"/>
     <InfoBar x:Name="UpdateInfoBar" IsOpen="False" IsClosable="True" Severity="Informational" Title="发现 Beflow 新版本">
         <InfoBar.ActionButton><Button Content="查看更新" Click="UpdateInfoBar_Click"/></InfoBar.ActionButton>
     </InfoBar>
+    </StackPanel>
     <NavigationView Grid.Row="1" x:Name="RootNavigation" Background="{ThemeResource BeflowWindowBackgroundBrush}" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" PaneDisplayMode="LeftCompact" ItemInvoked="RootNavigation_ItemInvoked" Loaded="RootNavigation_Loaded">
         <NavigationView.MenuItems>
             <NavigationViewItemHeader Content="下载与封装" />

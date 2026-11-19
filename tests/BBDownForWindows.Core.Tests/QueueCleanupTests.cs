@@ -76,7 +76,7 @@ public sealed class QueueCleanupTests
                     SourceB = new() { Completed = true, Files = [QueueFileStamp.Read(SourceB)] }
                 }] }
             };
-            var tools = new ToolLocator(paths, () => []);
+            var tools = new ToolLocator(paths);
             executor = new DownloadQueueExecutor(new QueuedMediaDownloader(paths, Runner, tools,
                 new ParseConcurrencyLimiter(new SettingsStore(paths))), Runner, tools, new DownloadNamingService(), new HistoryStore(paths));
             manager = new TaskManager(paths, Runner);
